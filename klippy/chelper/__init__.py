@@ -17,7 +17,6 @@ COMPILE_ARGS = ("-Wall -g -O2 -shared -fPIC"
                 " -o %s %s")
 SSE_FLAGS = "-mfpmath=sse -msse2"
 SOURCE_FILES = [
-    'command.c', 'ethcatqueue.c', 'kin_hash.c', 'pvtcompress.c', 'pvtsolve.c',
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c', 'trapq.c',
     'pollreactor.c', 'msgblock.c', 'trdispatch.c',
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
@@ -26,88 +25,9 @@ SOURCE_FILES = [
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
-    'command.h', 'ethcatqueue.h', 'ethercatmsg.h', 'pvtcompress.h',
     'list.h', 'serialqueue.h', 'stepcompress.h', 'itersolve.h', 'pyhelper.h',
     'trapq.h', 'pollreactor.h', 'msgblock.h'
 ]
-
-defs_pvtcompress = """
-    struct pull_history_pvt_steps
-    {
-        uint64_t first_clock;
-        uint64_t last_clock;
-        double start_position;
-        double velocity;
-    };
-    struct pvtcompress *pvtcompress_alloc(uint32_t oid);
-    void pvtcompress_free(struct pvtcompress *sc);
-    uint32_t pvtcompress_get_oid(struct pvtcompress *sc);
-    void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time);
-    int pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock);
-    int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double last_position);
-    double pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock);
-    int pvtcompress_queue_msg(struct pvtcompress *sc, uint32_t *data, int len);
-    int pvtcompress_extract_old(struct pvtcompress *sc,
-                                struct pull_history_pvt_steps *p,
-                                int max,
-                                uint64_t start_clock,
-                                uint64_t end_clock);
-    struct drivesync *drivesync_alloc(struct ethcatqueue *sq,
-                                      struct pvtcompress **sc_list,
-                                      int sc_num,
-                                      int move_num);
-    void drivesync_free(struct drivesync *ss);
-    void drivesync_set_time(struct drivesync *ss, double time_offset, double mcu_freq);
-    int drivesync_flush(struct drivesync *ss, uint64_t move_clock);
-"""
-
-defs_pvtsolve = """
-    int32_t pvtsolve_generate_steps(struct drive_kinematics *sk, double flush_time);
-    double pvtsolve_check_active(struct drive_kinematics *sk, double flush_time);
-    int32_t pvtsolve_is_active_axis(struct drive_kinematics *sk, char axis);
-    void pvtsolve_set_trapq(struct drive_kinematics *sk, struct trapq *tq);
-    void pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc);
-    double pvtsolve_calc_position_from_coord(struct drive_kinematics *sk, double x, double y, double z);
-    void pvtsolve_set_position(struct drive_kinematics *sk, double x, double y, double z);
-    double pvtsolve_get_commanded_pos(struct drive_kinematics *sk);
-"""
-
-defs_kin_hash = """
-    struct drive_kinematics *hash_drive_alloc(char axis);
-"""
-
-defs_ethcatqueue = """
-    #define MESSAGE_MAX 64
-    struct pull_queue_message {
-        uint8_t msg[MESSAGE_MAX];
-        int len;
-        double sent_time, receive_time;
-        uint64_t notify_id;
-    };
-    struct ethcatqueue *ethcatqueue_alloc(void);
-    void ethcatqueue_exit(struct ethcatqueue *sq);
-    void ethcatqueue_free(struct ethcatqueue *sq);
-    struct command_queue *ethcatqueue_alloc_commandqueue(void);
-    void ethcatqueue_free_commandqueue(struct command_queue *cq);
-    void ethcatqueue_send_command(struct ethcatqueue *sq,
-                                  uint8_t *msg,
-                                  int len,
-                                  uint64_t min_clock,
-                                  uint64_t req_clock,
-                                  uint64_t notify_id);
-    void ethcatqueue_send_batch(struct ethcatqueue *sq,
-                                struct command_queue *cq,
-                                struct list_head *msgs);
-    void ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm);
-    void ethcatqueue_set_wire_frequency(struct ethcatqueue *sq, double frequency);
-    void ethcatqueue_set_clock_est(struct ethcatqueue *sq,
-                                   double est_freq,
-                                   double conv_time,
-                                   uint64_t conv_clock,
-                                   uint64_t last_clock);
-    void ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce);
-    void ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len);
-"""
 
 defs_stepcompress = """
     struct pull_history_steps {
@@ -298,7 +218,6 @@ defs_std = """
 """
 
 defs_all = [
-    defs_pvtcompress, defs_pvtsolve, defs_kin_hash, defs_ethcatqueue,
     defs_pyhelper, defs_serialqueue, defs_std, defs_stepcompress,
     defs_itersolve, defs_trapq, defs_trdispatch,
     defs_kin_cartesian, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
