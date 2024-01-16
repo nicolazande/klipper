@@ -1,0 +1,4 @@
+Script used to compile a single c-helper file for debug puropses.
+
+Example of usage:
+	./compile.sh ../klippy/chelper/command.c --> ./out/command.o

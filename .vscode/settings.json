@@ -1,0 +1,8 @@
+{
+    "cmake.configureOnOpen": false,
+    "files.associations": {
+        "pgm.h": "c",
+        "ethcatqueue.h": "c",
+        "ecrt.h": "c"
+    }
+}
