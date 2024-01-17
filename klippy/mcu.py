@@ -694,6 +694,7 @@ class MCU:
         self._pvtqueues = [] #list of drive compressors
         self._steppersync = None #step compressors synchronizer
         self._drivesync = None #drive compressors synchronizer
+        self._flush_callbacks = [] #list of callbacks exacuted for each flush operation
         # stats
         self._get_status_info = {}
         self._stats_sumsq_base = 0.
@@ -917,6 +918,7 @@ class MCU:
                     self._serial.connect_pipe(self._serialport)
                 # connect to ethercat
                 self._ethercat.connect_ethercat()
+                logging.info("LUCALUCA", self._name)
                 # connect clock synchronizer for both serial and ethercat (indirectly)
                 self._clocksync.connect(self._serial, self._ethercat)
             except serialhdl.error as e:

@@ -94,7 +94,6 @@ class EthercatReader:
         msgparser = msgproto.MessageParser(warn_prefix=self.warn_prefix)
         self.msgparser = msgparser
         identify_data = None
-        logging.info("% SONMARIO", self.warn_prefix)
         try:
             # obtain and load drive specific data 
             '''

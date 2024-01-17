@@ -747,7 +747,7 @@ ethcatqueue_alloc(void)
 
     /* get EtherCAT master */
     master->master = ecrt_request_master(0);
-    HANDLE_ERROR(!master->master, fail)
+    HANDLE_ERROR(!master->master, klipper)
 
     /* create common data domain */
     master->domain = ecrt_master_create_domain(master->master);
@@ -805,6 +805,8 @@ ethcatqueue_alloc(void)
         master->pvtdomain[i].domain_pd = ecrt_domain_data(master->pvtdomain[i].domain);
         HANDLE_ERROR(!master->pvtdomain[i].domain_pd, fail)
     }
+
+klipper:
 
     /* crete pipe for internal event scheduling */
     ret = pipe(sq->pipe_sched);
@@ -879,7 +881,7 @@ ethcatqueue_alloc(void)
 
 fail:
     /* error handling */
-    report_errno("init", ret);
+    //report_errno("init", ret);
     return NULL;
 }
 
