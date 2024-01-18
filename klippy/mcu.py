@@ -918,7 +918,6 @@ class MCU:
                     self._serial.connect_pipe(self._serialport)
                 # connect to ethercat
                 self._ethercat.connect_ethercat()
-                logging.info("LUCALUCA", self._name)
                 # connect clock synchronizer for both serial and ethercat (indirectly)
                 self._clocksync.connect(self._serial, self._ethercat)
             except serialhdl.error as e:

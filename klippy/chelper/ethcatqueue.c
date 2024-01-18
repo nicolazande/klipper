@@ -976,7 +976,7 @@ ethcatqueue_free_commandqueue(struct command_queue *cq)
 }
 
 /** send a single synchronous command from high to low level thread */
-void
+void __visible
 ethcatqueue_send_command(struct ethcatqueue *sq,
                          uint8_t *msg,
                          int len,

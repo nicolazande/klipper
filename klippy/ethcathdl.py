@@ -94,21 +94,20 @@ class EthercatReader:
         msgparser = msgproto.MessageParser(warn_prefix=self.warn_prefix)
         self.msgparser = msgparser
         identify_data = None
-        try:
-            # obtain and load drive specific data 
-            '''
-            dfn = self.printer.get_start_args()['ethercat_commands_file']
-            with open(dfn, 'r') as file:
-                identify_data = file.read()
-            '''
-            logging.info("Loading EtherCAT data dictionary ...", self.warn_prefix)
-        except:
+        
+        # obtain and load drive specific data 
+        with open('./commands/drive_commands.json', 'r') as command_file:
+            identify_data = command_file.read()
+
+        # process ethercat commands and responses on host side
+        if identify_data is None:
             logging.info("Error in reading ethercat command file.", self.warn_prefix)
             self.disconnect()
             return False
-        # process ethercat commands and responses on host side
-        if identify_data is not None:
-            msgparser.process_identify(identify_data)
+        else:
+            logging.info("Loading EtherCAT data dictionary ...", identify_data)
+            msgparser.process_identify(identify_data, decompress=False)
+
         # unknown response handler (default)
         self.register_response(self.handle_unknown, '#unknown')
         return True
@@ -135,7 +134,8 @@ class EthercatReader:
         Set drive clock estimate. This clock is continuously synchronized
         with the mcu one through the serial module (not directly).
         '''
-        self.ffi_lib.ethcatqueue_set_clock_est(self.ethcatqueue, freq, conv_time, conv_clock, last_clock)
+        if self.ethcatqueue is not None:
+            self.ffi_lib.ethcatqueue_set_clock_est(self.ethcatqueue, freq, conv_time, conv_clock, last_clock)
         
     def disconnect(self):
         '''

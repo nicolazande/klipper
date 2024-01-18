@@ -1,0 +1,11 @@
+{
+    "commands":
+    {
+        "reset_step_clock oid=%c clock=%u": 0,
+        "stepper_get_position oid=%c": 1
+    },
+    "responses":
+    {
+        "stepper_position oid=%c pos=%i": 2
+    }
+}

@@ -36,7 +36,7 @@ class ClockSync:
         self.prediction_variance = 0.
         self.last_prediction_time = 0.
         
-    def connect(self, serial, ethercat=None):
+    def connect(self, serial, ethercat):
         '''
         Connect to serial and ethercat interfaces. There is no direct
         communication with the ethercat interface, however the internal
@@ -64,7 +64,7 @@ class ClockSync:
         serial.register_response(self._handle_clock, 'clock')
         self.reactor.update_timer(self.get_clock_timer, self.reactor.NOW)
         
-    def connect_file(self, serial, ethercat= None, pace=False):
+    def connect_file(self, serial, ethercat, pace=False):
         '''
         Connect to serial and ethercat interfaces (debug mode).
         '''
@@ -91,7 +91,7 @@ class ClockSync:
     
     def _handle_clock(self, params):
         '''
-        Update mcu clock estimate, this function is executes as callback when
+        Update mcu clock estimate, this function is executed as callback when
         the mcu replies to a _get_clock_event() request.
         '''
         self.queries_pending = 0
@@ -249,7 +249,7 @@ class SecondarySync(ClockSync):
         self.clock_adj = (0., 1.)
         self.last_sync_time = 0.
         
-    def connect(self, serial, ethercat=None):
+    def connect(self, serial, ethercat):
         '''
         Connect to serial and ethercat interfaces. There is no direct
         communication with the ethercat interface, however the internal
@@ -266,7 +266,7 @@ class SecondarySync(ClockSync):
         self.clock_adj = (main_print_time - local_print_time, self.mcu_freq)
         self.calibrate_clock(0., curtime)
         
-    def connect_file(self, serial, ethercat=None, pace=False):
+    def connect_file(self, serial, ethercat, pace=False):
         '''
         Connect to serial and ethercat interfaces (debug mode).
         Take into account the different frequency between main

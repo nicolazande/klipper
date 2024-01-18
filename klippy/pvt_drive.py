@@ -6,7 +6,7 @@
 import os, sys, math, logging, collections
 # add klippy dependency
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'klippy'))
-import chelper, mcu
+import chelper, mcu, ethcathdl
 
 class error(Exception):
     pass
@@ -93,7 +93,10 @@ class PVT_drive:
         # query position from high to low level thread
         self._get_position_cmd = self._mcu.lookup_query_command(
             "stepper_get_position oid=%c",
-            "stepper_position oid=%c pos=%i", oid=self._oid)
+            "stepper_position oid=%c pos=%i",
+            oid = self._oid,
+            serial = self._mcu._ethercat,
+            helper = ethcathdl.EthercatRetryCommand)
     
     def get_oid(self):
         '''
