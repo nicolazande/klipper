@@ -39,7 +39,8 @@
 /* timers */
 #define EQPT_INPUT      0           //position of input timer in ethcatqueue timer list
 #define EQPT_COMMAND    1           //position of command timer in ethcatqueue timer list
-#define EQPT_NUM        2           //number of timer used by a ethcatqueue
+#define EQPT_PROTOCOL   2           //position of command timer in ethcatqueue timer list
+#define EQPT_NUM        3           //number of timer used by a ethcatqueue
 /* transport layer */
 #define EQT_ETHCAT      'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
@@ -70,16 +71,6 @@ extern struct command_parser *command_parser_table[ETHCAT_MAX_CMD];
 static void
 check_wake_receive(struct ethcatqueue *sq);
 
-/**
- * Write to the ethcatqueue internal pipe to force the execution 
- * of the background low level ethercat immediately (don't wait
- * for associated timer). This function is called asynchronously
- * by the high level thread since it cannot update directly the
- * command event timer.
- */
-static void
-kick_bg_thread(struct ethcatqueue *sq);
-
 /** 
  * Process a single request from the high level thread, execute the associated
  * callback and append the result to the response queue so that the high level
@@ -96,11 +87,17 @@ static double
 input_event(struct ethcatqueue *sq, double eventtime);
 
 /**
+ * Precess a request coming from the EtherCAT high level thread.
+ */
+static double
+protocol_event(struct ethcatqueue *sq, double eventtime);
+
+/**
  * Callback for input activity on the pipe. This function is continuosly
  * run by the poll reactor and, as soon as data (dummy bytes) is found
  * on the rx side of the internal pipe, it updates the command timer (to
  * zero), indirectly forcing an execution of command_event(). This is
- * the low level thread counterpart of kick_bg_thread.
+ * the low level thread counterpart of kick_ethbg_thread.
  */
 static void
 kick_event(struct ethcatqueue *sq, double eventtime);
@@ -142,11 +139,11 @@ check_wake_receive(struct ethcatqueue *sq)
     }
 }
 
-static void
-kick_bg_thread(struct ethcatqueue *sq)
+void __visible
+kick_ethbg_thread(struct ethcatqueue *sq, uint8_t cmd)
 {
     /* write a dummy value just to wake up the poll reactor */
-    int ret = write(sq->pipe_sched[1], ".", 1);
+    int ret = write(sq->pipe_sched[1], &cmd, 1);
     if (ret < 0)
     {
         report_errno("pipe write", ret);
@@ -251,6 +248,8 @@ static void process_request(struct ethcatqueue *sq)
          */
         list_add_tail(response, &sq->response_queue);
 
+        errorf("STOCAZZO");
+
         /* wake up high level thread */
         check_wake_receive(sq);
     }
@@ -287,6 +286,13 @@ input_event(struct ethcatqueue *sq, double eventtime)
     return PR_NEVER;
 }
 
+static double
+protocol_event(struct ethcatqueue *sq, double eventtime)
+{
+    /* process a high level thread request */
+    process_request(sq);
+};
+
 static void
 kick_event(struct ethcatqueue *sq, double eventtime)
 {
@@ -294,16 +300,16 @@ kick_event(struct ethcatqueue *sq, double eventtime)
      * Allocate enogh space on stack. TODO: check if it is
      * possible to rduce the size of dummy.
      */
-    char dummy[8];
+    char cmd;
     /* read rx-command pipe */
-    int ret = read(sq->pipe_sched[0], dummy, sizeof(dummy));
+    int ret = read(sq->pipe_sched[0], &cmd, sizeof(cmd));
     /* check data */
     if (ret < 0)
     {
         report_errno("pipe read", ret);
     }
     /* update command timer (force ethercat command transmission) */
-    pollreactor_update_timer(sq->pr, EQPT_COMMAND, PR_NOW);
+    pollreactor_update_timer(sq->pr, cmd, PR_NOW);
 }
 
 static int
@@ -836,11 +842,16 @@ klipper:
      *                           directly by command_event after a fixed amount of
      *                           time when the frame is guaranteed to be received
      *                           back by the master.
+     *            3) EQPT_PROTOCOL: used to trigger protocol_event, its value is defined
+     *                              can be defined by the input_event (in the low level
+     *                              EtherCAT thread) or scheduled immediately by the
+     *                              high level thread through the pipe.
      */
     sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq);
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
     pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
+    pollreactor_add_timer(sq->pr, EQPT_PROTOCOL, protocol_event); //protocol timer
 
     /* 
      * Set pipe for low level thread scheduling in non blocking mode.
@@ -895,7 +906,7 @@ ethcatqueue_exit(struct ethcatqueue *sq)
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
     /* wake ethercat high level thread (last time) */
-    kick_bg_thread(sq);
+    kick_ethbg_thread(sq, EQPT_PROTOCOL);
     /* join and stop current thread */
     int ret = pthread_join(sq->tid, NULL);
     if (ret)
@@ -1077,7 +1088,7 @@ ethcatqueue_send_batch(struct ethcatqueue *sq, struct command_queue *cq, struct 
     /* wake the background thread if necessary (limit case) */
     if (mustwake)
     {
-        kick_bg_thread(sq);
+        kick_ethbg_thread(sq, EQPT_COMMAND);
     }
 }
 

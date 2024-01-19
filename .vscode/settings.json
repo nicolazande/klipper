@@ -3,6 +3,8 @@
     "files.associations": {
         "pgm.h": "c",
         "ethcatqueue.h": "c",
-        "ecrt.h": "c"
+        "ecrt.h": "c",
+        "serialqueue.h": "c",
+        "pyhelper.h": "c"
     }
 }

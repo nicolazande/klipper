@@ -45,6 +45,7 @@ class EthercatReader:
         # response message
         response = self.ffi_main.new('struct pull_queue_message *')
         while 1:
+            self.ffi_lib.kick_ethbg_thread(self.ethcatqueue, 2)
             # get and remove first message from receive queue
             self.ffi_lib.ethcatqueue_pull(self.ethcatqueue, response)
             count = response.len
@@ -93,21 +94,19 @@ class EthercatReader:
         # create ethercat private message parser
         msgparser = msgproto.MessageParser(warn_prefix=self.warn_prefix)
         self.msgparser = msgparser
+        # obtain and load drive specific data dictionary
         identify_data = None
-        
-        # obtain and load drive specific data 
-        with open('./commands/drive_commands.json', 'r') as command_file:
-            identify_data = command_file.read()
-
-        # process ethercat commands and responses on host side
-        if identify_data is None:
-            logging.info("Error in reading ethercat command file.", self.warn_prefix)
+        try:
+            with open('./commands/drive_commands.json', 'r') as command_file:
+                identify_data = command_file.read()
+        except:
+            logging.info("%sError in reading ethercat command file.", self.warn_prefix)
             self.disconnect()
             return False
-        else:
-            logging.info("Loading EtherCAT data dictionary ...", identify_data)
+        # process ethercat commands and responses on host side
+        if identify_data is not None:
+            logging.info("%sLoading EtherCAT data dictionary ...", self.warn_prefix)
             msgparser.process_identify(identify_data, decompress=False)
-
         # unknown response handler (default)
         self.register_response(self.handle_unknown, '#unknown')
         return True
@@ -118,15 +117,16 @@ class EthercatReader:
         therefore there is no need to pause and read/write additional
         object dictionary entries.
         '''
-        logging.info("%sStarting ethercat connect", self.warn_prefix)
+        logging.info("%sStarting ethercat connect...", self.warn_prefix)
         start_time = self.reactor.monotonic()
         while 1:
             if self.reactor.monotonic() > start_time + 90.:
                 # stop (connection timeout)
-                self._error("Unable to connect")
+                self._error("Unable to connect to EtherCAT.")
             # start new session (high and low level threads)
             ret = self._start_session()
             if ret:
+                logging.info("%sEthercat connected.", self.warn_prefix)
                 break
         
     def set_clock_est(self, freq, conv_time, conv_clock, last_clock):
