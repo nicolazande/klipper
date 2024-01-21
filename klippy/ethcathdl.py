@@ -45,7 +45,6 @@ class EthercatReader:
         # response message
         response = self.ffi_main.new('struct pull_queue_message *')
         while 1:
-            self.ffi_lib.kick_ethbg_thread(self.ethcatqueue, 2)
             # get and remove first message from receive queue
             self.ffi_lib.ethcatqueue_pull(self.ethcatqueue, response)
             count = response.len
@@ -203,6 +202,7 @@ class EthercatReader:
         Send raw command.
         '''
         # add command message to request queue
+        logging.info("PYCOMMAND LENGTH = %s", len(cmd))
         self.ffi_lib.ethcatqueue_send_command(self.ethcatqueue, cmd, len(cmd),
                                               minclock, reqclock, 0)
         
@@ -210,6 +210,7 @@ class EthercatReader:
         '''
         Send raw command and wait for confirmation.
         '''
+        logging.info("PYCOMMAND = %s" % cmd)
         self.last_notify_id += 1
         nid = self.last_notify_id
         # get available greenlet from reactor
@@ -219,7 +220,7 @@ class EthercatReader:
         # add command message to request queue
         self.ffi_lib.ethcatqueue_send_command(self.ethcatqueue, cmd, len(cmd),
                                               minclock, reqclock, nid)
-        # wait for completition
+        # wait for completion
         params = completion.wait()
         if params is None:
             self._error("Ethercat connection closed")

@@ -51,7 +51,7 @@
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
 /* switches */
-#define MESSAGE_CHECK_FORMAT (1U)
+#define MESSAGE_CHECK_FORMAT (0U)
 
 
 /****************************************************************
@@ -70,6 +70,15 @@ extern struct command_parser *command_parser_table[ETHCAT_MAX_CMD];
  */
 static void
 check_wake_receive(struct ethcatqueue *sq);
+
+/**
+ * Write to the ethcatqueue internal pipe to force the execution 
+ * of the background low level ethercat immediately (don't wait
+ * for associated timer). This function is called asynchronously
+ * by the high level thread since it cannot update directly the
+ * command event timer.
+ */
+static void kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd);
 
 /** 
  * Process a single request from the high level thread, execute the associated
@@ -97,7 +106,7 @@ protocol_event(struct ethcatqueue *sq, double eventtime);
  * run by the poll reactor and, as soon as data (dummy bytes) is found
  * on the rx side of the internal pipe, it updates the command timer (to
  * zero), indirectly forcing an execution of command_event(). This is
- * the low level thread counterpart of kick_ethbg_thread.
+ * the low level thread counterpart of kick_bg_thread.
  */
 static void
 kick_event(struct ethcatqueue *sq, double eventtime);
@@ -139,11 +148,12 @@ check_wake_receive(struct ethcatqueue *sq)
     }
 }
 
-void __visible
-kick_ethbg_thread(struct ethcatqueue *sq, uint8_t cmd)
+static void
+kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd)
 {
     /* write a dummy value just to wake up the poll reactor */
-    int ret = write(sq->pipe_sched[1], &cmd, 1);
+    uint8_t data = cmd;
+    int ret = write(sq->pipe_sched[1], &data, 1);
     if (ret < 0)
     {
         report_errno("pipe write", ret);
@@ -158,12 +168,22 @@ static void process_request(struct ethcatqueue *sq)
         /* data */
         struct sharedmonitor *ifc = &sq->klippyifc; //shared interface
         struct queue_message *request = list_first_entry(&sq->request_queue, struct queue_message, node); //request messgae
-        struct queue_message *response = malloc(sizeof(*response)); //response message (TODO: populate sent and receive time)
+        struct queue_message *response = message_alloc(); //response message (TODO: populate sent and receive time)
         uint8_t msglen; //message length in byte
         const struct command_parser *cp; //command parser
 
+        uint8_t *buf = request->msg;
+        errorf("CCOMMAND OUT = [");
+        for (uint8_t i=0; i < 64; i++)
+        {
+            errorf("%d,", buf[i]);
+        }
+        errorf("]");
+
         /* remove message from request queue */
         list_del(&request->node);
+
+        goto skip;
 
 #if MESSAGE_CHECK_FORMAT
         /* check message format (sync, crc, ...) */
@@ -197,7 +217,7 @@ static void process_request(struct ethcatqueue *sq)
             else
             {
                 /* unknown command */
-                return;
+                break;
             }
             
             /* variable length array for arguments */
@@ -205,7 +225,7 @@ static void process_request(struct ethcatqueue *sq)
 
             /* parse an incoming command into args */
             in = command_parsef(in, inend, cp, args);
-
+            
             /* get request handler */
             int (*func)(struct ethcatqueue *, void *, uint32_t *) = cp->func;
 
@@ -239,16 +259,16 @@ static void process_request(struct ethcatqueue *sq)
             }
         }
 
+skip:
+
         /* delete request message */
-        free(request);
+        message_free(request);
 
         /* 
          * Add response to response queue, in case of error it will
          * notify the high level thread which will take action.
          */
         list_add_tail(response, &sq->response_queue);
-
-        errorf("STOCAZZO");
 
         /* wake up high level thread */
         check_wake_receive(sq);
@@ -277,7 +297,7 @@ input_event(struct ethcatqueue *sq, double eventtime)
     }
 
     /* process a high level thread request */
-    process_request(sq);
+    //process_request(sq);
 
     /*wake up high level thread (will process response) */
     check_wake_receive(sq);
@@ -289,18 +309,21 @@ input_event(struct ethcatqueue *sq, double eventtime)
 static double
 protocol_event(struct ethcatqueue *sq, double eventtime)
 {
+    pthread_mutex_lock(&sq->lock);
+
     /* process a high level thread request */
     process_request(sq);
+
+    pthread_mutex_unlock(&sq->lock);
+
+    return PR_NEVER;
 };
 
 static void
 kick_event(struct ethcatqueue *sq, double eventtime)
 {
-    /**
-     * Allocate enogh space on stack. TODO: check if it is
-     * possible to rduce the size of dummy.
-     */
-    char cmd;
+    /* protocol command */
+    uint8_t cmd;
     /* read rx-command pipe */
     int ret = read(sq->pipe_sched[0], &cmd, sizeof(cmd));
     /* check data */
@@ -859,14 +882,15 @@ klipper:
      * is no activity on the pipe, return immediately and don't wait
      * in blocking mode. 
      */
-    fd_set_non_blocking(sq->pipe_sched[0]);
-    fd_set_non_blocking(sq->pipe_sched[1]);
+    ret = fd_set_non_blocking(sq->pipe_sched[0]);
+    ret = fd_set_non_blocking(sq->pipe_sched[1]);
 
     /* queues */
     sq->need_kick_clock = MAX_CLOCK; //background thread wuke up time
     list_init(&sq->pending_queues);  //messages waiting to be sent
     list_init(&sq->request_queue);   //request messages form high to low level thread
     list_init(&sq->response_queue);  //response messages form low to high level thread
+    errorf("REQUEST QUEUE INIT");
 
     /* associate external ethercat callback table */
     sq->klippyifc.cp_table = command_parser_table;
@@ -892,7 +916,7 @@ klipper:
 
 fail:
     /* error handling */
-    //report_errno("init", ret);
+    report_errno("init", ret);
     return NULL;
 }
 
@@ -906,7 +930,7 @@ ethcatqueue_exit(struct ethcatqueue *sq)
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
     /* wake ethercat high level thread (last time) */
-    kick_ethbg_thread(sq, EQPT_PROTOCOL);
+    //kick_bg_thread(sq, EQPT_PROTOCOL);
     /* join and stop current thread */
     int ret = pthread_join(sq->tid, NULL);
     if (ret)
@@ -996,22 +1020,33 @@ ethcatqueue_send_command(struct ethcatqueue *sq,
                          uint64_t notify_id)
 {
     /* crete new queue message */
-    struct queue_message *qm = malloc(sizeof(*qm));
-    memset(qm, 0, sizeof(*qm));
-    memcpy(qm->msg, msg, len);
+    struct queue_message *qm = message_alloc();
+    uint8_t *buf = &qm->msg[0];
+    memcpy(&buf[MESSAGE_HEADER_SIZE], msg, len);
     qm->len = len;
     qm->min_clock = min_clock;
     qm->req_clock = req_clock;
     qm->notify_id = notify_id;
+
+    /* fill header and trailer */
+    len += MESSAGE_HEADER_SIZE + MESSAGE_TRAILER_SIZE;
+    buf[MESSAGE_POS_LEN] = len;
+    buf[MESSAGE_POS_SEQ] = MESSAGE_DEST | (1 & MESSAGE_SEQ_MASK);
+    uint16_t crc = msgblock_crc16_ccitt(buf, len - MESSAGE_TRAILER_SIZE);
+    buf[len-MESSAGE_TRAILER_CRC] = crc >> 8;
+    buf[len-MESSAGE_TRAILER_CRC+1] = crc & 0xff;
+    buf[len-MESSAGE_TRAILER_SYNC] = MESSAGE_SYNC;
  
     /* acquire mutex (this operation has to be as fast as possible) */
     pthread_mutex_lock(&sq->lock);
 
     /* merge message queue with upcoming queue */
-    list_add_tail(qm, &sq->request_queue);
+    list_add_tail(&qm->node, &sq->request_queue);
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);
+
+    kick_bg_thread(sq, EQPT_PROTOCOL);    
 }
 
 /** add a batch of messages (pvt only) to the upcoming command queue */
@@ -1088,7 +1123,7 @@ ethcatqueue_send_batch(struct ethcatqueue *sq, struct command_queue *cq, struct 
     /* wake the background thread if necessary (limit case) */
     if (mustwake)
     {
-        kick_ethbg_thread(sq, EQPT_COMMAND);
+        //kick_bg_thread(sq, EQPT_COMMAND);
     }
 }
 

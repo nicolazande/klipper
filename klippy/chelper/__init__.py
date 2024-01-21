@@ -104,7 +104,6 @@ defs_ethcatqueue = """
                                    uint64_t last_clock);
     void ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce);
     void ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len);
-    void kick_ethbg_thread(struct ethcatqueue *sq, uint8_t cmd);
 """
 
 defs_stepcompress = """

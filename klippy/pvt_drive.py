@@ -198,7 +198,9 @@ class PVT_drive:
         if ret:
             raise error("Internal error in pvtcompress")
         # send reset command (TODO: add response for timing and error handling)
-        self._reset_cmd.send([self._oid, 0])
+        reset_cmd_tag = self._reset_cmd.get_command_tag()
+        data = (reset_cmd_tag, self._oid, 0)
+        self._reset_cmd.send(data)
         # get drive position
         self._query_mcu_position()
         

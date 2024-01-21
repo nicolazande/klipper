@@ -200,13 +200,4 @@ void ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce
 /* return a string buffer containing statistics for the ethcat port */
 void ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len);
 
-/**
- * Write to the ethcatqueue internal pipe to force the execution 
- * of the background low level ethercat immediately (don't wait
- * for associated timer). This function is called asynchronously
- * by the high level thread since it cannot update directly the
- * command event timer.
- */
-void kick_ethbg_thread(struct ethcatqueue *sq, uint8_t cmd);
-
 #endif // ethcatqueue.h
