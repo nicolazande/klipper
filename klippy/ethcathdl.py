@@ -49,7 +49,7 @@ class EthercatReader:
             self.ffi_lib.ethcatqueue_pull(self.ethcatqueue, response)
             count = response.len
             if count < 0:
-                # stop (nothing to process)
+                # stop (error)
                 break
             if response.notify_id:
                 ''' 
@@ -60,6 +60,7 @@ class EthercatReader:
                 completion = self.pending_notifications.pop(response.notify_id)
                 self.reactor.async_complete(completion, params)
                 continue
+            logging.info("RECEIVED PARAMS = %s" % response.msg)
             # get message parameters from encoded message
             params = self.msgparser.parse(response.msg[0:count])
             params['#sent_time'] = response.sent_time
@@ -210,7 +211,6 @@ class EthercatReader:
         '''
         Send raw command and wait for confirmation.
         '''
-        logging.info("PYCOMMAND = %s" % cmd)
         self.last_notify_id += 1
         nid = self.last_notify_id
         # get available greenlet from reactor

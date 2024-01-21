@@ -469,6 +469,7 @@ static int command_stepper_get_position(struct ethcatqueue *sq, void *out, uint3
     struct command_parser *ce = response_parser_table[ETHCAT_GET_POSITION_RES];
     /* create response  */
     uint8_t msglen = command_encode_and_frame(buf, ce, oid, position);
+    return 0;
 }
 static int command_stepper_get_position_param_list[1] = {PT_byte}; //oid
 static struct command_parser command_stepper_get_position_parser = 

@@ -152,8 +152,7 @@ static void
 kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd)
 {
     /* write a dummy value just to wake up the poll reactor */
-    uint8_t data = cmd;
-    int ret = write(sq->pipe_sched[1], &data, 1);
+    int ret = write(sq->pipe_sched[1], &cmd, 1);
     if (ret < 0)
     {
         report_errno("pipe write", ret);
@@ -172,18 +171,8 @@ static void process_request(struct ethcatqueue *sq)
         uint8_t msglen; //message length in byte
         const struct command_parser *cp; //command parser
 
-        uint8_t *buf = request->msg;
-        errorf("CCOMMAND OUT = [");
-        for (uint8_t i=0; i < 64; i++)
-        {
-            errorf("%d,", buf[i]);
-        }
-        errorf("]");
-
         /* remove message from request queue */
         list_del(&request->node);
-
-        goto skip;
 
 #if MESSAGE_CHECK_FORMAT
         /* check message format (sync, crc, ...) */
@@ -259,16 +248,19 @@ static void process_request(struct ethcatqueue *sq)
             }
         }
 
-skip:
-
         /* delete request message */
         message_free(request);
+
+        /* update response message */
+        response->len = response->msg[MESSAGE_POS_LEN];
+        errorf("LENGTH = %d", response->len);
+        errorf("RESID = %d", response->msg[2]);
 
         /* 
          * Add response to response queue, in case of error it will
          * notify the high level thread which will take action.
          */
-        list_add_tail(response, &sq->response_queue);
+        list_add_tail(&response->node, &sq->response_queue);
 
         /* wake up high level thread */
         check_wake_receive(sq);
