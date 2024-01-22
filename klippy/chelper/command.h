@@ -32,21 +32,22 @@
 /****************************************************************
  * Custom data types
  ****************************************************************/
-/* ethercat rpc command ids */
-typedef enum 
+/* command parser ids */
+enum 
 {
-    ETHCAT_NO_CMD,
-    ETHCAT_GET_POSITION_CMD,
-    ETHCAT_SET_CLOCK_CMD,
-    ETHCAT_MAX_CMD
-} ethercat_cmd;
+    ETH_DEFAULT_CP,
+    ETH_RESET_STEP_CLOCK_CP,
+    ETH_STEPPER_GET_POSITION_CP,
+    ETH_MAX_CP
+};
 
-typedef enum 
+/* command encoder ids */
+enum 
 {
-    ETHCAT_NO_RES,
-    ETHCAT_GET_POSITION_RES,
-    ETHCAT_MAX_RES
-} ethercat_res;
+    ETH_DEFAULT_CE,
+    ETH_STEPPER_POSITION_CE,
+    ETH_MAX_CE
+};
 
 /* command supported data types */
 enum 
@@ -61,19 +62,24 @@ enum
     PT_buffer,
 };
 
-/* command or response handler */
+/* response command encoder */
+struct command_encoder
+{
+    uint8_t msg_id; //response id
+    uint8_t max_size; //max command or response data size in bytes
+    uint8_t num_params; //list of parameter types (external)
+    const uint8_t *param_types;
+};
+
+/* command parser */
 struct command_parser
 {
-    uint8_t msg_id; //command or response id
-    union
-    {
-        uint8_t num_args; //number of arguments (function parametes + buffers)
-        uint8_t max_size; //max command or response data size in bytes
-    };
-    uint8_t flags; //command or response flags
+    uint8_t msg_id; //command id
+    uint8_t num_args; //number of arguments (function parametes + buffers)
+    uint8_t flags; //command flags
     uint8_t num_params; //number of function parameters
     const uint8_t *param_types; //list of parameter types (external)
-    int (*func)(struct ethcatqueue *, void *, uint32_t *); //command (only) callback
+    int (*func)(struct ethcatqueue *, void *, uint32_t *); //command callback
 };
 
 
@@ -87,6 +93,6 @@ uint8_t *command_parsef(uint8_t *p, uint8_t *maxend, struct command_parser *cp, 
 int8_t check_command(uint8_t *buf, uint8_t buf_len, uint8_t *pop_count);
 
 /* encode a response message buffer (used directly by callbacks) */
-uint8_t command_encode_and_frame(uint8_t *buf, struct command_parser *cp, ...);
+uint8_t command_encode_and_frame(uint8_t *buf, struct command_encoder *ce, ...);
 
 #endif // command.h

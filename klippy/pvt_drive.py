@@ -92,8 +92,8 @@ class PVT_drive:
             "reset_step_clock oid=%c clock=%u")
         # query position from high to low level thread
         self._get_position_cmd = self._mcu.lookup_query_command(
-            "stepper_get_position oid=%c",
-            "stepper_position oid=%c pos=%i",
+            msgformat="stepper_get_position oid=%c",
+            respformat="stepper_position oid=%c pos=%i",
             oid = self._oid,
             serial = self._mcu._ethercat,
             helper = ethcathdl.EthercatRetryCommand)

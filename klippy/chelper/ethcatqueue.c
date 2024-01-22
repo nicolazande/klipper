@@ -58,7 +58,7 @@
  * Data
  ****************************************************************/
 /* external command parser table */
-extern struct command_parser *command_parser_table[ETHCAT_MAX_CMD];
+extern struct command_parser *command_parser_table[ETH_MAX_CP];
 
 
 /****************************************************************
@@ -87,7 +87,7 @@ static void kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd);
  * and only one command at a time can be processed since there is a single
  * instance of sharedmonitor in the ethcatqueue.
  */
-static void process_request(struct ethcatqueue *sq);
+static double process_request(struct ethcatqueue *sq, double eventtime);
 
 /**
  * Read EtherCAT frame coming back from the drives and update internal structures.
@@ -159,8 +159,10 @@ kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd)
     }
 }
 
-static void process_request(struct ethcatqueue *sq)
+static double process_request(struct ethcatqueue *sq, double eventtime)
 {
+    double next_event = PR_NEVER;
+
     /* check request from high level thread */
     if (!list_empty(&sq->request_queue))
     {
@@ -170,9 +172,6 @@ static void process_request(struct ethcatqueue *sq)
         struct queue_message *response = message_alloc(); //response message (TODO: populate sent and receive time)
         uint8_t msglen; //message length in byte
         const struct command_parser *cp; //command parser
-
-        /* remove message from request queue */
-        list_del(&request->node);
 
 #if MESSAGE_CHECK_FORMAT
         /* check message format (sync, crc, ...) */
@@ -188,7 +187,7 @@ static void process_request(struct ethcatqueue *sq)
         /* get boundaries */
         uint8_t *in = &request->msg[MESSAGE_HEADER_SIZE];
         uint8_t *inend = &request->msg[msglen-MESSAGE_TRAILER_SIZE];
-        uint8_t *out = &response->msg[MESSAGE_HEADER_SIZE];
+        uint8_t *out = response->msg;
         uint8_t *outend = &response->msg[MESSAGE_MAX-MESSAGE_TRAILER_SIZE];
 
         /* loop over request bytes (allow multiple commands per message) */
@@ -198,7 +197,7 @@ static void process_request(struct ethcatqueue *sq)
             uint8_t cmdid = *in++;
 
             /* check command */
-            if (cmdid < ETHCAT_MAX_CMD)
+            if (cmdid < ETH_MAX_CP)
             {
                 /* get command parser */
                 cp = ifc->cp_table[cmdid];
@@ -235,7 +234,7 @@ static void process_request(struct ethcatqueue *sq)
                     response->notify_id = old_response->notify_id;
                     response->sent_time = old_response->sent_time;
                     response->receive_time = old_response->receive_time;
-                    out = &response->msg[MESSAGE_HEADER_SIZE];
+                    out = response->msg;
                     outend = &response->msg[MESSAGE_MAX-MESSAGE_TRAILER_SIZE];
                 }
 
@@ -245,26 +244,61 @@ static void process_request(struct ethcatqueue *sq)
                  * that a new response message can be created automatically.
                  */
                 int ret = func(sq, out, args);
+                if (ret)
+                {
+                    message_free(response);
+                    return PR_NOW;
+                }
             }
         }
 
-        /* delete request message */
-        message_free(request);
+        /* remove message from request queue */
+        list_del(&request->node);
 
         /* update response message */
         response->len = response->msg[MESSAGE_POS_LEN];
-        errorf("LENGTH = %d", response->len);
-        errorf("RESID = %d", response->msg[2]);
+
+        if (request->notify_id)
+        {
+            /* message requires notification (add to notify list) */
+            request->req_clock = sq->send_seq;
+            list_add_tail(&request->node, &sq->notify_queue);
+        }
+        else
+        {
+            /* delete request message */
+            message_free(request);
+        }
 
         /* 
          * Add response to response queue, in case of error it will
          * notify the high level thread which will take action.
          */
         list_add_tail(&response->node, &sq->response_queue);
-
-        /* wake up high level thread */
-        check_wake_receive(sq);
     }
+
+    //uint32_t rseq_delta = ((response->msg[MESSAGE_POS_SEQ] - sq->receive_seq) & MESSAGE_SEQ_MASK);
+    //uint64_t rseq = sq->receive_seq + rseq_delta;
+    while (!list_empty(&sq->notify_queue))
+    {
+        struct queue_message *qm = list_first_entry(&sq->notify_queue, struct queue_message, node);
+        // uint64_t wake_seq = rseq - 1 - (len > MESSAGE_MIN ? 1 : 0);
+        // uint64_t notify_msg_sent_seq = qm->req_clock;
+        // if (notify_msg_sent_seq > wake_seq)
+        // {
+        //     break;
+        // }
+        list_del(&qm->node);
+        qm->len = 0;
+        qm->sent_time = 0; //sq->last_receive_sent_time;
+        qm->receive_time = eventtime; //eventtime;
+        list_add_tail(&qm->node, &sq->response_queue);
+    }
+
+    /* wake up high level thread */
+    check_wake_receive(sq);
+
+    return next_event;
 };
 
 static double
@@ -301,14 +335,16 @@ input_event(struct ethcatqueue *sq, double eventtime)
 static double
 protocol_event(struct ethcatqueue *sq, double eventtime)
 {
+    double next_event = PR_NEVER;
+
     pthread_mutex_lock(&sq->lock);
 
     /* process a high level thread request */
-    process_request(sq);
+    next_event = process_request(sq, eventtime);
 
     pthread_mutex_unlock(&sq->lock);
 
-    return PR_NEVER;
+    return next_event;
 };
 
 static void
@@ -882,7 +918,7 @@ klipper:
     list_init(&sq->pending_queues);  //messages waiting to be sent
     list_init(&sq->request_queue);   //request messages form high to low level thread
     list_init(&sq->response_queue);  //response messages form low to high level thread
-    errorf("REQUEST QUEUE INIT");
+    list_init(&sq->notify_queue);    //notify queue for protocol messages
 
     /* associate external ethercat callback table */
     sq->klippyifc.cp_table = command_parser_table;
@@ -947,6 +983,7 @@ ethcatqueue_free(struct ethcatqueue *sq)
     pthread_mutex_lock(&sq->lock);
     message_queue_free(&sq->request_queue);
     message_queue_free(&sq->response_queue);
+    message_queue_free(&sq->notify_queue);
     /* free all pending queues */
     while (!list_empty(&sq->pending_queues))
     {
@@ -1167,7 +1204,7 @@ ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm)
     pqm->notify_id = response->notify_id;
 
     /* delete request message */
-    free(response);
+    message_free(response);
 
     /* unlock mutex */
     pthread_mutex_unlock(&sq->lock);

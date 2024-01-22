@@ -135,6 +135,10 @@ struct ethcatqueue
     struct mastermonitor masterifc; //EtherCAT master interface
     /* shared interface */
     struct sharedmonitor klippyifc; //klippy interface
+    /* protocol */
+    uint64_t send_seq;
+    uint64_t receive_seq;
+    struct list_head notify_queue;
 };
 
 

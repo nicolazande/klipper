@@ -29,8 +29,8 @@ enum
  ****************************************************************/
 /* message sequence number */
 static uint8_t next_sequence = MESSAGE_DEST;
-extern struct command_parser *command_parser_table[ETHCAT_MAX_CMD];
-extern struct command_parser *response_parser_table[ETHCAT_MAX_RES]; 
+extern struct command_parser *command_parser_table[ETH_MAX_CP];
+extern struct command_encoder *command_encoder_table[ETH_MAX_CE]; 
 
 
 /****************************************************************
@@ -43,7 +43,7 @@ static uint8_t *encode_int(uint8_t *p, uint32_t v);
 static uint32_t parse_int(uint8_t **pp);
 
 /* encode a response message */
-static uint8_t command_encodef(uint8_t *buf, const struct command_parser *cp, va_list args);
+static uint8_t command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args);
 
 /* add header and trailer bytes to a response message */
 static void command_add_frame(uint8_t *buf, uint8_t msglen);
@@ -121,10 +121,10 @@ parse_int(uint8_t **pp)
 
 /* encode a response message */
 static uint8_t
-command_encodef(uint8_t *buf, const struct command_parser *cp, va_list args)
+command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
 {
     /* get message max size in bytes */
-    uint8_t max_size = cp->max_size;
+    uint8_t max_size = ce->max_size;
     if (max_size <= MESSAGE_MIN)
     {
         return max_size;
@@ -135,11 +135,11 @@ command_encodef(uint8_t *buf, const struct command_parser *cp, va_list args)
     uint8_t *maxend = &p[max_size - MESSAGE_MIN];
     
     /* get number and type of parameters */
-    uint8_t num_params = cp->num_params;
-    const uint8_t *param_types = cp->param_types;
+    uint8_t num_params = ce->num_params;
+    const uint8_t *param_types = ce->param_types;
     
     /* store message id */
-    *p++ = cp->msg_id;
+    *p++ = ce->msg_id;
 
     /* loop through parameters and encode it */
     while (num_params--)
@@ -222,13 +222,17 @@ command_encodef(uint8_t *buf, const struct command_parser *cp, va_list args)
             }
             default:
             {
-                /* do nothing */
-                return 0;
+                /* erorr */
+                goto error;
             }
         }
     }
     /* move forward */
     return p - buf + MESSAGE_TRAILER_SIZE;
+
+error:
+    shutdown("Message encode error");
+    return 0;
 }
 
 /* add header and trailer bytes to a response message block */
@@ -423,7 +427,7 @@ nak:
 
 /* encode a response message buffer */
 uint8_t
-command_encode_and_frame(uint8_t *buf, struct command_parser *ce, ...)
+command_encode_and_frame(uint8_t *buf, struct command_encoder *ce, ...)
 {
     /* response parameters */
     va_list args;
@@ -438,52 +442,26 @@ command_encode_and_frame(uint8_t *buf, struct command_parser *ce, ...)
 
 
 /****************************************************************
- * Command command parsers
+ * Command parser list
  ****************************************************************/
-/** default dummy function */
-static int command_general_dummy(struct ethcatqueue *sq, void *out, uint32_t *args)
+/* default command parser */
+static int cp_f_default(struct ethcatqueue *sq, void *out, uint32_t *args)
 {
     return 0;
 }
-static int command_dummy_param_list[0];
-static struct command_parser generic_dummy_parser = 
+static int cp_p_default[0];
+static struct command_parser cp_default = 
 {
-    .msg_id = ETHCAT_NO_CMD,
+    .msg_id = ETH_DEFAULT_CP,
     .num_args = 0,
     .flags = 0,
     .num_params = 0,
-    .max_size = 0,
-    .param_types = &command_dummy_param_list,
-    .func = &command_general_dummy,
+    .param_types = &cp_p_default,
+    .func = &cp_f_default,
 };
 
-/** get position command */
-static int command_stepper_get_position(struct ethcatqueue *sq, void *out, uint32_t *args)
-{
-    /* get drive oid and target buffer */
-    uint8_t oid = args[0];
-    uint8_t *buf = (uint8_t *)out;
-    /* get position from slave moinitor */
-    int32_t position = sq->masterifc.monitor[oid].position; /** TODO: add int32_t specific field */
-    /* get response command parser */
-    struct command_parser *ce = response_parser_table[ETHCAT_GET_POSITION_RES];
-    /* create response  */
-    uint8_t msglen = command_encode_and_frame(buf, ce, oid, position);
-    return 0;
-}
-static int command_stepper_get_position_param_list[1] = {PT_byte}; //oid
-static struct command_parser command_stepper_get_position_parser = 
-{
-    .msg_id = ETHCAT_GET_POSITION_CMD,
-    .num_args = 1,
-    .flags = 0,
-    .num_params = 1,
-    .param_types = &command_stepper_get_position_param_list,
-    .func = &command_stepper_get_position,
-};
-
-/* set drive absolute clock (next step) */
-static int command_reset_step_clock(struct ethcatqueue *sq, void *out, uint32_t *args)
+/* reset step clock command parser */
+static int cp_f_command_reset_step_clock(struct ethcatqueue *sq, void *out, uint32_t *args)
 {
     struct stepper *s = NULL;
     /* get drive oid and target buffer */
@@ -492,50 +470,83 @@ static int command_reset_step_clock(struct ethcatqueue *sq, void *out, uint32_t 
     /** TODO: add logic for next step time */
     return 0;
 }
-static int command_reset_step_clock_param_list[2] = {PT_byte, PT_uint32}; //oid, clock
-static struct command_parser command_reset_step_clock_parser = 
+static int cp_p_reset_step_clock[2] = {PT_byte, PT_uint32}; //oid, clock
+static struct command_parser cp_reset_step_clock = 
 {
-    .msg_id = ETHCAT_SET_CLOCK_CMD,
+    .msg_id = ETH_RESET_STEP_CLOCK_CP,
     .num_args = 2,
     .flags = 0,
     .num_params = 2,
-    .param_types = &command_reset_step_clock_param_list,
-    .func = &command_reset_step_clock,
+    .param_types = &cp_p_reset_step_clock,
+    .func = &cp_f_command_reset_step_clock,
+};
+
+/** stepper get position command parser */
+static int cp_f_stepper_get_position(struct ethcatqueue *sq, void *out, uint32_t *args)
+{
+    /* get drive oid and target buffer */
+    uint8_t oid = args[0];
+    uint8_t *buf = (uint8_t *)out;
+    /* get position from slave moinitor */
+    int32_t position = 88; //sq->masterifc.monitor[oid].position; /** TODO: add int32_t specific field */
+    /* get response command parser */
+    struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
+    /* create response  */
+    uint8_t msglen = command_encode_and_frame(buf, ce, oid, position);
+    return 0;
+}
+static int cp_p_stepper_get_position[1] = {PT_byte}; //oid
+static struct command_parser cp_stepper_get_position = 
+{
+    .msg_id = ETH_STEPPER_GET_POSITION_CP,
+    .num_args = 1,
+    .flags = 0,
+    .num_params = 1,
+    .param_types = &cp_p_stepper_get_position,
+    .func = &cp_f_stepper_get_position,
 };
 
 
 /****************************************************************
- * Response command parsers
+ * Command encoder list
  ****************************************************************/
-/** get position response */
-static int response_stepper_get_position_param_list[2] = {PT_byte, PT_int32}; //oid, position
-static struct command_parser response_stepper_get_position_parser = 
+/* default command encoder */
+static int ce_p_default[0];
+static struct command_encoder ce_default = 
 {
-    .msg_id = ETHCAT_GET_POSITION_RES,
-    .flags = 0,
-    .num_params = 2,
+    .msg_id = ETH_DEFAULT_CE + ETH_MAX_CP,
+    .max_size = 0,
+    .num_params = 0,
+    .param_types = &ce_p_default,
+};
+
+/* stepper position command encoder */
+static int ce_p_stepper_position[2] = {PT_byte, PT_int32}; //oid, position
+static struct command_encoder ce_stepper_position = 
+{
+    .msg_id = ETH_STEPPER_POSITION_CE + ETH_MAX_CP,
     .max_size = MESSAGE_MAX-MESSAGE_TRAILER_SIZE,
-    .param_types = &response_stepper_get_position_param_list,
-    .func = NULL,
+    .num_params = 2,
+    .param_types = &ce_p_stepper_position,
 };
 
 
 /****************************************************************
  * Command command parser public table
  ****************************************************************/
-struct command_parser *command_parser_table[ETHCAT_MAX_CMD] =
+struct command_parser *command_parser_table[ETH_MAX_CP] =
 {
-    [ETHCAT_NO_CMD] = &generic_dummy_parser, //no command
-    [ETHCAT_GET_POSITION_CMD] = &command_stepper_get_position_parser, //query drive position
-    [ETHCAT_SET_CLOCK_CMD] = &command_reset_step_clock_parser, //reset drive clock
+    [ETH_DEFAULT_CP] = &cp_default, //default
+    [ETH_RESET_STEP_CLOCK_CP] = &cp_reset_step_clock, //reset step clock
+    [ETH_STEPPER_GET_POSITION_CP] = &cp_stepper_get_position, //stepper get position
 };
 
 
 /****************************************************************
  * Response command parser public table
  ****************************************************************/
-struct command_parser *response_parser_table[ETHCAT_MAX_RES] =
+struct command_encoder *command_encoder_table[ETH_MAX_CE] =
 {
-    [ETHCAT_NO_RES] = &generic_dummy_parser, //no response
-    [ETHCAT_GET_POSITION_RES] = &response_stepper_get_position_parser, //query drive position
+    [ETH_DEFAULT_CE] = &ce_default, //default
+    [ETH_STEPPER_POSITION_CE] = &ce_stepper_position, //stepper position
 };

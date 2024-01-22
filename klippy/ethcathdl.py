@@ -60,13 +60,12 @@ class EthercatReader:
                 completion = self.pending_notifications.pop(response.notify_id)
                 self.reactor.async_complete(completion, params)
                 continue
-            logging.info("RECEIVED PARAMS = %s" % response.msg)
             # get message parameters from encoded message
             params = self.msgparser.parse(response.msg[0:count])
             params['#sent_time'] = response.sent_time
             params['#receive_time'] = response.receive_time
             # message handler key
-            hdl = (params['#name'], params['#oid']) #high level response handler
+            hdl = (params['#name'], params['oid']) #high level response handler
             try:
                 with self.lock:
                     # lock handler (avoid registrations in the meantime)
