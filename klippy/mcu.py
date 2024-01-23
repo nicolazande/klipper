@@ -955,7 +955,9 @@ class MCU:
         
     def setup_pin(self, pin_type, pin_params):
         pcs = {'endstop': MCU_endstop,
-               'digital_out': MCU_digital_out, 'pwm': MCU_pwm, 'adc': MCU_adc}
+               'digital_out': MCU_digital_out,
+               'pwm': MCU_pwm,
+               'adc': MCU_adc}
         if pin_type not in pcs:
             raise pins.error("pin type %s not supported on mcu" % (pin_type,))
         return pcs[pin_type](self, pin_params)

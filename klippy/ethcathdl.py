@@ -202,7 +202,6 @@ class EthercatReader:
         Send raw command.
         '''
         # add command message to request queue
-        logging.info("PYCOMMAND LENGTH = %s", len(cmd))
         self.ffi_lib.ethcatqueue_send_command(self.ethcatqueue, cmd, len(cmd),
                                               minclock, reqclock, 0)
         

@@ -23,6 +23,7 @@ class PVT_drive:
         # parameters
         self._name = name
         self._units_in_radians = units_in_radians
+        self._step_dist = 1
         # keep virtual connection with the mcu module
         self._mcu = mcu
         self._oid = oid = self._mcu.create_ethercat_oid() #oid used as ethercat slave address
@@ -97,6 +98,13 @@ class PVT_drive:
             oid = self._oid,
             serial = self._mcu._ethercat,
             helper = ethcathdl.EthercatRetryCommand)
+        
+    def get_step_dist(self):
+        '''
+        Get step distance. NOTE: this is a dummy function needed for
+        compatibility reasons (homing, ...).
+        '''
+        return self._step_dist
     
     def get_oid(self):
         '''

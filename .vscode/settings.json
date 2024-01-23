@@ -5,6 +5,7 @@
         "ethcatqueue.h": "c",
         "ecrt.h": "c",
         "serialqueue.h": "c",
-        "pyhelper.h": "c"
+        "pyhelper.h": "c",
+        "command.h": "c"
     }
 }

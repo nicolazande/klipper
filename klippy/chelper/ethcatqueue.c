@@ -257,6 +257,7 @@ static double process_request(struct ethcatqueue *sq, double eventtime)
 
         /* update response message */
         response->len = response->msg[MESSAGE_POS_LEN];
+        response->receive_time = eventtime;
 
         if (request->notify_id)
         {
