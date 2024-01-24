@@ -4,11 +4,8 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import sys, os, zlib, logging, math
-import serialhdl, msgproto, pins, chelper, clocksync
-
-# add ethercat dependency
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '___', 'klippy'))
-import ethcathdl
+import serialhdl, ethcathdl, msgproto, pins, chelper, clocksync
+import stepper
 
 class error(Exception):
     pass

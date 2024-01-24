@@ -4,16 +4,50 @@
 
 # imports
 import os, sys, math, logging, collections
-# add klippy dependency
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'klippy'))
+# additional imports (TODO: check it)
 import chelper, mcu, ethcathdl
 
 class error(Exception):
     pass
 
-######################################################################
-# PVT drives
-######################################################################
+
+class PVT_drive_endstop(mcu.MCU_endstop):
+    '''
+    PVT drive built-in endstop.
+    '''
+    RETRY_QUERY = 1.000
+    def __init__(self, mcu, pin_params):
+        self._mcu = mcu
+        self._oid = self._mcu.create_ethercat_oid()
+        self._home_cmd = self._query_cmd = None
+        self._mcu.register_config_callback(self._build_config)
+        self._trigger_completion = None
+        self._rest_ticks = 0
+
+    def add_stepper(self, stepper):
+        pass
+
+    def get_steppers(self):
+        pass
+    
+    def _build_config(self):
+        '''
+        Build configuration.
+        '''
+        # lookup commands
+        self._home_cmd = self._mcu.lookup_command(
+            msgformat="endstop_home oid=%c",
+            serial=self._mcu._ethercat)
+        self._query_cmd = self._mcu.lookup_query_command(
+            msgformat="endstop_query_state oid=%c",
+            respformat="endstop_state oid=%c homing=%c next_clock=%u pin_value=%c",
+            serial = self._mcu._ethercat,
+            helper = ethcathdl.EthercatRetryCommand)
+        
+    def home_start(self, print_time, sample_time, sample_count, rest_time, triggered=True):
+        clock = self._mcu.print_time_to_clock(print_time)
+        self._home_cmd.send([self._oid], reqclock=clock)
+        
 class PVT_drive:
     '''
     Interface to low-level mcu and chelper code for pvt drive.
@@ -90,7 +124,8 @@ class PVT_drive:
         '''
         # command a reset clock from high to low level thread
         self._reset_cmd = self._mcu.lookup_command(
-            "reset_step_clock oid=%c clock=%u")
+            msgformat="reset_step_clock oid=%c clock=%u",
+            serial=self._mcu._ethercat)
         # query position from high to low level thread
         self._get_position_cmd = self._mcu.lookup_query_command(
             msgformat="stepper_get_position oid=%c",
@@ -323,7 +358,7 @@ def PrinterStepper(config, units_in_radians=False):
     return mcu_drive
 
 
-class PrinterDriveRail:
+class PrinterRail:
     '''
     A motor control rail with one (or more) steppers and one (or more)
     endstops with support for pvt drive.
@@ -488,7 +523,7 @@ def LookupMultiRail(config, need_position_minmax=True,
     '''
     Wrapper for dual stepper motor support.
     '''
-    rail = PrinterDriveRail(config, need_position_minmax, default_position_endstop, units_in_radians)
+    rail = PrinterRail(config, need_position_minmax, default_position_endstop, units_in_radians)
     for i in range(1, 99):
         if not config.has_section(config.get_name() + str(i)):
             break

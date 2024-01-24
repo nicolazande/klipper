@@ -30,7 +30,7 @@ class HashKinematics:
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
         self.dc_module = None
-        # check for dual carriage support
+        # check for dual carriage support (NOTE: not used for the moment)
         if config.has_section('dual_carriage'):
             dc_config = config.getsection('dual_carriage')
             dc_axis = dc_config.getchoice('axis', {'x': 'x', 'y': 'y'})
@@ -71,12 +71,17 @@ class HashKinematics:
         return [stepper_positions[rail.get_name()] for rail in self.rails]
     
     def update_limits(self, i, range):
+        '''
+        Update limits only for already homed axis.
+        '''
         l, h = self.limits[i]
-        # update limits only for already homed axis
         if l <= h:
             self.limits[i] = range
 
     def override_rail(self, i, rail):
+        '''
+        Override rail.
+        '''
         self.rails[i] = rail
     
     def set_position(self, newpos, homing_axes):
@@ -100,6 +105,7 @@ class HashKinematics:
         '''
         position_min, position_max = rail.get_range()
         hi = rail.get_homing_info()
+        # home position [x, y, z, extruder]
         homepos = [None, None, None, None]
         homepos[axis] = hi.position_endstop
         forcepos = list(homepos)
@@ -116,8 +122,10 @@ class HashKinematics:
         '''
         for axis in homing_state.get_axes():
             if self.dc_module is not None and axis == self.dual_carriage_axis:
+                # dual carridge (NOTE: unused at the moment)
                 self.dc_module.home(homing_state)
             else:
+                # default
                 self.home_axis(homing_state, axis, self.rails[axis])
                 
     def _motor_off(self, print_time):
