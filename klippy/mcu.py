@@ -99,7 +99,8 @@ class CommandQueryWrapper:
         '''
         Send command wrapper.
         '''
-        return self._do_send([self._cmd.encode(data)], minclock, reqclock)
+        cmd = self._cmd.encode(data)
+        return self._do_send([cmd], minclock, reqclock)
     
     def send_with_preface(self, preface_cmd, preface_data=(), data=(),
                           minclock=0, reqclock=0):
@@ -149,7 +150,7 @@ class MCU_trsync:
     REASON_PAST_END_TIME = 4
     def __init__(self, mcu, trdispatch):
         self._mcu = mcu
-        self._trdispatch = trdispatch
+        self._trdispatch = trdispatch #private time reference dispatcher
         self._reactor = mcu.get_printer().get_reactor() #printer main reactor
         self._steppers = [] #associated steppers
         self._trdispatch_mcu = None
@@ -364,7 +365,7 @@ class MCU_endstop:
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.trdispatch_stop(self._trdispatch)
         res = [trsync.stop() for trsync in self._trsyncs]
-        if any([r == etrsync.REASON_COMMS_TIMEOUT for r in res]):
+        if any([ r== etrsync.REASON_COMMS_TIMEOUT for r in res]):
             return -1.
         if res[0] != etrsync.REASON_ENDSTOP_HIT:
             return 0.

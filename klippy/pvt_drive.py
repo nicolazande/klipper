@@ -11,24 +11,30 @@ class error(Exception):
     pass
 
 
-class PVT_drive_endstop(mcu.MCU_endstop):
+class PVT_endstop:
     '''
     PVT drive built-in endstop.
     '''
     RETRY_QUERY = 1.000
-    def __init__(self, mcu, pin_params):
+    def __init__(self, mcu, oid):
         self._mcu = mcu
-        self._oid = self._mcu.create_ethercat_oid()
+        self._oid = oid
         self._home_cmd = self._query_cmd = None
         self._mcu.register_config_callback(self._build_config)
         self._trigger_completion = None
         self._rest_ticks = 0
+        self._steppers = [] #associated steppers
+
+    def get_mcu(self):
+        return self._mcu
 
     def add_stepper(self, stepper):
-        pass
+        if stepper in self._steppers:
+            return
+        self._steppers.append(stepper)
 
     def get_steppers(self):
-        pass
+        return list(self._steppers)
     
     def _build_config(self):
         '''
@@ -36,17 +42,43 @@ class PVT_drive_endstop(mcu.MCU_endstop):
         '''
         # lookup commands
         self._home_cmd = self._mcu.lookup_command(
-            msgformat="endstop_home oid=%c",
+            msgformat="endstop_home oid=%c", #stepper oid
             serial=self._mcu._ethercat)
         self._query_cmd = self._mcu.lookup_query_command(
-            msgformat="endstop_query_state oid=%c",
-            respformat="endstop_state oid=%c homing=%c next_clock=%u pin_value=%c",
+            msgformat="endstop_query_state oid=%c", #stepper oid
+            respformat="endstop_state oid=%c homing=%c finished=%c next_clock=%u",
             serial = self._mcu._ethercat,
             helper = ethcathdl.EthercatRetryCommand)
         
-    def home_start(self, print_time, sample_time, sample_count, rest_time, triggered=True):
+    def home_start(self, print_time, sample_time, sample_count, rest_time, triggered=True): 
         clock = self._mcu.print_time_to_clock(print_time)
+        reactor = self._mcu.get_printer().get_reactor()
+        self._trigger_completion = reactor.completion()
+        self._trigger_completion.complete(0)
         self._home_cmd.send([self._oid], reqclock=clock)
+        return self._trigger_completion
+
+    def home_wait(self, home_end_time):
+        if self._mcu.is_fileoutput():
+            self._trigger_completion.complete(True)
+        self._trigger_completion.wait()
+        while 1:
+            params = self._query_cmd.send([self._oid])
+            if params["finished"]:
+                break
+        next_clock = self._mcu.clock32_to_clock64(params['next_clock'])
+        if next_clock > home_end_time:
+            return -1.
+        return self._mcu.clock_to_print_time(next_clock - self._rest_ticks)
+    
+    def query_endstop(self, print_time):
+        clock = self._mcu.print_time_to_clock(print_time)
+        if self._mcu.is_fileoutput():
+            return 0
+        params = self._query_cmd.send([self._oid], minclock=clock)
+        return params['finished']
+
+    
         
 class PVT_drive:
     '''
@@ -395,7 +427,7 @@ class PrinterRail:
                 "position_endstop in section '%s' must be between"
                 " position_min and position_max" % config.get_name())
         # homing mechanics
-        self.homing_speed = config.getfloat('homing_speed', 5.0, above=0.)
+        self.homing_speed = config.getfloat('homing_speed', 500.0, above=0.)
         self.second_homing_speed = config.getfloat('second_homing_speed', self.homing_speed/2., above=0.)
         self.homing_retract_speed = config.getfloat('homing_retract_speed', self.homing_speed, above=0.)
         self.homing_retract_dist = config.getfloat('homing_retract_dist', 5., minval=0.)
@@ -453,42 +485,15 @@ class PrinterRail:
         '''
         Add stepper (drive) to the current rail.
         '''
+        printer = config.get_printer()
         stepper = PrinterStepper(config, self.stepper_units_in_radians)
         self.steppers.append(stepper)
-        if self.endstops and config.get('endstop_pin', None) is None:
-            # no endstop defined (use primary endstop)
-            self.endstops[0][0].add_stepper(stepper)
-            return
-        endstop_pin = config.get('endstop_pin')
-        printer = config.get_printer()
-        ppins = printer.lookup_object('pins')
-        pin_params = ppins.parse_pin(endstop_pin, True, True)
-        # normalize pin name
-        pin_name = "%s:%s" % (pin_params['chip_name'], pin_params['pin'])
-        # look for already-registered endstop
-        endstop = self.endstop_map.get(pin_name, None)
-        if endstop is None:
-            # new endstop (register it)
-            mcu_endstop = ppins.setup_pin('endstop', endstop_pin)
-            self.endstop_map[pin_name] = \
-            {
-                'endstop': mcu_endstop,
-                'invert': pin_params['invert'],
-                'pullup': pin_params['pullup']
-            }
-            name = stepper.get_name(short=True)
-            self.endstops.append((mcu_endstop, name))
-            query_endstops = printer.load_object(config, 'query_endstops')
-            query_endstops.register_endstop(mcu_endstop, name)
-        else:
-            mcu_endstop = endstop['endstop']
-            changed_invert = pin_params['invert'] != endstop['invert']
-            changed_pullup = pin_params['pullup'] != endstop['pullup']
-            if changed_invert or changed_pullup:
-                raise error("Pinter rail %s shared endstop pin %s "
-                            "must specify the same pullup/invert settings" % (
-                                self.get_name(), pin_name))
-        mcu_endstop.add_stepper(stepper)
+        endstop = PVT_endstop(stepper._mcu, stepper._oid)
+        name = stepper.get_name(short=True)
+        self.endstops.append((endstop, name))
+        query_endstops = printer.load_object(config, 'query_endstops')
+        query_endstops.register_endstop(endstop, name)
+        endstop.add_stepper(stepper)
         
     def setup_itersolve(self, alloc_func, *params):
         '''
