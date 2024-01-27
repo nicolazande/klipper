@@ -275,7 +275,14 @@ static double process_request(struct ethcatqueue *sq, double eventtime)
          * Add response to response queue, in case of error it will
          * notify the high level thread which will take action.
          */
-        list_add_tail(&response->node, &sq->response_queue);
+        if (response->len > 0)
+        {
+            list_add_tail(&response->node, &sq->response_queue);
+        }
+        else
+        {
+            message_free(response);
+        }
     }
 
     //uint32_t rseq_delta = ((response->msg[MESSAGE_POS_SEQ] - sq->receive_seq) & MESSAGE_SEQ_MASK);
@@ -1267,5 +1274,6 @@ ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len)
     pthread_mutex_unlock(&sq->lock);
     /* print to bufffer */
     snprintf(buf, len,
-            " ready_bytes=%u upcoming_bytes=%u", stats.ready_bytes, stats.upcoming_bytes);
+            " ready_bytes=%u upcoming_bytes=%u",
+            stats.ready_bytes, stats.upcoming_bytes);
 }

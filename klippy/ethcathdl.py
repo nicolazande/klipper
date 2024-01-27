@@ -52,7 +52,6 @@ class EthercatReader:
                 # stop (error)
                 break
             if response.notify_id:
-                logging.info("LLLLLLL = %s", response)
                 ''' 
                 Response require notification, handle it asynchronously.
                 '''
@@ -202,7 +201,6 @@ class EthercatReader:
         '''
         Send raw command.
         '''
-        logging.info("DIOBRACA CMD = %s", cmd)
         # add command message to request queue
         self.ffi_lib.ethcatqueue_send_command(self.ethcatqueue, cmd, len(cmd),
                                               minclock, reqclock, 0)
@@ -211,7 +209,6 @@ class EthercatReader:
         '''
         Send raw command and wait for confirmation.
         '''
-        logging.info("DIOBRACA QUERY CMD = %s", cmd)
         self.last_notify_id += 1
         nid = self.last_notify_id
         # get available greenlet from reactor
@@ -223,7 +220,6 @@ class EthercatReader:
                                               minclock, reqclock, nid)
         # wait for completion
         params = completion.wait()
-        logging.info("DIOBRACA RES = %s", params)
         if params is None:
             self._error("Ethercat connection closed")
         return params

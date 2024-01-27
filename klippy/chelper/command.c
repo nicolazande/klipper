@@ -539,12 +539,13 @@ static int cp_f_endstop_query_state(struct ethcatqueue *sq, void *out, uint32_t 
      * TODO: add ethercat logic to read the homing status
      *       of the selected drive axis.
      */
+    static uint8_t gg = 5;
     /* get command encoder */
     struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
     /* create response  */
     int8_t homing = 1;
     int8_t finished = 1;
-    uint32_t next_clock = 0;
+    uint32_t next_clock = sq->idle_time;
     uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
     return 0;
 }
@@ -557,6 +558,28 @@ static struct command_parser cp_endstop_query_state =
     .num_params = 1,
     .param_types = &cp_p_endstop_query_state,
     .func = &cp_f_endstop_query_state,
+};
+
+/** stepper stop on trigger command parser */
+static int cp_f_stepper_stop_on_trigger(struct ethcatqueue *sq, void *out, uint32_t *args)
+{
+    /* get endstop oid (corresponds to drive oid) */
+    uint8_t oid = args[0];
+    uint8_t *buf = (uint8_t *)out;
+    /**
+     * TODO: add ethercat logic to stop the selected drive axis.
+     */
+    return 0;
+}
+static int cp_p_stepper_stop_on_trigger[1] = {PT_byte}; //oid
+static struct command_parser cp_stepper_stop_on_trigger = 
+{
+    .msg_id = ETH_STEPPER_STOP_ON_TRIGGER_CP,
+    .num_args = 1,
+    .flags = 0,
+    .num_params = 1,
+    .param_types = &cp_p_stepper_stop_on_trigger,
+    .func = &cp_f_stepper_stop_on_trigger,
 };
 
 
@@ -584,7 +607,7 @@ static struct command_encoder ce_stepper_position =
 };
 
 /* endstop state command encoder */
-static int ce_p_endstop_state[4] = {PT_byte, PT_byte, PT_byte, PT_int32}; //oid, homing, finished, next_clock
+static int ce_p_endstop_state[4] = {PT_byte, PT_byte, PT_byte, PT_uint32}; //oid, homing, finished, next_clock
 static struct command_encoder ce_endstop_state = 
 {
     .msg_id = ETH_ENDSTOP_STATE_CE + ETH_MAX_CP,
@@ -604,6 +627,7 @@ struct command_parser *command_parser_table[ETH_MAX_CP] =
     [ETH_STEPPER_GET_POSITION_CP] = &cp_stepper_get_position, //stepper get position
     [ETH_ENDSTOP_HOME_CP] = &cp_endstop_home, //endstop home
     [ETH_ENDSTOP_QUERY_STATE_CP] = &cp_endstop_query_state, //query endstop state
+    [ETH_STEPPER_STOP_ON_TRIGGER_CP] = &cp_stepper_stop_on_trigger, //stepper stop on trigger
 };
 
 

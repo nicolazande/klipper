@@ -44,29 +44,50 @@ class PVT_endstop:
         self._home_cmd = self._mcu.lookup_command(
             msgformat="endstop_home oid=%c", #stepper oid
             serial=self._mcu._ethercat)
+        self._stepper_stop_cmd = self._mcu.lookup_command(
+            msgformat="stepper_stop_on_trigger oid=%c", #stepper oid
+            serial=self._mcu._ethercat)
         self._query_cmd = self._mcu.lookup_query_command(
             msgformat="endstop_query_state oid=%c", #stepper oid
             respformat="endstop_state oid=%c homing=%c finished=%c next_clock=%u",
             serial = self._mcu._ethercat,
-            helper = ethcathdl.EthercatRetryCommand)
+            helper = ethcathdl.EthercatRetryCommand,
+            oid=self._oid,
+            is_async=True)
         
     def home_start(self, print_time, sample_time, sample_count, rest_time, triggered=True): 
+        '''
+        Start homing procedure for a PVT drive.
+        '''
         clock = self._mcu.print_time_to_clock(print_time)
         reactor = self._mcu.get_printer().get_reactor()
+        # fake completion for compatibility
         self._trigger_completion = reactor.completion()
         self._trigger_completion.complete(0)
+        # homing (can stop steppers)
+        for s in self._steppers:
+            self._stepper_stop_cmd.send([s.get_oid()])
+        # send homing start command to drive endstop
         self._home_cmd.send([self._oid], reqclock=clock)
         return self._trigger_completion
 
     def home_wait(self, home_end_time):
+        '''
+        Wait for homing of a PVT drive.
+        '''
         if self._mcu.is_fileoutput():
             self._trigger_completion.complete(True)
+        # wait for fake completion
         self._trigger_completion.wait()
         while 1:
+            # query drive endstop state
             params = self._query_cmd.send([self._oid])
             if params["finished"]:
+                # endstop triggered
                 break
+        # get homing time
         next_clock = self._mcu.clock32_to_clock64(params['next_clock'])
+        next_clock = home_end_time/2 #TODO: remove later
         if next_clock > home_end_time:
             return -1.
         return self._mcu.clock_to_print_time(next_clock - self._rest_ticks)

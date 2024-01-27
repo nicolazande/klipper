@@ -4,11 +4,12 @@
         "reset_step_clock oid=%c clock=%u": 1,
         "stepper_get_position oid=%c": 2,
         "endstop_home oid=%c" : 3,
-        "endstop_query_state oid=%c" : 4
+        "endstop_query_state oid=%c" : 4,
+        "stepper_stop_on_trigger oid=%c" : 5
     },
     "responses":
     {
-        "stepper_position oid=%c pos=%i" : 6,
-        "endstop_state oid=%c homing=%c finished=%c next_clock=%u" : 7
+        "stepper_position oid=%c pos=%i" : 7,
+        "endstop_state oid=%c homing=%c finished=%c next_clock=%u" : 8
     }
 }
