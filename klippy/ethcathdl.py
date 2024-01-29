@@ -87,6 +87,18 @@ class EthercatReader:
         '''
         # allocate ehtercatqueue and start low level thread
         self.ethcatqueue = self.ffi_main.gc(self.ffi_lib.ethcatqueue_alloc(), self.ffi_lib.ethcatqueue_free)
+        
+        pdo_entries = self.ffi_main.new('ec_pdo_entry_info_t[2]')
+        pdos = self.ffi_main.new('ec_pdo_info_t[2]')
+        pdos[0].index = 33
+        pdos[1].index = 66
+
+        # get and remove first message from receive queue
+        self.ffi_lib.ethcatqueue_slave_config(self.ethcatqueue, 0, 0, 1, 4, 66)
+        self.ffi_lib.ethcatqueue_slave_config_pdos(self.ethcatqueue, 0, 1, 2,
+                                                    2, pdo_entries,
+                                                    2, pdos)
+
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
         self.background_thread.start() #start high level background thread

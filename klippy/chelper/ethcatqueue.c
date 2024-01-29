@@ -796,6 +796,84 @@ background_thread(void *data)
 /****************************************************************
  * Public functions
  ****************************************************************/
+void __visible ethcatqueue_slave_config(struct ethcatqueue *sq,
+                                        uint8_t index,
+                                        uint16_t alias,
+                                        uint16_t position,
+                                        uint32_t vendor_id,
+                                        uint32_t product_code)
+{
+    struct mastermonitor *master = &sq->masterifc;
+    struct slavemonitor *slave = &master->monitor[index];
+    slave->alias = alias;
+    slave->position = position;
+    slave->vendor_id = vendor_id;
+    slave->product_code = product_code;
+}
+
+void __visible ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
+                                             uint8_t slave_index,
+                                             uint8_t sync_index,
+                                             uint8_t direction,
+                                             uint8_t n_pdo_entries,
+                                             ec_pdo_entry_info_t *pdo_entries,
+                                             uint8_t n_pdos,
+                                             ec_pdo_info_t *pdos)
+{
+    struct mastermonitor *master = &sq->masterifc;
+    struct slavemonitor *slave = &master->monitor[slave_index];
+
+    slave->n_pdo_entries = n_pdo_entries;
+    for (uint8_t i = 0; i < n_pdo_entries; i++)
+    {
+        slave->pdo_entries[i] = pdo_entries[i];
+    }
+
+    slave->n_pdos = n_pdos;
+    for (uint8_t i = 0; i < n_pdos; i++)
+    {
+        slave->pdos[i].index = pdos[i].index;
+        slave->pdos[i].n_entries = pdos[i].n_entries;
+        uint8_t position = (uint8_t)pdos[i].entries;
+        slave->pdos[i].entries = &slave->pdo_entries[position];
+    }
+
+    uint8_t local_index = direction - 1;
+    if (local_index < EC_DIR_OUTPUT)
+    {
+        slave->syncs[local_index].index = sync_index;
+        slave->syncs[local_index].dir = direction;
+        slave->syncs[local_index].n_pdos = n_pdos;
+        slave->syncs[local_index].pdos = &slave->pdos[0];
+    }
+}
+
+// void __visible ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
+//                                                   uint8_t index,
+//                                                              uint8_t n_regs,
+//                                                 ec_pdo_entry_reg_t *regs)
+// {
+//     struct mastermonitor *master = &sq->masterifc;
+//     struct slavemonitor *slave = &master->monitor[index];
+    
+//     slave->n_registers = n_regs;
+//     for (uint8_t i = 0; i < n_regs; i++)
+//     {
+//         slave->registers[i] = *regs[i];
+//     }
+// }
+
+// void __visible ethcatqueue_config_common_registers(struct ethcatqueue *sq,
+//                                                    uint8_t n_regs,
+//                                                    ec_pdo_entry_reg_t *regs)
+// {
+//     struct mastermonitor *master = &sq->masterifc;
+//     for (uint8_t i = 0; i < n_regs; i++)
+//     {
+//         master->registers[i] = *regs[i];
+//     }
+// }
+
 /** create a new ethcatqueue object */
 struct ethcatqueue * __visible
 ethcatqueue_alloc(void)
@@ -807,25 +885,25 @@ ethcatqueue_alloc(void)
     struct ethcatqueue *sq = malloc(sizeof(*sq));
     memset(sq, 0, sizeof(*sq));
 
-    /* get master interface */
+    /* get ethercat master interface */
     struct mastermonitor *master = &sq->masterifc;
 
-    /* get EtherCAT master */
+    /* get ethercat master */
     master->master = ecrt_request_master(0);
     HANDLE_ERROR(!master->master, klipper)
 
     /* create common data domain */
     master->domain = ecrt_master_create_domain(master->master);
-    HANDLE_ERROR(!master->domain, fail)
+    HANDLE_ERROR(!master->domain, klipper)
 
     /* create pvt specific domains */
     for (uint8_t i = 0; i < ETHCAT_PVT_DOMAINS; i++)
     {
         master->pvtdomain[i].domain = ecrt_master_create_domain(master->master);
-        HANDLE_ERROR(!master->pvtdomain[i].domain, fail)
+        HANDLE_ERROR(!master->pvtdomain[i].domain, klipper)
     }
 
-    /* prepare slaves */
+    /* initialize ethercat slaves */
     for (uint8_t i = 0; i < ETHCAT_DRIVES; i++)
     {
         /* get slave monitor */
@@ -837,15 +915,19 @@ ethcatqueue_alloc(void)
                                                          slave->position,
                                                          slave->vendor_id,
                                                          slave->product_code);
-        HANDLE_ERROR(!sc, fail)
+        HANDLE_ERROR(!sc, klipper)
 
         /* configure slave pdos */
-        HANDLE_ERROR(ecrt_slave_config_pdos(sc, EC_END, slave->syncs), fail)
+        ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
+        report_errno("ecrt_slave_config_pdos", ret);
+        HANDLE_ERROR(ret, klipper)
 
         /* configure slave domain specific registers */
         for (uint8_t j = 0; j < ETHCAT_PVT_DOMAINS; j++)
         {
-            HANDLE_ERROR(ecrt_domain_reg_pdo_entry_list(master->pvtdomain[j].domain, slave->registers), fail)
+            ret = ecrt_domain_reg_pdo_entry_list(master->pvtdomain[j].domain, slave->registers);
+            report_errno("ecrt_domain_reg_pdo_entry_list", ret);
+            HANDLE_ERROR(ret, klipper)
         }
 
         /* configure slave dc clock */
@@ -858,13 +940,14 @@ ethcatqueue_alloc(void)
     }
 
     /* activate master */
-    HANDLE_ERROR(ecrt_master_activate(master->master), fail)
+    ret = ecrt_master_activate(master->master);
+    HANDLE_ERROR(ret, fail)
 
     /* get common data domain starting address */
     master->domain_pd = ecrt_domain_data(master->domain);
     HANDLE_ERROR(!master->domain_pd, fail)
 
-    /* get pdo instance data domain starting address */
+    /* get pdo data domain starting address */
     for (uint8_t i = 0; i < ETHCAT_PVT_DOMAINS; i++)
     {
         master->pvtdomain[i].domain_pd = ecrt_domain_data(master->pvtdomain[i].domain);
@@ -952,7 +1035,7 @@ klipper:
 
 fail:
     /* error handling */
-    report_errno("init", ret);
+    report_errno("Ethercat queue allocation", ret);
     return NULL;
 }
 

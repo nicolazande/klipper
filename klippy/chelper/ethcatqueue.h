@@ -71,10 +71,15 @@ struct slavemonitor
     uint16_t position;                      //slave position
     uint32_t vendor_id;                     //slave vendor_id
     uint32_t product_code;                  //slave product_code
-    uint16_t assign_activate;               //bitmask fir dc clock channel used for synchronization
+    uint16_t assign_activate;               //bitmask for dc clock channel used for synchronization
     double sync0_st;                        //ethercat sync0 shify time (in seconds)
     double sync1_st;                        //ethercat sync1 shify time (in seconds)
+    uint8_t n_pdo_entries;
+    ec_pdo_entry_info_t pdo_entries[1];       //
+    uint8_t n_pdos;
+    ec_pdo_info_t pdos[1];                   //
     ec_sync_info_t syncs[3];                //pdo sync manager configuration
+    uint8_t n_registers;
     ec_pdo_entry_reg_t registers[1];        //registers containing pdo mapped objects details (only one buffer object)
     uint8_t *pvtdata[ETHCAT_PVT_DOMAINS];   //pvt domain addresses
 };
@@ -84,8 +89,10 @@ struct mastermonitor
 {
     ec_master_t *master;                    //ethercat master
     ec_domain_t *domain;                    //domain used for common data (exchanged every cycle)
-    ec_domain_state_t domain_state;         //domain state
+    ec_domain_state_t domain_state;         //common domain state
     uint8_t *domain_pd;                     //domain process data pointer for common data
+    uint8_t n_registers;
+    ec_pdo_entry_reg_t registers[1];        //registers containing common pdo mapped objects details
     uint16_t frame_size;                    //total size in bytes of pvt data (sum of pvtdomain.domain_size)
     uint8_t full_counter;                   //counter for signaling number of slaves for which pdo slots are full
     double sync0_ct;                        //ethercat sync0 cycle time (in seconds)
@@ -113,7 +120,7 @@ struct sharedmonitor
 /* EtherCAT message queue */
 struct ethcatqueue
 {
-    /* input reading */
+    /* reactor and scheduling */
     struct pollreactor *pr; //ethercat low level reactor
     int pipe_sched[2]; //pipe_sched[0] = rx-command pipe, pipe_sched[1] = tx-command-pipe
     /* threading */
@@ -124,27 +131,42 @@ struct ethcatqueue
     /* baud and clock tracking */
     double idle_time; //next time when the ethernet port is idle (ready for next operation)
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
-    /* pending transmission message queues */
+    /* message queues */
     struct list_head pending_queues; //drive queues of pending messages waiting to be sent
     int ready_bytes; //number of bytes ready to be sent (depends on drive pvt buffer size)
     int upcoming_bytes; //number of bytes in upcoming messages to be sent (depends on drive pvt buffer size)
     uint64_t need_kick_clock; //clock value at which the background thread needs to be woken up
-    struct list_head request_queue; //list of high level thread requests
-    struct list_head response_queue; //list of low level thread responses
-    /* ethercat master data */
+    /* ethercat interface data */
     struct mastermonitor masterifc; //EtherCAT master interface
-    /* shared interface */
     struct sharedmonitor klippyifc; //klippy interface
-    /* protocol */
+    /* internal protocol data */
     uint64_t send_seq;
     uint64_t receive_seq;
     struct list_head notify_queue;
+    struct list_head request_queue; //list of high level thread requests
+    struct list_head response_queue; //list of low level thread responses
 };
 
 
 /****************************************************************
  * Public functions
  ****************************************************************/
+void ethcatqueue_slave_config(struct ethcatqueue *sq,
+                              uint8_t index,
+                              uint16_t alias,
+                              uint16_t position,
+                              uint32_t vendor_id,
+                              uint32_t product_code);
+
+void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
+                                   uint8_t slave_index,
+                                   uint8_t sync_index,
+                                   uint8_t direction,
+                                   uint8_t n_pdo_entries,
+                                   ec_pdo_entry_info_t *pdo_entries,
+                                   uint8_t n_pdos,
+                                   ec_pdo_info_t *pdos);
+
 /** create a new ethcatqueue object */
 struct ethcatqueue *ethcatqueue_alloc(void);
 

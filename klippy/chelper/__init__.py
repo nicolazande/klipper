@@ -81,6 +81,32 @@ defs_kin_hash = """
 """
 
 defs_ethcatqueue = """
+    typedef struct
+    {
+        uint16_t index;
+        uint8_t subindex;
+        uint8_t bit_length;
+    } ec_pdo_entry_info_t;
+    typedef struct
+    {
+        uint16_t index;
+        unsigned int n_entries;
+        ec_pdo_entry_info_t *entries;
+    } ec_pdo_info_t;
+    void ethcatqueue_slave_config(struct ethcatqueue *sq,
+                                uint8_t index,
+                                uint16_t alias,
+                                uint16_t position,
+                                uint32_t vendor_id,
+                                uint32_t product_code);
+    void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
+                                    uint8_t slave_index,
+                                    uint8_t sync_index,
+                                    uint8_t direction,
+                                    uint8_t n_pdo_entries,
+                                    ec_pdo_entry_info_t *pdo_entries,
+                                    uint8_t n_pdos,
+                                    ec_pdo_info_t *pdos);
     struct ethcatqueue *ethcatqueue_alloc(void);
     void ethcatqueue_exit(struct ethcatqueue *sq);
     void ethcatqueue_free(struct ethcatqueue *sq);
