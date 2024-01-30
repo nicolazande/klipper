@@ -80,41 +80,48 @@ class EthercatReader:
         raise error(self.warn_prefix + (msg % params))
     
     def _load_ethercat_config(self, filename):
-
+        '''
+        Load and initialize ethercat configuration.
+        '''
+        # read configuration from config file
         identify_data = None
         try:
             with open(filename, 'r') as coe_file:
                 identify_data = json.load(coe_file)
         except:
             pass
-
+        # get master and slaves data
         slaves = identify_data["slaves"]
+        master = identify_data["master"]
+        # process slaves
         for slave_idx, slave in enumerate(slaves):
-
-            self.ffi_lib.ethcatqueue_slave_config(self.ethcatqueue, slave_idx, slave["alias"], slave["position"],
+            # configure slave
+            self.ffi_lib.ethcatqueue_slave_config(self.ethcatqueue, slave_idx,
+                                                  slave["alias"], slave["position"],
                                                   slave["vendor_id"], slave["product_code"])
-
+            # get slave syncs and process them
             syncs = slave["syncs"]
             for sync_idx, sync in enumerate(syncs):
+                # get sync pdos
                 pdos = sync["pdos"]
                 cpdos = self.ffi_main.new('ec_pdo_info_t['+str(len(pdos))+']')
                 for pdo_idx, pdo in enumerate(pdos):
                     cpdos[pdo_idx].index = pdo["index"]
                     cpdos[pdo_idx].n_entries = pdo["n_entries"]
-                    #cpdos[pdo_idx].entries = pdo["entries"]
-
+                    cpdos[pdo_idx].entries = self.ffi_main.cast("ec_pdo_entry_info_t *", pdo["entries"])                    
+                # get sync pdo entries
                 pdo_entries = sync["pdo_entries"]
                 cpdo_entries = self.ffi_main.new('ec_pdo_entry_info_t['+str(len(pdo_entries))+']')
                 for pdo_entry_idx, pdo_entry in enumerate(pdo_entries):
                     cpdo_entries[pdo_entry_idx].index = pdo_entry["index"]
                     cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
                     cpdo_entries[pdo_entry_idx].bit_length = pdo_entry["bit_length"]
-
-                self.ffi_lib.ethcatqueue_slave_config_pdos(self.ethcatqueue, slave_idx, sync["index"], sync["direction"],
-                                                    len(pdo_entries), cpdo_entries,
-                                                    len(pdos), cpdos)
-
-            
+                # configure sync (pdos and pdo entries)
+                self.ffi_lib.ethcatqueue_slave_config_pdos(self.ethcatqueue,
+                                                           slave_idx, sync["index"], sync["direction"],
+                                                           len(pdo_entries), cpdo_entries,
+                                                           len(pdos), cpdos)
+            # get slave registers
             registers = slave["registers"]
             cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(len(registers))+']')
             for register_idx, register in enumerate(registers):
@@ -124,25 +131,35 @@ class EthercatReader:
                 cregisters[register_idx].product_code = register["product_code"]
                 cregisters[register_idx].index = register["index"]
                 cregisters[register_idx].subindex = register["subindex"]
-                #cregisters[register_idx].offset = register["offset"]
-                #cregisters[register_idx].bit_position = register["bit_position"]
-        
-            self.ffi_lib.ethcatqueue_slave_config_registers(self.ethcatqueue, slave_idx,
-                                                            len(registers), cregisters)
+                cregisters[register_idx].offset = self.ffi_main.cast("unsigned int *", register["offset"])
+                cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
+            # configure private slave domain registers
+            self.ffi_lib.ethcatqueue_slave_config_registers(self.ethcatqueue, slave_idx, len(registers), cregisters)
+        # process master
+        registers = master["registers"]
+        cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(len(registers))+']')
+        for register_idx, register in enumerate(registers):
+            cregisters[register_idx].alias = register["alias"]
+            cregisters[register_idx].position = register["position"]
+            cregisters[register_idx].vendor_id = register["vendor_id"]
+            cregisters[register_idx].product_code = register["product_code"]
+            cregisters[register_idx].index = register["index"]
+            cregisters[register_idx].subindex = register["subindex"]
+            cregisters[register_idx].offset = self.ffi_main.cast("unsigned int *", register["offset"])
+            cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
+        # configure common master domain registers
+        self.ffi_lib.ethcatqueue_master_config_registers(self.ethcatqueue, len(registers), cregisters)
 
-                
     def _start_session(self):
         '''
         Start new session, there is no direct contact with the mcu during the setup.
         '''
         # allocate ehtercatqueue
         self.ethcatqueue = self.ffi_main.gc(self.ffi_lib.ethcatqueue_alloc(), self.ffi_lib.ethcatqueue_free)
-        
+        # load ethercat configuration
         self._load_ethercat_config('./commands/coe.json')
-
         # initialize and start low level thread
         self.ffi_lib.ethcatqueue_init(self.ethcatqueue)
-        
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
         self.background_thread.start() #start high level background thread

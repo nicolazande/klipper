@@ -29,7 +29,13 @@
 							"bit_length": 16
 						}
 					]
-            	}
+            	},
+				{
+					"index" : 1,
+					"direction" : 1,
+					"pdos" : [],
+					"pdo_entries": []
+				}
         	],
         	"registers": [
             	{
@@ -37,7 +43,7 @@
 					"position": 2,
 					"vendor_id": 3,
 					"product_code": 4,
-					"index" : 4000,
+					"index" : 3000,
 					"subindex" : 0,
 					"offset" : 0,
 					"bit_position" : 0
@@ -47,9 +53,9 @@
 					"position": 2,
 					"vendor_id": 3,
 					"product_code": 4,
-					"index" : 5000,
+					"index" : 3001,
 					"subindex" : 0,
-					"offset" : 0,
+					"offset" : 16,
 					"bit_position" : 0
             	}
         	]
@@ -73,17 +79,23 @@
         			],
 					"pdo_entries": [
 						{
-							"index": 3000,
+							"index": 3002,
 							"subindex": 0,
 							"bit_length": 16
 						},
 						{
-							"index": 3001,
+							"index": 3003,
 							"subindex": 0,
 							"bit_length": 16
 						}
 					]
-            	}
+            	},
+				{
+					"index" : 1,
+					"direction" : 1,
+					"pdos" : [],
+					"pdo_entries": []
+				}
         	],
         	"registers": [
             	{
@@ -91,7 +103,7 @@
 					"position": 6,
 					"vendor_id": 7,
 					"product_code": 8,
-					"index" : 4000,
+					"index" : 3002,
 					"subindex" : 0,
 					"offset" : 0,
 					"bit_position" : 0
@@ -100,14 +112,21 @@
                 	"alias": 5,
 					"position": 6,
 					"vendor_id": 7,
-					"product_code": 4,
-					"index" : 5000,
+					"product_code": 8,
+					"index" : 3003,
 					"subindex" : 0,
-					"offset" : 0,
+					"offset" : 16,
 					"bit_position" : 0
             	}
         	]
     	}
-    ]
+    ],
+	"master" :
+	{
+		"sync0_ct" : 0.001,
+		"sync1_ct" : 0.001,
+		"registers": [
+		]
+	}
 }
 

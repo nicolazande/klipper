@@ -74,13 +74,13 @@ struct slavemonitor
     uint16_t assign_activate;               //bitmask for dc clock channel used for synchronization
     double sync0_st;                        //ethercat sync0 shify time (in seconds)
     double sync1_st;                        //ethercat sync1 shify time (in seconds)
-    uint8_t n_pdo_entries;
-    ec_pdo_entry_info_t pdo_entries[1];       //
-    uint8_t n_pdos;
-    ec_pdo_info_t pdos[1];                   //
+    uint8_t n_pdo_entries;                  //
+    ec_pdo_entry_info_t pdo_entries[2];     //
+    uint8_t n_pdos;                         //
+    ec_pdo_info_t pdos[1];                  //
     ec_sync_info_t syncs[3];                //pdo sync manager configuration
-    uint8_t n_registers;
-    ec_pdo_entry_reg_t registers[1];        //registers containing pdo mapped objects details (only one buffer object)
+    uint8_t n_registers;                    //
+    ec_pdo_entry_reg_t registers[3];        //registers containing pdo mapped objects details (only one buffer object)
     uint8_t *pvtdata[ETHCAT_PVT_DOMAINS];   //pvt domain addresses
 };
 
@@ -91,8 +91,8 @@ struct mastermonitor
     ec_domain_t *domain;                    //domain used for common data (exchanged every cycle)
     ec_domain_state_t domain_state;         //common domain state
     uint8_t *domain_pd;                     //domain process data pointer for common data
-    uint8_t n_registers;
-    ec_pdo_entry_reg_t registers[1];        //registers containing common pdo mapped objects details
+    uint8_t n_registers;                    //
+    ec_pdo_entry_reg_t registers[3];        //registers containing common pdo mapped objects details
     uint16_t frame_size;                    //total size in bytes of pvt data (sum of pvtdomain.domain_size)
     uint8_t full_counter;                   //counter for signaling number of slaves for which pdo slots are full
     double sync0_ct;                        //ethercat sync0 cycle time (in seconds)

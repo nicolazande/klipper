@@ -848,8 +848,11 @@ ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
         slave->syncs[local_index].index = sync_index;
         slave->syncs[local_index].dir = direction;
         slave->syncs[local_index].n_pdos = n_pdos;
-        slave->syncs[local_index].pdos = &slave->pdos[0];
+        slave->syncs[local_index].pdos = slave->pdos;
     }
+
+    /* reset stop flag */
+    slave->syncs[EC_DIR_OUTPUT].index = EC_END;
 }
 
 /** configure ethercat slave private registers */
@@ -867,6 +870,9 @@ ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
     {
         slave->registers[i] = registers[i];
     }
+
+    /* reset stop clock */
+    slave->registers[3] = (ec_pdo_entry_reg_t){};
 }
 
 /** configure ethercat master common registers */
@@ -881,6 +887,9 @@ ethcatqueue_master_config_registers(struct ethcatqueue *sq,
     {
         master->registers[i] = registers[i];
     }
+
+    /* reset stop clock */
+    master->registers[3] = (ec_pdo_entry_reg_t){};
 }
 
 /** create an empty ethcatqueue object */
@@ -933,9 +942,8 @@ ethcatqueue_init(struct ethcatqueue *sq)
                                                          slave->product_code);
         HANDLE_ERROR(!sc, klipper)
 
-        /* configure slave pdos */
+        /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
-        report_errno("ecrt_slave_config_pdos", ret);
         HANDLE_ERROR(ret, klipper)
 
         /* configure slave domain specific registers */
