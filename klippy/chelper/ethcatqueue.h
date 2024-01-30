@@ -151,6 +151,7 @@ struct ethcatqueue
 /****************************************************************
  * Public functions
  ****************************************************************/
+/** initialize ethercat slave */
 void ethcatqueue_slave_config(struct ethcatqueue *sq,
                               uint8_t index,
                               uint16_t alias,
@@ -158,6 +159,7 @@ void ethcatqueue_slave_config(struct ethcatqueue *sq,
                               uint32_t vendor_id,
                               uint32_t product_code);
 
+/** configure a list of pdos for a sync manager of an ethercat slave */
 void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                                    uint8_t slave_index,
                                    uint8_t sync_index,
@@ -167,8 +169,22 @@ void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                                    uint8_t n_pdos,
                                    ec_pdo_info_t *pdos);
 
-/** create a new ethcatqueue object */
+/** configure ethercat slave private registers */
+void ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
+                                        uint8_t index,
+                                        uint8_t n_registers,
+                                        ec_pdo_entry_reg_t *registers);
+
+/** configure ethercat master common registers */
+void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
+                                         uint8_t n_registers,
+                                         ec_pdo_entry_reg_t *registers);
+
+/** create an empty ethcatqueue object */
 struct ethcatqueue *ethcatqueue_alloc(void);
+
+/** initialize ethcatqueue */
+int ethcatqueue_init(struct ethcatqueue *sq);
 
 /** request that the background thread exit */
 void ethcatqueue_exit(struct ethcatqueue *sq);

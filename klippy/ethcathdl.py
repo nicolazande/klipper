@@ -3,9 +3,7 @@
 #
 
 # imports
-import logging, threading, os, sys
-# add klippy dependency
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'klippy'))
+import logging, threading, json
 import msgproto, chelper, util
 
 class error(Exception):
@@ -80,25 +78,71 @@ class EthercatReader:
         Raise error.
         '''
         raise error(self.warn_prefix + (msg % params))
+    
+    def _load_ethercat_config(self, filename):
+
+        identify_data = None
+        try:
+            with open(filename, 'r') as coe_file:
+                identify_data = json.load(coe_file)
+        except:
+            pass
+
+        slaves = identify_data["slaves"]
+        for slave_idx, slave in enumerate(slaves):
+
+            self.ffi_lib.ethcatqueue_slave_config(self.ethcatqueue, slave_idx, slave["alias"], slave["position"],
+                                                  slave["vendor_id"], slave["product_code"])
+
+            syncs = slave["syncs"]
+            for sync_idx, sync in enumerate(syncs):
+                pdos = sync["pdos"]
+                cpdos = self.ffi_main.new('ec_pdo_info_t['+str(len(pdos))+']')
+                for pdo_idx, pdo in enumerate(pdos):
+                    cpdos[pdo_idx].index = pdo["index"]
+                    cpdos[pdo_idx].n_entries = pdo["n_entries"]
+                    #cpdos[pdo_idx].entries = pdo["entries"]
+
+                pdo_entries = sync["pdo_entries"]
+                cpdo_entries = self.ffi_main.new('ec_pdo_entry_info_t['+str(len(pdo_entries))+']')
+                for pdo_entry_idx, pdo_entry in enumerate(pdo_entries):
+                    cpdo_entries[pdo_entry_idx].index = pdo_entry["index"]
+                    cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
+                    cpdo_entries[pdo_entry_idx].bit_length = pdo_entry["bit_length"]
+
+                self.ffi_lib.ethcatqueue_slave_config_pdos(self.ethcatqueue, slave_idx, sync["index"], sync["direction"],
+                                                    len(pdo_entries), cpdo_entries,
+                                                    len(pdos), cpdos)
+
+            
+            registers = slave["registers"]
+            cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(len(registers))+']')
+            for register_idx, register in enumerate(registers):
+                cregisters[register_idx].alias = register["alias"]
+                cregisters[register_idx].position = register["position"]
+                cregisters[register_idx].vendor_id = register["vendor_id"]
+                cregisters[register_idx].product_code = register["product_code"]
+                cregisters[register_idx].index = register["index"]
+                cregisters[register_idx].subindex = register["subindex"]
+                #cregisters[register_idx].offset = register["offset"]
+                #cregisters[register_idx].bit_position = register["bit_position"]
+        
+            self.ffi_lib.ethcatqueue_slave_config_registers(self.ethcatqueue, slave_idx,
+                                                            len(registers), cregisters)
+
                 
     def _start_session(self):
         '''
         Start new session, there is no direct contact with the mcu during the setup.
         '''
-        # allocate ehtercatqueue and start low level thread
+        # allocate ehtercatqueue
         self.ethcatqueue = self.ffi_main.gc(self.ffi_lib.ethcatqueue_alloc(), self.ffi_lib.ethcatqueue_free)
         
-        pdo_entries = self.ffi_main.new('ec_pdo_entry_info_t[2]')
-        pdos = self.ffi_main.new('ec_pdo_info_t[2]')
-        pdos[0].index = 33
-        pdos[1].index = 66
+        self._load_ethercat_config('./commands/coe.json')
 
-        # get and remove first message from receive queue
-        self.ffi_lib.ethcatqueue_slave_config(self.ethcatqueue, 0, 0, 1, 4, 66)
-        self.ffi_lib.ethcatqueue_slave_config_pdos(self.ethcatqueue, 0, 1, 2,
-                                                    2, pdo_entries,
-                                                    2, pdos)
-
+        # initialize and start low level thread
+        self.ffi_lib.ethcatqueue_init(self.ethcatqueue)
+        
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
         self.background_thread.start() #start high level background thread

@@ -83,6 +83,17 @@ defs_kin_hash = """
 defs_ethcatqueue = """
     typedef struct
     {
+        uint16_t alias;
+        uint16_t position;
+        uint32_t vendor_id;
+        uint32_t product_code;
+        uint16_t index;
+        uint8_t subindex;
+        unsigned int *offset;
+        unsigned int *bit_position;
+    } ec_pdo_entry_reg_t;
+    typedef struct
+    {
         uint16_t index;
         uint8_t subindex;
         uint8_t bit_length;
@@ -107,7 +118,15 @@ defs_ethcatqueue = """
                                     ec_pdo_entry_info_t *pdo_entries,
                                     uint8_t n_pdos,
                                     ec_pdo_info_t *pdos);
+    void ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
+                                            uint8_t index,
+                                            uint8_t n_registers,
+                                            ec_pdo_entry_reg_t *registers);
+    void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
+                                            uint8_t n_registers,
+                                            ec_pdo_entry_reg_t *registers);
     struct ethcatqueue *ethcatqueue_alloc(void);
+    int ethcatqueue_init(struct ethcatqueue *sq);
     void ethcatqueue_exit(struct ethcatqueue *sq);
     void ethcatqueue_free(struct ethcatqueue *sq);
     struct command_queue *ethcatqueue_alloc_commandqueue(void);
@@ -373,13 +392,6 @@ pyhelper_logging_callback = None
 def logging_callback(msg):
     logging.error(FFI_main.string(msg))
 
-def pre_init_debug(*args):
-    '''
-    Helper function to debug without mainsail.
-    '''
-    with open("debug/out.txt", "a+") as debugfile:
-        print(*args, file=debugfile)
-
 # Return the Foreign Function Interface api to the caller
 def get_ffi():
     global FFI_main, FFI_lib, pyhelper_logging_callback
@@ -406,13 +418,11 @@ def get_ffi():
             try:
                 FFI_main.cdef(d)
             except Exception as e:
-                pre_init_debug(e)
                 raise
 
         try:
             FFI_lib = FFI_main.dlopen(destlib)
         except Exception as e:
-            pre_init_debug(e)
             raise
             
         # Setup error logging

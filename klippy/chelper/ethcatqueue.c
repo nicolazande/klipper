@@ -796,12 +796,14 @@ background_thread(void *data)
 /****************************************************************
  * Public functions
  ****************************************************************/
-void __visible ethcatqueue_slave_config(struct ethcatqueue *sq,
-                                        uint8_t index,
-                                        uint16_t alias,
-                                        uint16_t position,
-                                        uint32_t vendor_id,
-                                        uint32_t product_code)
+/** initialize ethercat slave */
+void __visible
+ethcatqueue_slave_config(struct ethcatqueue *sq,
+                         uint8_t index,
+                         uint16_t alias,
+                         uint16_t position,
+                         uint32_t vendor_id,
+                         uint32_t product_code)
 {
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[index];
@@ -811,14 +813,16 @@ void __visible ethcatqueue_slave_config(struct ethcatqueue *sq,
     slave->product_code = product_code;
 }
 
-void __visible ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
-                                             uint8_t slave_index,
-                                             uint8_t sync_index,
-                                             uint8_t direction,
-                                             uint8_t n_pdo_entries,
-                                             ec_pdo_entry_info_t *pdo_entries,
-                                             uint8_t n_pdos,
-                                             ec_pdo_info_t *pdos)
+/** configure a list of pdos for a sync manager of an ethercat slave */
+void __visible
+ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
+                              uint8_t slave_index,
+                              uint8_t sync_index,
+                              uint8_t direction,
+                              uint8_t n_pdo_entries,
+                              ec_pdo_entry_info_t *pdo_entries,
+                              uint8_t n_pdos,
+                              ec_pdo_info_t *pdos)
 {
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[slave_index];
@@ -848,42 +852,54 @@ void __visible ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
     }
 }
 
-// void __visible ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
-//                                                   uint8_t index,
-//                                                              uint8_t n_regs,
-//                                                 ec_pdo_entry_reg_t *regs)
-// {
-//     struct mastermonitor *master = &sq->masterifc;
-//     struct slavemonitor *slave = &master->monitor[index];
+/** configure ethercat slave private registers */
+void __visible
+ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
+                                   uint8_t index,
+                                   uint8_t n_registers,
+                                   ec_pdo_entry_reg_t *registers)
+{
+    struct mastermonitor *master = &sq->masterifc;
+    struct slavemonitor *slave = &master->monitor[index];
     
-//     slave->n_registers = n_regs;
-//     for (uint8_t i = 0; i < n_regs; i++)
-//     {
-//         slave->registers[i] = *regs[i];
-//     }
-// }
+    slave->n_registers = n_registers;
+    for (uint8_t i = 0; i < n_registers; i++)
+    {
+        slave->registers[i] = registers[i];
+    }
+}
 
-// void __visible ethcatqueue_config_common_registers(struct ethcatqueue *sq,
-//                                                    uint8_t n_regs,
-//                                                    ec_pdo_entry_reg_t *regs)
-// {
-//     struct mastermonitor *master = &sq->masterifc;
-//     for (uint8_t i = 0; i < n_regs; i++)
-//     {
-//         master->registers[i] = *regs[i];
-//     }
-// }
+/** configure ethercat master common registers */
+void __visible 
+ethcatqueue_master_config_registers(struct ethcatqueue *sq,
+                                    uint8_t n_registers,
+                                    ec_pdo_entry_reg_t *registers)
+{
+    struct mastermonitor *master = &sq->masterifc;
 
-/** create a new ethcatqueue object */
+    for (uint8_t i = 0; i < n_registers; i++)
+    {
+        master->registers[i] = registers[i];
+    }
+}
+
+/** create an empty ethcatqueue object */
 struct ethcatqueue * __visible
 ethcatqueue_alloc(void)
 {
-    /* shared error code */
-    int ret;
-
     /* allocate serialqueue */
     struct ethcatqueue *sq = malloc(sizeof(*sq));
     memset(sq, 0, sizeof(*sq));
+
+    return sq;
+}
+
+/** initialize ethcatqueue */
+int __visible
+ethcatqueue_init(struct ethcatqueue *sq)
+{
+    /* shared error code */
+    int ret;
 
     /* get ethercat master interface */
     struct mastermonitor *master = &sq->masterifc;
@@ -1030,13 +1046,11 @@ klipper:
     ret = pthread_create(&sq->tid, NULL, background_thread, sq);
     HANDLE_ERROR(ret, fail)
 
-    /* ethercatqueue pointer used by application */
-    return sq;
-
 fail:
     /* error handling */
     report_errno("Ethercat queue allocation", ret);
-    return NULL;
+    
+    return ret;
 }
 
 /** 
