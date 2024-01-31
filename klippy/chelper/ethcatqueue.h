@@ -21,6 +21,8 @@
 #endif
 #define ETHCAT_DRIVES 2         //number of ethercat drives
 #define ETHCAT_PVT_DOMAINS 2    //number of pvt domains (one for each pdo instance)
+#define ETHCAT_STANDARD_DOMAINS 1  //number of pvt domains (one for each pdo instance)
+#define ETHCAT_DOMAINS (ETHCAT_PVT_DOMAINS + ETHCAT_STANDARD_DOMAINS)
 #define ETHCAT_DRIVE_MASK ((1 << (ETHCAT_DRIVES)) - 1)
 
 
@@ -49,13 +51,16 @@ struct command_queue
  * a pdo for each of the associated drives (X and Y coordinates have to be
  * transmitted together).
  */
-struct pvtdomain
+struct domainmonitor
 {
-    ec_domain_t *domain;            //domain used for drive pdos
-    ec_domain_state_t domain_state; //domain state
-    uint8_t *domain_pd;             //domain process data pointer
-    uint16_t domain_size;           //size in bytes of the domain
-    uint8_t mask;                   //number of active associated drives (in current cycle)
+    ec_domain_t *domain;                //domain used for drive pdos
+    ec_domain_state_t domain_state;     //domain state
+    uint8_t *domain_pd;                 //domain process data pointer
+    uint16_t domain_size;               //size in bytes of the domain
+    uint8_t mask;                       //number of active associated drives (in current cycle)
+    uint8_t type;
+    uint8_t n_registers;
+    ec_pdo_entry_reg_t registers[3];    //registers containing common pdo mapped objects details
 };
 
 /* EtherCAT slave status monitor */
@@ -79,8 +84,6 @@ struct slavemonitor
     uint8_t n_pdos;                         //
     ec_pdo_info_t pdos[1];                  //
     ec_sync_info_t syncs[3];                //pdo sync manager configuration
-    uint8_t n_registers;                    //
-    ec_pdo_entry_reg_t registers[3];        //registers containing pdo mapped objects details (only one buffer object)
     uint8_t *pvtdata[ETHCAT_PVT_DOMAINS];   //pvt domain addresses
 };
 
@@ -88,17 +91,12 @@ struct slavemonitor
 struct mastermonitor
 {
     ec_master_t *master;                    //ethercat master
-    ec_domain_t *domain;                    //domain used for common data (exchanged every cycle)
-    ec_domain_state_t domain_state;         //common domain state
-    uint8_t *domain_pd;                     //domain process data pointer for common data
-    uint8_t n_registers;                    //
-    ec_pdo_entry_reg_t registers[3];        //registers containing common pdo mapped objects details
-    uint16_t frame_size;                    //total size in bytes of pvt data (sum of pvtdomain.domain_size)
+    uint16_t frame_size;                    //total size in bytes of pvt data (sum of domains.domain_size)
     uint8_t full_counter;                   //counter for signaling number of slaves for which pdo slots are full
     double sync0_ct;                        //ethercat sync0 cycle time (in seconds)
     double sync1_ct;                        //ethercat sync1 cycle time (in seconds)
     double frame_time;                      //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
-    struct pvtdomain pvtdomain[ETHCAT_PVT_DOMAINS]; //pvt private domains
+    struct domainmonitor domains[ETHCAT_DOMAINS]; //pvt private domains
     struct slavemonitor monitor[ETHCAT_DRIVES]; //storage for associated slave monitors
 };
 
@@ -169,14 +167,9 @@ void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                                    uint8_t n_pdos,
                                    ec_pdo_info_t *pdos);
 
-/** configure ethercat slave private registers */
-void ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
-                                        uint8_t index,
-                                        uint8_t n_registers,
-                                        ec_pdo_entry_reg_t *registers);
-
 /** configure ethercat master common registers */
 void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
+                                         uint8_t index,
                                          uint8_t n_registers,
                                          ec_pdo_entry_reg_t *registers);
 

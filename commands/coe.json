@@ -6,6 +6,9 @@
 			"position": 2,
 			"vendor_id": 3,
 			"product_code": 4,
+			"assign_activate" : 0,
+			"sync0_st" : 0,
+			"sync1_st" : 0,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -36,28 +39,6 @@
 					"pdos" : [],
 					"pdo_entries": []
 				}
-        	],
-        	"registers": [
-            	{
-                	"alias": 1,
-					"position": 2,
-					"vendor_id": 3,
-					"product_code": 4,
-					"index" : 3000,
-					"subindex" : 0,
-					"offset" : 0,
-					"bit_position" : 0
-            	},
-            	{
-					"alias": 1,
-					"position": 2,
-					"vendor_id": 3,
-					"product_code": 4,
-					"index" : 3001,
-					"subindex" : 0,
-					"offset" : 16,
-					"bit_position" : 0
-            	}
         	]
     	},
     	{
@@ -66,6 +47,9 @@
 			"position": 6,
 			"vendor_id": 7,
 			"product_code": 8,
+			"assign_activate" : 0,
+			"sync0_st" : 0,
+			"sync1_st" : 0,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -96,28 +80,6 @@
 					"pdos" : [],
 					"pdo_entries": []
 				}
-        	],
-        	"registers": [
-            	{
-					"alias": 5,
-					"position": 6,
-					"vendor_id": 7,
-					"product_code": 8,
-					"index" : 3002,
-					"subindex" : 0,
-					"offset" : 0,
-					"bit_position" : 0
-				},
-            	{
-                	"alias": 5,
-					"position": 6,
-					"vendor_id": 7,
-					"product_code": 8,
-					"index" : 3003,
-					"subindex" : 0,
-					"offset" : 16,
-					"bit_position" : 0
-            	}
         	]
     	}
     ],
@@ -125,8 +87,58 @@
 	{
 		"sync0_ct" : 0.001,
 		"sync1_ct" : 0.001,
-		"registers": [
+		"domains" : [
+			{
+				"type" : "standard",
+				"registers" : [
+					{
+						"alias": 1,
+						"position": 2,
+						"vendor_id": 3,
+						"product_code": 4,
+						"index" : 3000,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"alias": 1,
+						"position": 2,
+						"vendor_id": 3,
+						"product_code": 4,
+						"index" : 3001,
+						"subindex" : 0,
+						"offset" : 16,
+						"bit_position" : 0
+					}
+				]
+			},
+			{
+				"type" : "pvt",
+				"registers" : [
+					{
+						"alias": 1,
+						"position": 2,
+						"vendor_id": 3,
+						"product_code": 4,
+						"index" : 3000,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"alias": 1,
+						"position": 2,
+						"vendor_id": 3,
+						"product_code": 4,
+						"index" : 3001,
+						"subindex" : 0,
+						"offset" : 16,
+						"bit_position" : 0
+					}
+				]
+			}
 		]
-	}
+	}	
 }
 

@@ -91,12 +91,12 @@ struct command_parser
  * Public functions
  ****************************************************************/
 /* parse an incoming command into args */
-uint8_t *command_parsef(uint8_t *p, uint8_t *maxend, struct command_parser *cp, uint32_t *args);
+uint8_t *command_parsef(uint8_t *p, uint8_t *maxend, const struct command_parser *cp, uint32_t *args);
 
 /* check message */
 int8_t check_command(uint8_t *buf, uint8_t buf_len, uint8_t *pop_count);
 
 /* encode a response message buffer (used directly by callbacks) */
-uint8_t command_encode_and_frame(uint8_t *buf, struct command_encoder *ce, ...);
+uint8_t command_encode_and_frame(uint8_t *buf, const struct command_encoder *ce, ...);
 
 #endif // command.h

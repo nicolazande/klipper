@@ -227,7 +227,7 @@ static double process_request(struct ethcatqueue *sq, double eventtime)
                     struct queue_message *old_response = response;
 
                     /* append previous response to response queue */
-                    list_add_tail(response, &sq->response_queue);
+                    list_add_tail(&response->node, &sq->response_queue);
                     
                     /* create response message and update indexes */
                     response = malloc(sizeof(*response));
@@ -318,16 +318,24 @@ input_event(struct ethcatqueue *sq, double eventtime)
     /* receive process data */
     ecrt_master_receive(ifc->master);
 
-    /* process received common data (from datagram to domain) */
-    ecrt_domain_process(ifc->domain);
+    /* loop over common domains */
+    for (uint8_t i = ETHCAT_PVT_DOMAINS; i < ETHCAT_DOMAINS; i++)
+    {
+        /* get domain */
+        struct domainmonitor *dm = &ifc->domains[i];
 
-    /** update domain state (TODO: add error handling) */
-    ecrt_domain_state(ifc->domain, &ifc->domain_state);
+        /* process received data (from datagram to domain) */
+        ecrt_domain_process(dm->domain);
+
+        /** update domain state (TODO: add error handling) */
+        ecrt_domain_state(dm->domain, &dm->domain_state);
+    }
 
     /* read associated slaves window status (as soon as possible) */
+    struct domainmonitor *dm = &ifc->domains[ETHCAT_PVT_DOMAINS];
     for (uint8_t i = 0; i < ETHCAT_DRIVES; i++)
     {
-        ifc->monitor[i].slave_window = EC_READ_U32(ifc->domain_pd + ifc->monitor[i].off_slave_window);
+        ifc->monitor[i].slave_window = EC_READ_U32(dm->domain_pd + ifc->monitor[i].off_slave_window);
     }
 
     /* process a high level thread request */
@@ -433,7 +441,7 @@ build_and_send_command(struct ethcatqueue *sq)
             memcpy(slave->pvtdata[slave->master_window], qm->msg, qm->len);
 
             /* increase slave counter in domain */
-            master->pvtdomain[slave->master_window].mask |= (1 << qm->oid);
+            master->domains[slave->master_window].mask |= (1 << qm->oid);
             
             /* increase master tx index */
             slave->master_window++;
@@ -699,8 +707,15 @@ command_event(struct ethcatqueue *sq, double eventtime)
          */
         if ((waketime != PR_NOW) || (master->full_counter))
         {
-            /* upate common domain datagram (always) */
-            ecrt_domain_queue(master->domain);
+            /* loop over common domains */
+            for (uint8_t i = ETHCAT_PVT_DOMAINS; i < ETHCAT_DOMAINS; i++)
+            {
+                /* get domain */
+                struct domainmonitor *dm = &master->domains[i];
+
+                /* upate common domain datagram (always) */
+                ecrt_domain_queue(dm->domain);
+            }
 
             /* check if there is something to send */
             if (buflen)
@@ -709,16 +724,16 @@ command_event(struct ethcatqueue *sq, double eventtime)
                 for (uint8_t i = 0; i < ETHCAT_PVT_DOMAINS; i++)
                 {
                     /* get domain */
-                    struct pvtdomain *domain = master->pvtdomain[i].domain;
+                    struct domainmonitor *dm = master->domains[i].domain;
 
                     /* data consistency check (step for each axis) */
-                    if (domain->mask == ETHCAT_DRIVE_MASK)
+                    if (dm->mask == ETHCAT_DRIVE_MASK)
                     {
                         /* update domain */
-                        ecrt_domain_queue(master->pvtdomain[i].domain);
+                        ecrt_domain_queue(master->domains[i].domain);
 
                         /* reset domain drive mask */
-                        domain->mask = 0;
+                        dm->mask = 0;
                     }
                     else
                     {
@@ -855,41 +870,23 @@ ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
     slave->syncs[EC_DIR_OUTPUT].index = EC_END;
 }
 
-/** configure ethercat slave private registers */
-void __visible
-ethcatqueue_slave_config_registers(struct ethcatqueue *sq,
-                                   uint8_t index,
-                                   uint8_t n_registers,
-                                   ec_pdo_entry_reg_t *registers)
-{
-    struct mastermonitor *master = &sq->masterifc;
-    struct slavemonitor *slave = &master->monitor[index];
-    
-    slave->n_registers = n_registers;
-    for (uint8_t i = 0; i < n_registers; i++)
-    {
-        slave->registers[i] = registers[i];
-    }
-
-    /* reset stop clock */
-    slave->registers[3] = (ec_pdo_entry_reg_t){};
-}
-
 /** configure ethercat master common registers */
 void __visible 
 ethcatqueue_master_config_registers(struct ethcatqueue *sq,
+                                    uint8_t index,
                                     uint8_t n_registers,
                                     ec_pdo_entry_reg_t *registers)
 {
     struct mastermonitor *master = &sq->masterifc;
+    struct domainmonitor *dm = &master->domains[index];
 
     for (uint8_t i = 0; i < n_registers; i++)
     {
-        master->registers[i] = registers[i];
+        dm->registers[i] = registers[i];
     }
 
     /* reset stop clock */
-    master->registers[3] = (ec_pdo_entry_reg_t){};
+    dm->registers[2] = (ec_pdo_entry_reg_t){};
 }
 
 /** create an empty ethcatqueue object */
@@ -917,15 +914,15 @@ ethcatqueue_init(struct ethcatqueue *sq)
     master->master = ecrt_request_master(0);
     HANDLE_ERROR(!master->master, klipper)
 
-    /* create common data domain */
-    master->domain = ecrt_master_create_domain(master->master);
-    HANDLE_ERROR(!master->domain, klipper)
-
-    /* create pvt specific domains */
-    for (uint8_t i = 0; i < ETHCAT_PVT_DOMAINS; i++)
+    /* create domains */
+    for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
     {
-        master->pvtdomain[i].domain = ecrt_master_create_domain(master->master);
-        HANDLE_ERROR(!master->pvtdomain[i].domain, klipper)
+        /* get domain */
+        struct domainmonitor *dm = &master->domains[i];
+
+        /* create domain */
+        dm->domain = ecrt_master_create_domain(master->master);
+        HANDLE_ERROR(!dm->domain, klipper)
     }
 
     /* initialize ethercat slaves */
@@ -946,14 +943,6 @@ ethcatqueue_init(struct ethcatqueue *sq)
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
         HANDLE_ERROR(ret, klipper)
 
-        /* configure slave domain specific registers */
-        for (uint8_t j = 0; j < ETHCAT_PVT_DOMAINS; j++)
-        {
-            ret = ecrt_domain_reg_pdo_entry_list(master->pvtdomain[j].domain, slave->registers);
-            report_errno("ecrt_domain_reg_pdo_entry_list", ret);
-            HANDLE_ERROR(ret, klipper)
-        }
-
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
                              master->monitor[i].assign_activate, //dc channel used
@@ -963,19 +952,25 @@ ethcatqueue_init(struct ethcatqueue *sq)
                              TIMES2NS(slave->sync1_st)); //sync0 shift time
     }
 
+    /* configure master domain registers */
+    for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
+    {
+        struct domainmonitor *dm = &master->domains[i];
+        ret = ecrt_domain_reg_pdo_entry_list(dm->domain, dm->registers);
+        report_errno("ecrt_domain_reg_pdo_entry_list", ret);
+        HANDLE_ERROR(ret, klipper)
+    }
+
     /* activate master */
     ret = ecrt_master_activate(master->master);
     HANDLE_ERROR(ret, fail)
 
-    /* get common data domain starting address */
-    master->domain_pd = ecrt_domain_data(master->domain);
-    HANDLE_ERROR(!master->domain_pd, fail)
-
-    /* get pdo data domain starting address */
-    for (uint8_t i = 0; i < ETHCAT_PVT_DOMAINS; i++)
+    /* get domain data addresses */
+    for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
     {
-        master->pvtdomain[i].domain_pd = ecrt_domain_data(master->pvtdomain[i].domain);
-        HANDLE_ERROR(!master->pvtdomain[i].domain_pd, fail)
+        struct domainmonitor *dm = &master->domains[i];
+        dm->domain_pd = ecrt_domain_data(dm->domain);
+        HANDLE_ERROR(!dm->domain_pd, fail)
     }
 
 klipper:

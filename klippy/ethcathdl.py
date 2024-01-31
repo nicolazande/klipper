@@ -121,8 +121,10 @@ class EthercatReader:
                                                            slave_idx, sync["index"], sync["direction"],
                                                            len(pdo_entries), cpdo_entries,
                                                            len(pdos), cpdos)
-            # get slave registers
-            registers = slave["registers"]
+        # process master
+        domains = master["domains"]
+        for domain_idx, domain in enumerate(domains):
+            registers = domain["registers"]
             cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(len(registers))+']')
             for register_idx, register in enumerate(registers):
                 cregisters[register_idx].alias = register["alias"]
@@ -133,22 +135,8 @@ class EthercatReader:
                 cregisters[register_idx].subindex = register["subindex"]
                 cregisters[register_idx].offset = self.ffi_main.cast("unsigned int *", register["offset"])
                 cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
-            # configure private slave domain registers
-            self.ffi_lib.ethcatqueue_slave_config_registers(self.ethcatqueue, slave_idx, len(registers), cregisters)
-        # process master
-        registers = master["registers"]
-        cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(len(registers))+']')
-        for register_idx, register in enumerate(registers):
-            cregisters[register_idx].alias = register["alias"]
-            cregisters[register_idx].position = register["position"]
-            cregisters[register_idx].vendor_id = register["vendor_id"]
-            cregisters[register_idx].product_code = register["product_code"]
-            cregisters[register_idx].index = register["index"]
-            cregisters[register_idx].subindex = register["subindex"]
-            cregisters[register_idx].offset = self.ffi_main.cast("unsigned int *", register["offset"])
-            cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
-        # configure common master domain registers
-        self.ffi_lib.ethcatqueue_master_config_registers(self.ethcatqueue, len(registers), cregisters)
+            # configure common master domain registers
+            self.ffi_lib.ethcatqueue_master_config_registers(self.ethcatqueue, domain_idx, len(registers), cregisters)
 
     def _start_session(self):
         '''

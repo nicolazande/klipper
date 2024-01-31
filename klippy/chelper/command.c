@@ -254,7 +254,7 @@ command_add_frame(uint8_t *buf, uint8_t msglen)
  ****************************************************************/
 /* parse an incoming command into args */
 uint8_t *
-command_parsef(uint8_t *p, uint8_t *maxend, struct command_parser *cp, uint32_t *args)
+command_parsef(uint8_t *p, uint8_t *maxend, const struct command_parser *cp, uint32_t *args)
 {
     /* get number of parameters and parameter types */
     uint8_t num_params = cp->num_params;
@@ -427,7 +427,7 @@ nak:
 
 /* encode a response message buffer */
 uint8_t
-command_encode_and_frame(uint8_t *buf, struct command_encoder *ce, ...)
+command_encode_and_frame(uint8_t *buf, const struct command_encoder *ce, ...)
 {
     /* response parameters */
     va_list args;
