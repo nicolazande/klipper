@@ -89,7 +89,6 @@
 		"sync1_ct" : 0.001,
 		"domains" : [
 			{
-				"type" : "pvt",
 				"registers" : [
 					{
 						"alias": 0,

@@ -664,6 +664,10 @@ command_event(struct ethcatqueue *sq, double eventtime)
     int buflen = 0; //length (in bytes) of data to be transmitted
     double waketime; //wake time of next command event
 
+    static double old_eventtime;
+    errorf("command event time = %lf, ideal delta = %lf, real delata = %lf", eventtime, master->sync0_ct, eventtime-old_eventtime);
+    old_eventtime = eventtime;
+
     /** set master application time (TODO: check delayed read operation) */
     ecrt_master_application_time(master->master, TIMES2NS(eventtime));
 
@@ -883,6 +887,18 @@ ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
     slave->syncs[sync_size] = (ec_sync_info_t){EC_END, 0, 0, 0, 0};
 }
 
+/** configure ethercat master */
+void __visible 
+ethcatqueue_master_config(struct ethcatqueue *sq,
+                          double sync0_ct,
+                          double sync1_ct)
+{
+    /* get master domain monitor */
+    struct mastermonitor *master = &sq->masterifc;
+    master->sync0_ct = sync0_ct;
+    master->sync1_ct = sync1_ct;
+}
+
 /** configure ethercat master domain registers */
 void __visible 
 ethcatqueue_master_config_registers(struct ethcatqueue *sq,
@@ -1031,7 +1047,7 @@ klipper:
      *                              EtherCAT thread) or scheduled immediately by the
      *                              high level thread through the pipe.
      */
-    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq);
+    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 100);
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
     pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
@@ -1068,8 +1084,16 @@ klipper:
     ret = pthread_cond_init(&sq->cond, NULL);
     HANDLE_ERROR(ret, fail)
 
-    /* create and run the background ethercat low level thread */
-    ret = pthread_create(&sq->tid, NULL, background_thread, sq);
+    /* set scheduling policy */
+    pthread_attr_init(&sq->sched_policy);
+    pthread_attr_setschedpolicy(&sq->sched_policy, SCHED_FIFO);
+
+    /* set thread scheduling priority */
+    sq->sched_param.sched_priority = 1;
+    pthread_attr_setschedparam(&sq->sched_policy, &sq->sched_param);    
+
+    /* create and run the background ethercat low-level thread */
+    ret = pthread_create(&sq->tid, &sq->sched_policy, background_thread, sq);
     HANDLE_ERROR(ret, fail)
 
 fail:
@@ -1089,7 +1113,7 @@ ethcatqueue_exit(struct ethcatqueue *sq)
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
     /* wake ethercat high level thread (last time) */
-    //kick_bg_thread(sq, EQPT_PROTOCOL);
+    kick_bg_thread(sq, EQPT_PROTOCOL);
     /* join and stop current thread */
     int ret = pthread_join(sq->tid, NULL);
     if (ret)

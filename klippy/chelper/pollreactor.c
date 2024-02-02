@@ -19,6 +19,7 @@ struct pollreactor_timer {
 
 struct pollreactor {
     int num_fds, num_timers, must_exit;
+    double resolution;
     void *callback_data;
     double next_timer;
     struct pollfd *fds;
@@ -28,7 +29,7 @@ struct pollreactor {
 
 // Allocate a new 'struct pollreactor' object
 struct pollreactor *
-pollreactor_alloc(int num_fds, int num_timers, void *callback_data)
+pollreactor_alloc(int num_fds, int num_timers, void *callback_data, double resolution)
 {
     struct pollreactor *pr = malloc(sizeof(*pr));
     memset(pr, 0, sizeof(*pr));
@@ -37,6 +38,7 @@ pollreactor_alloc(int num_fds, int num_timers, void *callback_data)
     pr->must_exit = 0;
     pr->callback_data = callback_data;
     pr->next_timer = PR_NEVER;
+    pr->resolution = resolution;
     pr->fds = malloc(num_fds * sizeof(*pr->fds));
     memset(pr->fds, 0, num_fds * sizeof(*pr->fds));
     pr->fd_callbacks = malloc(num_fds * sizeof(*pr->fd_callbacks));
@@ -101,7 +103,8 @@ pollreactor_update_timer(struct pollreactor *pr, int pos, double waketime)
 static int
 pollreactor_check_timers(struct pollreactor *pr, double eventtime, int busy)
 {
-    if (eventtime >= pr->next_timer) {
+    if (eventtime >= pr->next_timer)
+    {
         // Find and run pending timers
         pr->next_timer = PR_NEVER;
         int i;
@@ -120,8 +123,14 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime, int busy)
     if (busy)
         return 0;
     // Calculate sleep duration
-    double timeout = ceil((pr->next_timer - eventtime) * 1000.);
-    return timeout < 1. ? 1 : (timeout > 1000. ? 1000 : (int)timeout);
+    double res = pr->resolution;
+    double timeout = ((pr->next_timer - eventtime) * 1000. * res) / res;
+    if (timeout > 1000.)
+    {
+        timeout = 1000.;
+    }
+    return timeout;
+    // return timeout < 1. ? 1 : (timeout > 1000. ? 1000 : (int)timeout);
 }
 
 // Repeatedly check for timer and fd events and invoke their callbacks

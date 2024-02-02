@@ -63,7 +63,7 @@ struct domainmonitor
     uint16_t domain_size;               //size in bytes of the domain
     uint8_t mask;                       //number of active associated drives (in current cycle)
     uint8_t n_registers;                //number of registers in the domain
-    uint64_t offsets[ETHCAT_MAX_REGISTERS]; //domain register offsets
+    uint32_t offsets[ETHCAT_MAX_REGISTERS]; //domain register offsets
     ec_pdo_entry_reg_t registers[ETHCAT_MAX_REGISTERS]; //domain registers
 };
 
@@ -128,6 +128,8 @@ struct ethcatqueue
     int pipe_sched[2]; //pipe_sched[0] = rx-command pipe, pipe_sched[1] = tx-command-pipe
     /* threading */
     pthread_t tid; //ethcat low level thread id
+    pthread_attr_t sched_policy; //thread scheduling policy
+    struct sched_param sched_param; //thread schedulting parameters (priority)
     pthread_mutex_t lock; //protects variables below
     pthread_cond_t cond; //condition variable used for thread synchronization
     int receive_waiting; //flag indicating whether the ethcatqueue is waiting to receive data
@@ -174,6 +176,11 @@ void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                                    ec_pdo_entry_info_t *pdo_entries,
                                    uint8_t n_pdos,
                                    ec_pdo_info_t *pdos);
+
+/** configure ethercat master */
+void ethcatqueue_master_config(struct ethcatqueue *sq,
+                               double sync0_ct,
+                               double sync1_ct);
 
 /** configure ethercat master domain registers */
 void ethcatqueue_master_config_registers(struct ethcatqueue *sq,

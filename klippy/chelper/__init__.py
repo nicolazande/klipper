@@ -121,6 +121,9 @@ defs_ethcatqueue = """
                                     ec_pdo_entry_info_t *pdo_entries,
                                     uint8_t n_pdos,
                                     ec_pdo_info_t *pdos);
+    void ethcatqueue_master_config(struct ethcatqueue *sq,
+                                   double sync0_ct,
+                                   double sync1_ct);
     void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
                                             uint8_t index,
                                             uint8_t n_registers,

@@ -123,6 +123,7 @@ class EthercatReader:
                                                            len(pdo_entries), cpdo_entries,
                                                            len(pdos), cpdos)
         # process master
+        self.ffi_lib.ethcatqueue_master_config(self.ethcatqueue, master["sync0_ct"], master["sync1_ct"])
         domains = master["domains"]
         for domain_idx, domain in enumerate(domains):
             registers = domain["registers"]

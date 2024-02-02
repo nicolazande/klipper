@@ -636,9 +636,9 @@ serialqueue_alloc(int serial_fd, char serial_fd_type, int client_id)
         goto fail;
 
     // Reactor setup
-    sq->pr = pollreactor_alloc(SQPF_NUM, SQPT_NUM, sq);
-    pollreactor_add_fd(sq->pr, SQPF_SERIAL, serial_fd, input_event
-                       , serial_fd_type==SQT_DEBUGFILE);
+    sq->pr = pollreactor_alloc(SQPF_NUM, SQPT_NUM, sq, 1);
+    pollreactor_add_fd(sq->pr, SQPF_SERIAL, serial_fd, input_event,
+                       serial_fd_type==SQT_DEBUGFILE);
     pollreactor_add_fd(sq->pr, SQPF_PIPE, sq->pipe_fds[0], kick_event, 0);
     pollreactor_add_timer(sq->pr, SQPT_RETRANSMIT, retransmit_event);
     pollreactor_add_timer(sq->pr, SQPT_COMMAND, command_event);
