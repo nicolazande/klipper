@@ -115,7 +115,7 @@ int32_t pvtsolve_is_active_axis(struct drive_kinematics *sk, char axis);
 void pvtsolve_set_trapq(struct drive_kinematics *sk, struct trapq *tq);
 
 /** set drive_kinematics pvtcompress */
-void pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc);
+void pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc, double simtime);
 
 /** calculate toolhead position from coordinates */
 double pvtsolve_calc_position_from_coord(struct drive_kinematics *sk, double x, double y, double z);

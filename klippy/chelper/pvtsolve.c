@@ -355,9 +355,10 @@ pvtsolve_set_trapq(struct drive_kinematics *sk, struct trapq *tq)
 
 /** set drive kinematics compressor */
 void __visible
-pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc)
+pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc, double simtime)
 {
     sk->sc = sc;
+    sk->simtime = simtime;
 }
 
 /** calculate toolhead position from coordinates */

@@ -672,13 +672,13 @@ command_event(struct ethcatqueue *sq, double eventtime)
      * master internal time. TODO: this operation doesn't need to be
      * performed every cycle, therefore add a counter enable logic.
      */
-    //ecrt_master_sync_reference_clock_to(master->master, TIMES2NS(eventtime));
+    ecrt_master_sync_reference_clock_to(master->master, TIMES2NS(eventtime));
 
     /** 
      * Queue the DC clock drift compensation datagram, all slaves are
      * synchronized with the reference clock (first DC capable slave).
      */
-    //ecrt_master_sync_slave_clocks(master->master);
+    ecrt_master_sync_slave_clocks(master->master);
 
     /* prepare data for frame transmission */
     for (;;)

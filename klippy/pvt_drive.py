@@ -105,12 +105,12 @@ class PVT_drive:
     '''
     Interface to low-level mcu and chelper code for pvt drive.
     '''
-    def __init__(self, name, mcu:mcu.MCU,
-                 units_in_radians = False):
+    def __init__(self, name, mcu, units_in_radians, simtime):
         # parameters
         self._name = name
         self._units_in_radians = units_in_radians
         self._step_dist = 1
+        self._simtime = simtime
         # keep virtual connection with the mcu module
         self._mcu = mcu
         self._oid = oid = self._mcu.create_ethercat_oid() #oid used as ethercat slave address
@@ -279,7 +279,7 @@ class PVT_drive:
             mcu_pos = self.get_mcu_position()
         self._stepper_kinematics = sk
         ffi_main, ffi_lib = chelper.get_ffi()
-        ffi_lib.pvtsolve_set_pvtcompress(sk, self._stepqueue)
+        ffi_lib.pvtsolve_set_pvtcompress(sk, self._stepqueue, self._simtime)
         self.set_trapq(self._trapq)
         self._set_mcu_position(mcu_pos) #move back to previous position
         return old_sk
@@ -391,6 +391,7 @@ def PrinterStepper(config, units_in_radians=False):
     '''
     printer = config.get_printer()
     name = config.get_name()
+    simtime = config.getfloat('sampling_time', 0.001, minval=0.001, maxval=.01)
     '''
     NOTE: the proper way to get it is through the pin module which is
     guaranteed to be instantiated, however the mcu should be always
@@ -399,7 +400,7 @@ def PrinterStepper(config, units_in_radians=False):
     '''
     mcu = printer.lookup_object('mcu')
     # create drive object
-    mcu_drive = PVT_drive(name, mcu, 0)
+    mcu_drive = PVT_drive(name=name, mcu=mcu, units_in_radians=False, simtime=simtime)
     '''
     Register helper modules.
     TODO check which are really needed for servos and adapt them

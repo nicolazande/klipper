@@ -70,7 +70,7 @@ defs_pvtsolve = """
     double pvtsolve_check_active(struct drive_kinematics *sk, double flush_time);
     int32_t pvtsolve_is_active_axis(struct drive_kinematics *sk, char axis);
     void pvtsolve_set_trapq(struct drive_kinematics *sk, struct trapq *tq);
-    void pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc);
+    void pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc, double simtime);
     double pvtsolve_calc_position_from_coord(struct drive_kinematics *sk, double x, double y, double z);
     void pvtsolve_set_position(struct drive_kinematics *sk, double x, double y, double z);
     double pvtsolve_get_commanded_pos(struct drive_kinematics *sk);
