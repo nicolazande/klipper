@@ -672,13 +672,13 @@ command_event(struct ethcatqueue *sq, double eventtime)
      * master internal time. TODO: this operation doesn't need to be
      * performed every cycle, therefore add a counter enable logic.
      */
-    ecrt_master_sync_reference_clock_to(master->master, TIMES2NS(eventtime));
+    //ecrt_master_sync_reference_clock_to(master->master, TIMES2NS(eventtime));
 
     /** 
      * Queue the DC clock drift compensation datagram, all slaves are
      * synchronized with the reference clock (first DC capable slave).
      */
-    ecrt_master_sync_slave_clocks(master->master);
+    //ecrt_master_sync_slave_clocks(master->master);
 
     /* prepare data for frame transmission */
     for (;;)
@@ -818,17 +818,26 @@ ethcatqueue_slave_config(struct ethcatqueue *sq,
                          uint16_t alias,
                          uint16_t position,
                          uint32_t vendor_id,
-                         uint32_t product_code)
+                         uint32_t product_code,
+                         uint16_t assign_activate,
+                         double sync0_st,
+                         double sync1_st)
 {
+    /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[index];
+
+    /* populate slave */
     slave->alias = alias;
     slave->position = position;
     slave->vendor_id = vendor_id;
     slave->product_code = product_code;
+    slave->assign_activate = assign_activate;
+    slave->sync0_st = sync0_st;
+    slave->sync1_st = sync1_st;
 }
 
-/** configure a list of pdos for a sync manager of an ethercat slave */
+/** configure ethercat slava pdos for a sync manager */
 void __visible
 ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                               uint8_t slave_index,
@@ -839,15 +848,18 @@ ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                               uint8_t n_pdos,
                               ec_pdo_info_t *pdos)
 {
+    /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[slave_index];
 
+    /* store pdo entries */
     slave->n_pdo_entries = n_pdo_entries;
     for (uint8_t i = 0; i < n_pdo_entries; i++)
     {
         slave->pdo_entries[i] = pdo_entries[i];
     }
 
+    /* store pdos */
     slave->n_pdos = n_pdos;
     for (uint8_t i = 0; i < n_pdos; i++)
     {
@@ -857,36 +869,43 @@ ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
         slave->pdos[i].entries = &slave->pdo_entries[position];
     }
 
-    uint8_t local_index = direction - 1;
-    if (local_index < EC_DIR_OUTPUT)
+    /* get number of available syncs */
+    int8_t sync_size = sizeof(slave->syncs)/sizeof(slave->syncs[0]) - 1;
+    if ((sync_size > 0) && (sync_index < sync_size))
     {
-        slave->syncs[local_index].index = sync_index;
-        slave->syncs[local_index].dir = direction;
-        slave->syncs[local_index].n_pdos = n_pdos;
-        slave->syncs[local_index].pdos = slave->pdos;
+        slave->syncs[sync_index].index = sync_index;
+        slave->syncs[sync_index].dir = direction;
+        slave->syncs[sync_index].n_pdos = n_pdos;
+        slave->syncs[sync_index].pdos = slave->pdos;
     }
 
-    /* reset stop flag */
-    slave->syncs[EC_DIR_OUTPUT].index = EC_END;
+    /* reset stop flag (last sync) */
+    slave->syncs[sync_size] = (ec_sync_info_t){EC_END, 0, 0, 0, 0};
 }
 
-/** configure ethercat master common registers */
+/** configure ethercat master domain registers */
 void __visible 
 ethcatqueue_master_config_registers(struct ethcatqueue *sq,
                                     uint8_t index,
                                     uint8_t n_registers,
                                     ec_pdo_entry_reg_t *registers)
 {
+    /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct domainmonitor *dm = &master->domains[index];
 
+    /* store registers */
+    dm->n_registers = n_registers;
     for (uint8_t i = 0; i < n_registers; i++)
     {
+        /* assign register */
         dm->registers[i] = registers[i];
+        /* assign register offset */
+        dm->registers[i].offset = &dm->offsets[i];
     }
 
-    /* reset stop clock */
-    dm->registers[2] = (ec_pdo_entry_reg_t){};
+    /* reset stop flag (last empty register) */
+    dm->registers[n_registers] = (ec_pdo_entry_reg_t){};
 }
 
 /** create an empty ethcatqueue object */
@@ -896,7 +915,6 @@ ethcatqueue_alloc(void)
     /* allocate serialqueue */
     struct ethcatqueue *sq = malloc(sizeof(*sq));
     memset(sq, 0, sizeof(*sq));
-
     return sq;
 }
 
@@ -910,14 +928,14 @@ ethcatqueue_init(struct ethcatqueue *sq)
     /* get ethercat master interface */
     struct mastermonitor *master = &sq->masterifc;
 
-    /* get ethercat master */
+    /* create ethercat master */
     master->master = ecrt_request_master(0);
     HANDLE_ERROR(!master->master, klipper)
 
     /* create domains */
     for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
     {
-        /* get domain */
+        /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
 
         /* create domain */
@@ -955,9 +973,11 @@ ethcatqueue_init(struct ethcatqueue *sq)
     /* configure master domain registers */
     for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
     {
+        /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
+
+        /* register mapped pdo entries to domain */
         ret = ecrt_domain_reg_pdo_entry_list(dm->domain, dm->registers);
-        report_errno("ecrt_domain_reg_pdo_entry_list", ret);
         HANDLE_ERROR(ret, klipper)
     }
 
@@ -968,7 +988,10 @@ ethcatqueue_init(struct ethcatqueue *sq)
     /* get domain data addresses */
     for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
     {
+        /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
+
+        /* initialize domain data */
         dm->domain_pd = ecrt_domain_data(dm->domain);
         HANDLE_ERROR(!dm->domain_pd, fail)
     }
@@ -1260,7 +1283,7 @@ ethcatqueue_send_batch(struct ethcatqueue *sq, struct command_queue *cq, struct 
     /* wake the background thread if necessary (limit case) */
     if (mustwake)
     {
-        //kick_bg_thread(sq, EQPT_COMMAND);
+        kick_bg_thread(sq, EQPT_COMMAND);
     }
 }
 

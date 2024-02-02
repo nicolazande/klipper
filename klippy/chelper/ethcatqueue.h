@@ -16,14 +16,18 @@
 /****************************************************************
  * Defines
  ****************************************************************/
-#ifndef MAX_CLOCK
+#ifndef MAX_CLOCK //max clock
 #define MAX_CLOCK 0x7fffffffffffffffLL
 #endif
-#define ETHCAT_DRIVES 2         //number of ethercat drives
-#define ETHCAT_PVT_DOMAINS 2    //number of pvt domains (one for each pdo instance)
+#define ETHCAT_DRIVES 2  //number of ethercat drives
+#define ETHCAT_PVT_DOMAINS 2 //number of pvt domains (one for each pdo instance)
 #define ETHCAT_STANDARD_DOMAINS 1  //number of pvt domains (one for each pdo instance)
-#define ETHCAT_DOMAINS (ETHCAT_PVT_DOMAINS + ETHCAT_STANDARD_DOMAINS)
-#define ETHCAT_DRIVE_MASK ((1 << (ETHCAT_DRIVES)) - 1)
+#define ETHCAT_DOMAINS (ETHCAT_PVT_DOMAINS + ETHCAT_STANDARD_DOMAINS) //total number of domains
+#define ETHCAT_MAX_SYNCS 3 //max number of syncs per slave
+#define ETHCAT_MAX_REGISTERS 3 //max number of master registers
+#define ETHCAT_MAX_PDOS 3 //max number of slave pdos (per slave)
+#define ETHCAT_MAX_PDO_ENTRIES 3 //max number of pdo enries per slave
+#define ETHCAT_DRIVE_MASK ((1 << (ETHCAT_DRIVES)) - 1) //operation complete mask
 
 
 /****************************************************************
@@ -58,9 +62,9 @@ struct domainmonitor
     uint8_t *domain_pd;                 //domain process data pointer
     uint16_t domain_size;               //size in bytes of the domain
     uint8_t mask;                       //number of active associated drives (in current cycle)
-    uint8_t type;
-    uint8_t n_registers;
-    ec_pdo_entry_reg_t registers[3];    //registers containing common pdo mapped objects details
+    uint8_t n_registers;                //number of registers in the domain
+    uint64_t offsets[ETHCAT_MAX_REGISTERS]; //domain register offsets
+    ec_pdo_entry_reg_t registers[ETHCAT_MAX_REGISTERS]; //domain registers
 };
 
 /* EtherCAT slave status monitor */
@@ -79,25 +83,26 @@ struct slavemonitor
     uint16_t assign_activate;               //bitmask for dc clock channel used for synchronization
     double sync0_st;                        //ethercat sync0 shify time (in seconds)
     double sync1_st;                        //ethercat sync1 shify time (in seconds)
-    uint8_t n_pdo_entries;                  //
-    ec_pdo_entry_info_t pdo_entries[2];     //
-    uint8_t n_pdos;                         //
-    ec_pdo_info_t pdos[1];                  //
-    ec_sync_info_t syncs[3];                //pdo sync manager configuration
+    uint8_t n_pdo_entries;                  //number of slave pdo entries
+    ec_pdo_entry_info_t pdo_entries[ETHCAT_MAX_PDO_ENTRIES]; //slave pdo entries
+    uint8_t n_pdos;                         //number of slave pdos
+    ec_pdo_info_t pdos[ETHCAT_MAX_PDOS];    //slave pdos
+    ec_sync_info_t syncs[ETHCAT_MAX_SYNCS]; //pdo sync manager configuration
     uint8_t *pvtdata[ETHCAT_PVT_DOMAINS];   //pvt domain addresses
 };
 
 /* EtherCAT master status monitor */
 struct mastermonitor
 {
-    ec_master_t *master;                    //ethercat master
-    uint16_t frame_size;                    //total size in bytes of pvt data (sum of domains.domain_size)
-    uint8_t full_counter;                   //counter for signaling number of slaves for which pdo slots are full
-    double sync0_ct;                        //ethercat sync0 cycle time (in seconds)
-    double sync1_ct;                        //ethercat sync1 cycle time (in seconds)
-    double frame_time;                      //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
+    ec_master_t *master;                          //ethercat master
+    uint16_t frame_size;                          //total size in bytes of pvt data (sum of domains.domain_size)
+    uint8_t full_counter;                         //counter for signaling number of slaves for which pdo slots are full
+    double sync0_ct;                              //ethercat sync0 cycle time (in seconds)
+    double sync1_ct;                              //ethercat sync1 cycle time (in seconds)
+    double frame_time;                            //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
+    uint8_t n_domains;                            //number of ethercat domains in use
     struct domainmonitor domains[ETHCAT_DOMAINS]; //pvt private domains
-    struct slavemonitor monitor[ETHCAT_DRIVES]; //storage for associated slave monitors
+    struct slavemonitor monitor[ETHCAT_DRIVES];   //storage for associated slave monitors
 };
 
 /* Shared interface (between high and low level ethercat threads) */
@@ -155,9 +160,12 @@ void ethcatqueue_slave_config(struct ethcatqueue *sq,
                               uint16_t alias,
                               uint16_t position,
                               uint32_t vendor_id,
-                              uint32_t product_code);
+                              uint32_t product_code,
+                              uint16_t assign_activate,
+                              double sync0_st,
+                              double sync1_st);
 
-/** configure a list of pdos for a sync manager of an ethercat slave */
+/** configure ethercat slava pdos for a sync manager */
 void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                                    uint8_t slave_index,
                                    uint8_t sync_index,
@@ -167,7 +175,7 @@ void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
                                    uint8_t n_pdos,
                                    ec_pdo_info_t *pdos);
 
-/** configure ethercat master common registers */
+/** configure ethercat master domain registers */
 void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
                                          uint8_t index,
                                          uint8_t n_registers,

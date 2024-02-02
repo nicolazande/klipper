@@ -2,10 +2,10 @@
     "slaves": [
 		{
 			"name" : "pvt_drive_x",
-			"alias": 1,
-			"position": 2,
-			"vendor_id": 3,
-			"product_code": 4,
+			"alias": 0,
+			"position": 0,
+			"vendor_id": 1,
+			"product_code": 1,
 			"assign_activate" : 0,
 			"sync0_st" : 0,
 			"sync1_st" : 0,
@@ -15,19 +15,19 @@
 					"direction" : 2,
 					"pdos" : [
 						{
-							"index": 1600,
+							"index": 5632,
 							"n_entries": 2,
 							"entries": 0
 						}
 					],
 					"pdo_entries": [
 						{
-							"index": 3000,
+							"index": 12228,
 							"subindex": 0,
 							"bit_length": 16
 						},
 						{
-							"index": 3001,
+							"index": 12229,
 							"subindex": 0,
 							"bit_length": 16
 						}
@@ -43,10 +43,10 @@
     	},
     	{
 			"name" : "pvt_drive_y",
-			"alias": 5,
-			"position": 6,
-			"vendor_id": 7,
-			"product_code": 8,
+			"alias": 1,
+			"position": 1,
+			"vendor_id": 2,
+			"product_code": 2,
 			"assign_activate" : 0,
 			"sync0_st" : 0,
 			"sync1_st" : 0,
@@ -56,19 +56,19 @@
 					"direction" : 2,
 					"pdos" : [
 						{
-							"index": 1600,
+							"index": 5632,
 							"n_entries": 2,
 							"entries": 0
 						}
         			],
 					"pdo_entries": [
 						{
-							"index": 3002,
+							"index": 12230,
 							"subindex": 0,
 							"bit_length": 16
 						},
 						{
-							"index": 3003,
+							"index": 12231,
 							"subindex": 0,
 							"bit_length": 16
 						}
@@ -89,51 +89,26 @@
 		"sync1_ct" : 0.001,
 		"domains" : [
 			{
-				"type" : "standard",
-				"registers" : [
-					{
-						"alias": 1,
-						"position": 2,
-						"vendor_id": 3,
-						"product_code": 4,
-						"index" : 3000,
-						"subindex" : 0,
-						"offset" : 0,
-						"bit_position" : 0
-					},
-					{
-						"alias": 1,
-						"position": 2,
-						"vendor_id": 3,
-						"product_code": 4,
-						"index" : 3001,
-						"subindex" : 0,
-						"offset" : 16,
-						"bit_position" : 0
-					}
-				]
-			},
-			{
 				"type" : "pvt",
 				"registers" : [
 					{
-						"alias": 1,
-						"position": 2,
-						"vendor_id": 3,
-						"product_code": 4,
-						"index" : 3000,
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 12228,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
 					},
 					{
-						"alias": 1,
-						"position": 2,
-						"vendor_id": 3,
-						"product_code": 4,
-						"index" : 3001,
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 12229,
 						"subindex" : 0,
-						"offset" : 16,
+						"offset" : 0,
 						"bit_position" : 0
 					}
 				]
