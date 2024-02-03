@@ -1047,7 +1047,7 @@ klipper:
      *                              EtherCAT thread) or scheduled immediately by the
      *                              high level thread through the pipe.
      */
-    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 100);
+    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10.);
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
     pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
