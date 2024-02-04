@@ -15,7 +15,7 @@ class ClockSync:
     reference time, receives its value through serial and updates
     the internal clocks of the following structures:
         - serialqueue: data exanged through serial (z-axis, extruder, ...)
-        - ethcatqueue: data exanged through ethercat (x/y-axis)
+        - ethercatqueue: data exanged through ethercat (x/y-axis)
     '''
     def __init__(self, reactor):
         self.reactor = reactor

@@ -5,7 +5,7 @@
 # imports
 import os, sys, math, logging, collections
 # additional imports (TODO: check it)
-import chelper, mcu, ethcathdl
+import chelper, mcu, ethercathdl
 
 class error(Exception):
     pass
@@ -51,7 +51,7 @@ class PVT_endstop:
             msgformat="endstop_query_state oid=%c", #stepper oid
             respformat="endstop_state oid=%c homing=%c finished=%c next_clock=%u",
             serial = self._mcu._ethercat,
-            helper = ethcathdl.EthercatRetryCommand,
+            helper = ethercathdl.EthercatRetryCommand,
             oid=self._oid,
             is_async=True)
         
@@ -185,7 +185,7 @@ class PVT_drive:
             respformat="stepper_position oid=%c pos=%i",
             oid = self._oid,
             serial = self._mcu._ethercat,
-            helper = ethcathdl.EthercatRetryCommand)
+            helper = ethercathdl.EthercatRetryCommand)
         
     def get_step_dist(self):
         '''

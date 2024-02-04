@@ -1,5 +1,11 @@
-#ifndef ETHCATQUEUE_H
-#define ETHCATQUEUE_H
+#ifndef ETHERCATQUEUE_H
+#define ETHERCATQUEUE_H
+
+/****************************************************************
+ * Configuration
+ ****************************************************************/
+#define __USE_GNU 1
+
 
 /****************************************************************
  * Includes
@@ -19,15 +25,15 @@
 #ifndef MAX_CLOCK //max clock
 #define MAX_CLOCK 0x7fffffffffffffffLL
 #endif
-#define ETHCAT_DRIVES 2  //number of ethercat drives
-#define ETHCAT_PVT_DOMAINS 2 //number of pvt domains (one for each pdo instance)
-#define ETHCAT_STANDARD_DOMAINS 1  //number of pvt domains (one for each pdo instance)
-#define ETHCAT_DOMAINS (ETHCAT_PVT_DOMAINS + ETHCAT_STANDARD_DOMAINS) //total number of domains
-#define ETHCAT_MAX_SYNCS 3 //max number of syncs per slave
-#define ETHCAT_MAX_REGISTERS 3 //max number of master registers
-#define ETHCAT_MAX_PDOS 3 //max number of slave pdos (per slave)
-#define ETHCAT_MAX_PDO_ENTRIES 3 //max number of pdo enries per slave
-#define ETHCAT_DRIVE_MASK ((1 << (ETHCAT_DRIVES)) - 1) //operation complete mask
+#define ETHERCAT_DRIVES 2  //number of ethercat drives
+#define ETHERCAT_PVT_DOMAINS 2 //number of pvt domains (one for each pdo instance)
+#define ETHERCAT_STANDARD_DOMAINS 1  //number of pvt domains (one for each pdo instance)
+#define ETHERCAT_DOMAINS (ETHERCAT_PVT_DOMAINS + ETHERCAT_STANDARD_DOMAINS) //total number of domains
+#define ETHERCAT_MAX_SYNCS 3 //max number of syncs per slave
+#define ETHERCAT_MAX_REGISTERS 3 //max number of master registers
+#define ETHERCAT_MAX_PDOS 3 //max number of slave pdos (per slave)
+#define ETHERCAT_MAX_PDO_ENTRIES 3 //max number of pdo enries per slave
+#define ETHERCAT_DRIVE_MASK ((1 << (ETHERCAT_DRIVES)) - 1) //operation complete mask
 
 
 /****************************************************************
@@ -63,8 +69,8 @@ struct domainmonitor
     uint16_t domain_size;               //size in bytes of the domain
     uint8_t mask;                       //number of active associated drives (in current cycle)
     uint8_t n_registers;                //number of registers in the domain
-    uint32_t offsets[ETHCAT_MAX_REGISTERS]; //domain register offsets
-    ec_pdo_entry_reg_t registers[ETHCAT_MAX_REGISTERS]; //domain registers
+    uint32_t offsets[ETHERCAT_MAX_REGISTERS]; //domain register offsets
+    ec_pdo_entry_reg_t registers[ETHERCAT_MAX_REGISTERS]; //domain registers
 };
 
 /* EtherCAT slave status monitor */
@@ -84,11 +90,11 @@ struct slavemonitor
     double sync0_st;                        //ethercat sync0 shify time (in seconds)
     double sync1_st;                        //ethercat sync1 shify time (in seconds)
     uint8_t n_pdo_entries;                  //number of slave pdo entries
-    ec_pdo_entry_info_t pdo_entries[ETHCAT_MAX_PDO_ENTRIES]; //slave pdo entries
+    ec_pdo_entry_info_t pdo_entries[ETHERCAT_MAX_PDO_ENTRIES]; //slave pdo entries
     uint8_t n_pdos;                         //number of slave pdos
-    ec_pdo_info_t pdos[ETHCAT_MAX_PDOS];    //slave pdos
-    ec_sync_info_t syncs[ETHCAT_MAX_SYNCS]; //pdo sync manager configuration
-    uint8_t *pvtdata[ETHCAT_PVT_DOMAINS];   //pvt domain addresses
+    ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS];    //slave pdos
+    ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
+    uint8_t *pvtdata[ETHERCAT_PVT_DOMAINS];   //pvt domain addresses
 };
 
 /* EtherCAT master status monitor */
@@ -101,8 +107,8 @@ struct mastermonitor
     double sync1_ct;                              //ethercat sync1 cycle time (in seconds)
     double frame_time;                            //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
     uint8_t n_domains;                            //number of ethercat domains in use
-    struct domainmonitor domains[ETHCAT_DOMAINS]; //pvt private domains
-    struct slavemonitor monitor[ETHCAT_DRIVES];   //storage for associated slave monitors
+    struct domainmonitor domains[ETHERCAT_DOMAINS]; //pvt private domains
+    struct slavemonitor monitor[ETHERCAT_DRIVES];   //storage for associated slave monitors
 };
 
 /* Shared interface (between high and low level ethercat threads) */
@@ -121,18 +127,19 @@ struct sharedmonitor
 };
 
 /* EtherCAT message queue */
-struct ethcatqueue
+struct ethercatqueue
 {
     /* reactor and scheduling */
     struct pollreactor *pr; //ethercat low level reactor
     int pipe_sched[2]; //pipe_sched[0] = rx-command pipe, pipe_sched[1] = tx-command-pipe
     /* threading */
-    pthread_t tid; //ethcat low level thread id
+    int cpu; //ethercat low level thread dedicated cpu
+    pthread_t tid; //ethercat low level thread id
     pthread_attr_t sched_policy; //thread scheduling policy
     struct sched_param sched_param; //thread schedulting parameters (priority)
     pthread_mutex_t lock; //protects variables below
     pthread_cond_t cond; //condition variable used for thread synchronization
-    int receive_waiting; //flag indicating whether the ethcatqueue is waiting to receive data
+    int receive_waiting; //flag indicating whether the ethercatqueue is waiting to receive data
     /* baud and clock tracking */
     double idle_time; //next time when the ethernet port is idle (ready for next operation)
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
@@ -156,98 +163,101 @@ struct ethcatqueue
 /****************************************************************
  * Public functions
  ****************************************************************/
+/** configure ethercat low level thread dedicated cpu */
+void ethercatqueue_config_cpu(struct ethercatqueue *sq, int cpu);
+
 /** initialize ethercat slave */
-void ethcatqueue_slave_config(struct ethcatqueue *sq,
-                              uint8_t index,
-                              uint16_t alias,
-                              uint16_t position,
-                              uint32_t vendor_id,
-                              uint32_t product_code,
-                              uint16_t assign_activate,
-                              double sync0_st,
-                              double sync1_st);
+void ethercatqueue_slave_config(struct ethercatqueue *sq,
+                                uint8_t index,
+                                uint16_t alias,
+                                uint16_t position,
+                                uint32_t vendor_id,
+                                uint32_t product_code,
+                                uint16_t assign_activate,
+                                double sync0_st,
+                                double sync1_st);
 
 /** configure ethercat slava pdos for a sync manager */
-void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
-                                   uint8_t slave_index,
-                                   uint8_t sync_index,
-                                   uint8_t direction,
-                                   uint8_t n_pdo_entries,
-                                   ec_pdo_entry_info_t *pdo_entries,
-                                   uint8_t n_pdos,
-                                   ec_pdo_info_t *pdos);
+void ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
+                                     uint8_t slave_index,
+                                     uint8_t sync_index,
+                                     uint8_t direction,
+                                     uint8_t n_pdo_entries,
+                                     ec_pdo_entry_info_t *pdo_entries,
+                                     uint8_t n_pdos,
+                                     ec_pdo_info_t *pdos);
 
 /** configure ethercat master */
-void ethcatqueue_master_config(struct ethcatqueue *sq,
-                               double sync0_ct,
-                               double sync1_ct);
+void ethercatqueue_master_config(struct ethercatqueue *sq,
+                                 double sync0_ct,
+                                 double sync1_ct);
 
 /** configure ethercat master domain registers */
-void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
-                                         uint8_t index,
-                                         uint8_t n_registers,
-                                         ec_pdo_entry_reg_t *registers);
+void ethercatqueue_master_config_registers(struct ethercatqueue *sq,
+                                           uint8_t index,
+                                           uint8_t n_registers,
+                                           ec_pdo_entry_reg_t *registers);
 
-/** create an empty ethcatqueue object */
-struct ethcatqueue *ethcatqueue_alloc(void);
+/** create an empty ethercatqueue object */
+struct ethercatqueue *ethercatqueue_alloc(void);
 
-/** initialize ethcatqueue */
-int ethcatqueue_init(struct ethcatqueue *sq);
+/** initialize ethercatqueue */
+int ethercatqueue_init(struct ethercatqueue *sq);
 
 /** request that the background thread exit */
-void ethcatqueue_exit(struct ethcatqueue *sq);
+void ethercatqueue_exit(struct ethercatqueue *sq);
 
-/** free all resources associated with a ethcatqueue */
-void ethcatqueue_free(struct ethcatqueue *sq);
+/** free all resources associated with a ethercatqueue */
+void ethercatqueue_free(struct ethercatqueue *sq);
 
 /** allocate a command_queue */
-struct command_queue *ethcatqueue_alloc_commandqueue(void);
+struct command_queue *ethercatqueue_alloc_commandqueue(void);
 
 /** free a command_queue */
-void ethcatqueue_free_commandqueue(struct command_queue *cq);
+void ethercatqueue_free_commandqueue(struct command_queue *cq);
 
 /** send a single synchronous command from high to low level thread (blocking) */
 void
-ethcatqueue_send_command(struct ethcatqueue *sq,
-                         uint8_t *msg,
-                         int len,
-                         uint64_t min_clock,
-                         uint64_t req_clock,
-                         uint64_t notify_id);
+ethercatqueue_send_command(struct ethercatqueue *sq,
+                           uint8_t *msg,
+                           int len,
+                           uint64_t min_clock,
+                           uint64_t req_clock,
+                           uint64_t notify_id);
 
 /** 
  * Add a batch of messages to the given command_queue. This function is called
  * from the flush_moves in the mcu module.
  */
-void ethcatqueue_send_batch(struct ethcatqueue *sq,
-                            struct command_queue *cq,
-                            struct list_head *msgs);
+void ethercatqueue_send_batch(struct ethercatqueue *sq,
+                              struct command_queue *cq,
+                              struct list_head *msgs);
 
 /**
- * Return a message read from the ethcat port (or wait for one if none
+ * Return a message read from the ethercat port (or wait for one if none
  * available). It is called directly from the ethercat high level thread.
  * It is a ffi c-helper function that takes a pre-processed message from
  * the low level thread and handles it properly using the main reactor.
  */
-void ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm);
+void ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm);
 
 /** ffi c-helper function used to set ethercat frequency */
-void ethcatqueue_set_wire_frequency(struct ethcatqueue *sq, double frequency);
+void ethercatqueue_set_wire_frequency(struct ethercatqueue *sq, double frequency);
 
 /**
  * Set the estimated clock rate of the mcu on the other end of the
- * ethcat port.
+ * ethercat port.
  */
-void ethcatqueue_set_clock_est(struct ethcatqueue *sq,
-                               double est_freq,
-                               double conv_time,
-                               uint64_t conv_clock,
-                               uint64_t last_clock);
+void ethercatqueue_set_clock_est(struct ethercatqueue *sq,
+                                 double est_freq,
+                                 double conv_time,
+                                 uint64_t conv_clock,
+                                 uint64_t last_clock);
 
 /** return the latest clock estimate */
-void ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce);
+void ethercatqueue_get_clock_est(struct ethercatqueue *sq, struct clock_estimate *ce);
 
-/* return a string buffer containing statistics for the ethcat port */
-void ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len);
+/* return a string buffer containing statistics for the ethercat port */
+void ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len);
 
-#endif // ethcatqueue.h
+#endif // ethercatqueue.h

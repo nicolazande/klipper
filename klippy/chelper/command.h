@@ -7,7 +7,7 @@
 #include <stdarg.h> // va_list
 #include <stddef.h>
 #include <stdint.h> // uint8_t
-#include "ethcatqueue.h" //struct drivemsg
+#include "ethercatqueue.h" //struct drivemsg
 
 
 /****************************************************************
@@ -83,7 +83,7 @@ struct command_parser
     uint8_t flags; //command flags
     uint8_t num_params; //number of function parameters
     const uint8_t *param_types; //list of parameter types (external)
-    int (*func)(struct ethcatqueue *, void *, uint32_t *); //command callback
+    int (*func)(struct ethercatqueue *, void *, uint32_t *); //command callback
 };
 
 

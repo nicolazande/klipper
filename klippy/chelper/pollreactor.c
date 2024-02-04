@@ -179,13 +179,15 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime, int busy)
         timeout = pr->tmin;
     }
     
-    return timeout;
+    /* integer timeout [ms] */
+    return (int)timeout;
 }
 
 /** repeatedly check for timer and fd events and invoke their callbacks */
 void
 pollreactor_run(struct pollreactor *pr)
 {
+    /* get event time */
     double eventtime = get_monotonic();
     int busy = 1;
 

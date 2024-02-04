@@ -34,7 +34,7 @@ struct pull_history_pvt_steps
 };
 
 /* ethercat queue forward declaration */
-struct ethcatqueue;
+struct ethercatqueue;
 
 
 /****************************************************************
@@ -72,7 +72,7 @@ int pvtcompress_extract_old(struct pvtcompress *sc,
                             uint64_t end_clock);
 
 /** allocate a new drivesync object */
-struct drivesync *drivesync_alloc(struct ethcatqueue *sq,
+struct drivesync *drivesync_alloc(struct ethercatqueue *sq,
                                     struct pvtcompress **sc_list,
                                     int sc_num,
                                     int move_num);

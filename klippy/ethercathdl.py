@@ -3,7 +3,7 @@
 #
 
 # imports
-import logging, threading, json
+import os, logging, threading, json
 import msgproto, chelper, util
 
 class error(Exception):
@@ -20,7 +20,7 @@ class EthercatReader:
         self.msgparser = msgproto.MessageParser(warn_prefix=warn_prefix)
         # C interface
         self.ffi_main, self.ffi_lib = chelper.get_ffi()
-        self.ethcatqueue = None #ethcatqueue (main structure for automatic EtherCAT communication)
+        self.ethercatqueue = None #ethercatqueue (main structure for automatic EtherCAT communication)
         self.stats_buf = self.ffi_main.new('char[4096]') #status buffer for debug purpose
         # threading
         self.lock = threading.Lock() #mutex to access response queue of low level thread
@@ -44,7 +44,7 @@ class EthercatReader:
         response = self.ffi_main.new('struct pull_queue_message *')
         while 1:
             # get and remove first message from receive queue
-            self.ffi_lib.ethcatqueue_pull(self.ethcatqueue, response)
+            self.ffi_lib.ethercatqueue_pull(self.ethercatqueue, response)
             count = response.len
             if count < 0:
                 # stop (error)
@@ -71,7 +71,7 @@ class EthercatReader:
                     # run message handler
                     hdl(params)
             except:
-                logging.exception("%sException in ethcat callback", self.warn_prefix)
+                logging.exception("%sException in ethercat callback", self.warn_prefix)
                 
     def _error(self, msg, *params):
         '''
@@ -96,7 +96,7 @@ class EthercatReader:
         # process slaves
         for slave_idx, slave in enumerate(slaves):
             # configure slave
-            self.ffi_lib.ethcatqueue_slave_config(self.ethcatqueue, slave_idx,
+            self.ffi_lib.ethercatqueue_slave_config(self.ethercatqueue, slave_idx,
                                                   slave["alias"], slave["position"],
                                                   slave["vendor_id"], slave["product_code"],
                                                   slave["assign_activate"], slave["sync0_st"], slave["sync1_st"])
@@ -118,12 +118,12 @@ class EthercatReader:
                     cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
                     cpdo_entries[pdo_entry_idx].bit_length = pdo_entry["bit_length"]
                 # configure sync (pdos and pdo entries)
-                self.ffi_lib.ethcatqueue_slave_config_pdos(self.ethcatqueue,
+                self.ffi_lib.ethercatqueue_slave_config_pdos(self.ethercatqueue,
                                                            slave_idx, sync["index"], sync["direction"],
                                                            len(pdo_entries), cpdo_entries,
                                                            len(pdos), cpdos)
         # process master
-        self.ffi_lib.ethcatqueue_master_config(self.ethcatqueue, master["sync0_ct"], master["sync1_ct"])
+        self.ffi_lib.ethercatqueue_master_config(self.ethercatqueue, master["sync0_ct"], master["sync1_ct"])
         domains = master["domains"]
         for domain_idx, domain in enumerate(domains):
             registers = domain["registers"]
@@ -138,18 +138,24 @@ class EthercatReader:
                 cregisters[register_idx].offset = self.ffi_main.cast("unsigned int *", register["offset"])
                 cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
             # configure common master domain registers
-            self.ffi_lib.ethcatqueue_master_config_registers(self.ethcatqueue, domain_idx, len(registers), cregisters)
+            self.ffi_lib.ethercatqueue_master_config_registers(self.ethercatqueue, domain_idx, len(registers), cregisters)
 
     def _start_session(self):
         '''
         Start new session, there is no direct contact with the mcu during the setup.
         '''
         # allocate ehtercatqueue
-        self.ethcatqueue = self.ffi_main.gc(self.ffi_lib.ethcatqueue_alloc(), self.ffi_lib.ethcatqueue_free)
+        self.ethercatqueue = self.ffi_main.gc(self.ffi_lib.ethercatqueue_alloc(), self.ffi_lib.ethercatqueue_free)
+        # set low lever ethercat thread dedicated cpu
+        n_cpus = os.cpu_count()
+        if n_cpus is not None and n_cpus > 1:
+            self.ffi_lib.ethercatqueue_config_cpu(self.ethercatqueue, 1)
+        else:
+            logging.info("Hardware not suppoerted")
         # load ethercat configuration
         self._load_ethercat_config('./commands/coe.json')
         # initialize and start low level thread
-        self.ffi_lib.ethcatqueue_init(self.ethcatqueue)
+        self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
         self.background_thread.start() #start high level background thread
@@ -196,18 +202,18 @@ class EthercatReader:
         Set drive clock estimate. This clock is continuously synchronized
         with the mcu one through the serial module (not directly).
         '''
-        if self.ethcatqueue is not None:
-            self.ffi_lib.ethcatqueue_set_clock_est(self.ethcatqueue, freq, conv_time, conv_clock, last_clock)
+        if self.ethercatqueue is not None:
+            self.ffi_lib.ethercatqueue_set_clock_est(self.ethercatqueue, freq, conv_time, conv_clock, last_clock)
         
     def disconnect(self):
         '''
         Disconnect EtherCAT communication with drive.
         '''
-        if self.ethcatqueue is not None:
-            self.ffi_lib.ethcatqueue_exit(self.ethcatqueue)
+        if self.ethercatqueue is not None:
+            self.ffi_lib.ethercatqueue_exit(self.ethercatqueue)
             if self.background_thread is not None:
                 self.background_thread.join()
-            self.background_thread = self.ethcatqueue = None
+            self.background_thread = self.ethercatqueue = None
         for pn in self.pending_notifications.values():
             pn.complete(None)
         self.pending_notifications.clear()
@@ -216,9 +222,9 @@ class EthercatReader:
         '''
         Extract old messages stored in the debug queue.
         '''
-        if self.ethcatqueue is None:
+        if self.ethercatqueue is None:
             return ""
-        self.ffi_lib.ethcatqueue_get_stats(self.ethcatqueue, self.stats_buf, len(self.stats_buf))
+        self.ffi_lib.ethercatqueue_get_stats(self.ethercatqueue, self.stats_buf, len(self.stats_buf))
         return str(self.ffi_main.string(self.stats_buf).decode())
     
     def get_reactor(self):
@@ -233,11 +239,11 @@ class EthercatReader:
         '''
         return self.msgparser
     
-    def get_ethcatqueue(self):
+    def get_ethercatqueue(self):
         '''
         Get ethercat queue.
         '''
-        return self.ethcatqueue
+        return self.ethercatqueue
     
     def get_default_command_queue(self):
         '''
@@ -265,7 +271,7 @@ class EthercatReader:
         Send raw command.
         '''
         # add command message to request queue
-        self.ffi_lib.ethcatqueue_send_command(self.ethcatqueue, cmd, len(cmd),
+        self.ffi_lib.ethercatqueue_send_command(self.ethercatqueue, cmd, len(cmd),
                                               minclock, reqclock, 0)
         
     def raw_send_wait_ack(self, cmd, minclock, reqclock, cmd_queue=None):
@@ -279,7 +285,7 @@ class EthercatReader:
         # add request to waiting list
         self.pending_notifications[nid] = completion
         # add command message to request queue
-        self.ffi_lib.ethcatqueue_send_command(self.ethcatqueue, cmd, len(cmd),
+        self.ffi_lib.ethercatqueue_send_command(self.ethercatqueue, cmd, len(cmd),
                                               minclock, reqclock, nid)
         # wait for completion
         params = completion.wait()
@@ -306,8 +312,8 @@ class EthercatReader:
         '''
         Allocate command queue.
         '''
-        return self.ffi_main.gc(self.ffi_lib.ethcatqueue_alloc_commandqueue(),
-                                self.ffi_lib.ethcatqueue_free_commandqueue)
+        return self.ffi_main.gc(self.ffi_lib.ethercatqueue_alloc_commandqueue(),
+                                self.ffi_lib.ethercatqueue_free_commandqueue)
     
     def _handle_unknown_init(self, params):
         logging.debug("%sUnknown message %d (len %d) while identifying", self.warn_prefix, params['#msgid'], len(params['#msg']))
@@ -326,12 +332,12 @@ class EthercatRetryCommand:
     '''
     Class to send a query command and return the received response.
     '''
-    def __init__(self, ethcat:EthercatReader, name, oid=None):
-        self.ethcat = ethcat
+    def __init__(self, ethercat:EthercatReader, name, oid=None):
+        self.ethercat = ethercat
         self.name = name
         self.oid = oid
         self.last_params = None
-        self.ethcat.register_response(self.handle_callback, name, oid)
+        self.ethercat.register_response(self.handle_callback, name, oid)
         
     def handle_callback(self, params):
         '''
@@ -349,19 +355,19 @@ class EthercatRetryCommand:
         while 1:
             for cmd in cmds[:-1]:
                 # send simple (no ack) commands
-                self.ethcat.raw_send(cmd, minclock, reqclock, cmd_queue)
+                self.ethercat.raw_send(cmd, minclock, reqclock, cmd_queue)
             # wait for response to the last command
-            self.ethcat.raw_send_wait_ack(cmds[-1], minclock, reqclock, cmd_queue)
+            self.ethercat.raw_send_wait_ack(cmds[-1], minclock, reqclock, cmd_queue)
             params = self.last_params
             if params is not None:
                 # response received (remove handler from reactor)
-                self.ethcat.register_response(None, self.name, self.oid)
+                self.ethercat.register_response(None, self.name, self.oid)
                 return params
             if retries <= 0:
                 # timeout (remove handler from reactor)
-                self.ethcat.register_response(None, self.name, self.oid)
+                self.ethercat.register_response(None, self.name, self.oid)
                 raise error("Unable to obtain '%s' response" % (self.name,))
-            reactor = self.ethcat.reactor
+            reactor = self.ethercat.reactor
             reactor.pause(reactor.monotonic() + retry_delay)
             retries -= 1
             retry_delay *= 2. #double retry delay

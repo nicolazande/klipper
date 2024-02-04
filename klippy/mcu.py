@@ -4,7 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import sys, os, zlib, logging, math
-import serialhdl, ethcathdl, msgproto, pins, chelper, clocksync
+import serialhdl, ethercathdl, msgproto, pins, chelper, clocksync
 import stepper
 
 class error(Exception):
@@ -649,7 +649,7 @@ class MCU:
         # serial interface
         self._serial = serialhdl.SerialReader(self._reactor, warn_prefix=wp)
         # ethercat interface
-        self._ethercat = ethcathdl.EthercatReader(self._reactor, warn_prefix=wp)
+        self._ethercat = ethercathdl.EthercatReader(self._reactor, warn_prefix=wp)
         self._baud = 0
         self._canbus_iface = None
         canbus_uuid = config.get('canbus_uuid', None)
@@ -878,7 +878,7 @@ class MCU:
         ffi_lib.steppersync_set_time(self._steppersync, 0., self._mcu_freq)
         # prepare ethercat sync structure (same number of steps as steppersync)
         self._drivesync = ffi_main.gc(
-            ffi_lib.drivesync_alloc(self._ethercat.get_ethcatqueue(),
+            ffi_lib.drivesync_alloc(self._ethercat.get_ethercatqueue(),
                                     self._pvtqueues, len(self._pvtqueues),
                                     move_count - self._reserved_move_slots),
             ffi_lib.drivesync_free)

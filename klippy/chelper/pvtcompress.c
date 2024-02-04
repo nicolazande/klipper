@@ -17,7 +17,7 @@
 #include <string.h> // memset
 #include "compiler.h" // DIV_ROUND_UP
 #include "pyhelper.h" // errorf
-#include "ethcatqueue.h" // struct pvtmsg
+#include "ethercatqueue.h" // struct pvtmsg
 #include "pvtcompress.h" // pvtcompress_alloc
 
 
@@ -68,7 +68,7 @@ struct pvthistory
  */
 struct drivesync
 {
-    struct ethcatqueue *sq; //ethercat queue
+    struct ethercatqueue *sq; //ethercat queue
     struct command_queue *cq; //private command queue (isolate from unrelated commands)
     struct pvtcompress **sc_list; //storage for associated pvtcompress objects (one for each drive)
     int sc_num; //number of associated drives
@@ -408,13 +408,13 @@ pvtcompress_extract_old(struct pvtcompress *sc,
 
 /** allocate a new drivesync object */
 struct drivesync * __visible
-drivesync_alloc(struct ethcatqueue *sq, struct pvtcompress **sc_list, int sc_num, int move_num)
+drivesync_alloc(struct ethercatqueue *sq, struct pvtcompress **sc_list, int sc_num, int move_num)
 {
     /* create drive synchronization object */
     struct drivesync *ss = malloc(sizeof(*ss));
     memset(ss, 0, sizeof(*ss));
     ss->sq = sq; //assign ethercatqueue
-    ss->cq = ethcatqueue_alloc_commandqueue(); //initialize command queue
+    ss->cq = ethercatqueue_alloc_commandqueue(); //initialize command queue
 
     /* setup compressor list (one for each drive) */
     ss->sc_list = malloc(sizeof(*sc_list)*sc_num); 
@@ -439,7 +439,7 @@ drivesync_free(struct drivesync *ss)
     }
     free(ss->sc_list);
     free(ss->move_clocks);
-    ethcatqueue_free_commandqueue(ss->cq);
+    ethercatqueue_free_commandqueue(ss->cq);
     free(ss);
 }
 
@@ -551,7 +551,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
     if (!list_empty(&msgs))
     {
         /* transmit atch of steps */
-        ethcatqueue_send_batch(ss->sq, ss->cq, &msgs);
+        ethercatqueue_send_batch(ss->sq, ss->cq, &msgs);
     }
     
     return 0;

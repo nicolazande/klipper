@@ -2,13 +2,16 @@
     "cmake.configureOnOpen": false,
     "files.associations": {
         "pgm.h": "c",
-        "ethcatqueue.h": "c",
+        "ethercatqueue.h": "c",
         "ecrt.h": "c",
         "serialqueue.h": "c",
         "pyhelper.h": "c",
         "command.h": "c",
         "poll.h": "c",
         "pvtsolve.h": "c",
-        "pollreactor.h": "c"
+        "pollreactor.h": "c",
+        "unistd.h": "c",
+        "pthread.h": "c",
+        "struct___jmp_buf_tag.h": "c"
     }
 }

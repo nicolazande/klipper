@@ -14,20 +14,16 @@
  * Includes
  ****************************************************************/
 #include <math.h> //fabs
-#include <pthread.h> //pthread_mutex_lock
 #include <stddef.h> //offsetof
-#include <stdint.h> //uint64_t
 #include <stdio.h> //snprintf
 #include <stdlib.h> //malloc
 #include <string.h> //memset
 #include <termios.h> //tcflush
 #include <unistd.h> //pipe
 #include "compiler.h" //__visible
-#include "list.h" //list_add_tail
-#include "msgblock.h" // message_alloc
 #include "pollreactor.h" //pollreactor_alloc
 #include "pyhelper.h" //get_monotonic
-#include "ethcatqueue.h" //struct pvtmsg
+#include "ethercatqueue.h" //struct pvtmsg
 
 
 /****************************************************************
@@ -35,14 +31,14 @@
  ****************************************************************/
 /* file descriptors */
 #define EQPF_PIPE   0               //index of rx-cmd pipe (pipe where application stores cmd to be sent)
-#define EQPF_NUM    1               //number of file descriptors used by a ethcatqueue
+#define EQPF_NUM    1               //number of file descriptors used by a ethercatqueue
 /* timers */
-#define EQPT_INPUT      0           //position of input timer in ethcatqueue timer list
-#define EQPT_COMMAND    1           //position of command timer in ethcatqueue timer list
-#define EQPT_PROTOCOL   2           //position of command timer in ethcatqueue timer list
-#define EQPT_NUM        3           //number of timer used by a ethcatqueue
+#define EQPT_INPUT      0           //position of input timer in ethercatqueue timer list
+#define EQPT_COMMAND    1           //position of command timer in ethercatqueue timer list
+#define EQPT_PROTOCOL   2           //position of command timer in ethercatqueue timer list
+#define EQPT_NUM        3           //number of timer used by a ethercatqueue
 /* transport layer */
-#define EQT_ETHCAT      'e'         //id for ethernet transport layer (osi 2)
+#define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time and memory limits */
 #define WR_TIME_OFFSET        0     //offset between write and next read operation (without frame_time)
@@ -69,37 +65,37 @@ extern struct command_parser *command_parser_table[ETH_MAX_CP];
  * to further process the messages in the receive queue.
  */
 static void
-check_wake_receive(struct ethcatqueue *sq);
+check_wake_receive(struct ethercatqueue *sq);
 
 /**
- * Write to the ethcatqueue internal pipe to force the execution 
+ * Write to the ethercatqueue internal pipe to force the execution 
  * of the background low level ethercat immediately (don't wait
  * for associated timer). This function is called asynchronously
  * by the high level thread since it cannot update directly the
  * command event timer.
  */
-static void kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd);
+static void kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd);
 
 /** 
  * Process a single request from the high level thread, execute the associated
  * callback and append the result to the response queue so that the high level
  * thread can read and further process it. The process is always synchronous
  * and only one command at a time can be processed since there is a single
- * instance of sharedmonitor in the ethcatqueue.
+ * instance of sharedmonitor in the ethercatqueue.
  */
-static double process_request(struct ethcatqueue *sq, double eventtime);
+static double process_request(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Read EtherCAT frame coming back from the drives and update internal structures.
  */
 static double
-input_event(struct ethcatqueue *sq, double eventtime);
+input_event(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Precess a request coming from the EtherCAT high level thread.
  */
 static double
-protocol_event(struct ethcatqueue *sq, double eventtime);
+protocol_event(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Callback for input activity on the pipe. This function is continuosly
@@ -109,27 +105,27 @@ protocol_event(struct ethcatqueue *sq, double eventtime);
  * the low level thread counterpart of kick_bg_thread.
  */
 static void
-kick_event(struct ethcatqueue *sq, double eventtime);
+kick_event(struct ethercatqueue *sq, double eventtime);
 
 /** 
  * Populate ethercat domain for the current cycle, all mapped objects
  * are transmitted in the current cycle frame.
  */
 static int
-build_and_send_command(struct ethcatqueue *sq);
+build_and_send_command(struct ethercatqueue *sq);
 
 /**
  * Determine schedule time of next command event and move messages
  * from pending queue to ready queue for each drive.
  */
 static double
-check_send_command(struct ethcatqueue *sq, int pending, double eventtime);
+check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
 
 /* callback timer to send data to the ethercat port */
 static double
-command_event(struct ethcatqueue *sq, double eventtime);
+command_event(struct ethercatqueue *sq, double eventtime);
 
-/** main background thread for reading/writing to ethcat port */
+/** main background thread for reading/writing to ethercat port */
 static void *
 background_thread(void *data);
 
@@ -138,18 +134,18 @@ background_thread(void *data);
  * Private functions
  ****************************************************************/
 static void
-check_wake_receive(struct ethcatqueue *sq)
+check_wake_receive(struct ethercatqueue *sq)
 {
     if (sq->receive_waiting)
     {
-        /* signal condition to ethcatqueue_pull */
+        /* signal condition to ethercatqueue_pull */
         sq->receive_waiting = 0;
         pthread_cond_signal(&sq->cond);
     }
 }
 
 static void
-kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd)
+kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd)
 {
     /* write a dummy value just to wake up the poll reactor */
     int ret = write(sq->pipe_sched[1], &cmd, 1);
@@ -159,7 +155,7 @@ kick_bg_thread(struct ethcatqueue *sq, uint8_t cmd)
     }
 }
 
-static double process_request(struct ethcatqueue *sq, double eventtime)
+static double process_request(struct ethercatqueue *sq, double eventtime)
 {
     double next_event = PR_NEVER;
 
@@ -215,7 +211,7 @@ static double process_request(struct ethcatqueue *sq, double eventtime)
             in = command_parsef(in, inend, cp, args);
             
             /* get request handler */
-            int (*func)(struct ethcatqueue *, void *, uint32_t *) = cp->func;
+            int (*func)(struct ethercatqueue *, void *, uint32_t *) = cp->func;
 
             /* check callback */
             if (func)
@@ -310,7 +306,7 @@ static double process_request(struct ethcatqueue *sq, double eventtime)
 };
 
 static double
-input_event(struct ethcatqueue *sq, double eventtime)
+input_event(struct ethercatqueue *sq, double eventtime)
 {
     /* get master interface */
     struct mastermonitor *ifc = &sq->masterifc;
@@ -319,7 +315,7 @@ input_event(struct ethcatqueue *sq, double eventtime)
     ecrt_master_receive(ifc->master);
 
     /* loop over common domains */
-    for (uint8_t i = ETHCAT_PVT_DOMAINS; i < ETHCAT_DOMAINS; i++)
+    for (uint8_t i = ETHERCAT_PVT_DOMAINS; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain */
         struct domainmonitor *dm = &ifc->domains[i];
@@ -332,8 +328,8 @@ input_event(struct ethcatqueue *sq, double eventtime)
     }
 
     /* read associated slaves window status (as soon as possible) */
-    struct domainmonitor *dm = &ifc->domains[ETHCAT_PVT_DOMAINS];
-    for (uint8_t i = 0; i < ETHCAT_DRIVES; i++)
+    struct domainmonitor *dm = &ifc->domains[ETHERCAT_PVT_DOMAINS];
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         ifc->monitor[i].slave_window = EC_READ_U32(dm->domain_pd + ifc->monitor[i].off_slave_window);
     }
@@ -349,7 +345,7 @@ input_event(struct ethcatqueue *sq, double eventtime)
 }
 
 static double
-protocol_event(struct ethcatqueue *sq, double eventtime)
+protocol_event(struct ethercatqueue *sq, double eventtime)
 {
     double next_event = PR_NEVER;
 
@@ -364,7 +360,7 @@ protocol_event(struct ethcatqueue *sq, double eventtime)
 };
 
 static void
-kick_event(struct ethcatqueue *sq, double eventtime)
+kick_event(struct ethercatqueue *sq, double eventtime)
 {
     /* protocol command */
     uint8_t cmd;
@@ -380,7 +376,7 @@ kick_event(struct ethcatqueue *sq, double eventtime)
 }
 
 static int
-build_and_send_command(struct ethcatqueue *sq)
+build_and_send_command(struct ethercatqueue *sq)
 {
     /* data */
     int len = 0; //number of bytes added in to the current frame
@@ -423,7 +419,7 @@ build_and_send_command(struct ethcatqueue *sq)
         }
 
         /* get target slave */
-        if (qm->oid < ETHCAT_DRIVES)
+        if (qm->oid < ETHERCAT_DRIVES)
         {
             slave = &master->monitor[qm->oid];
         }
@@ -481,7 +477,7 @@ build_and_send_command(struct ethcatqueue *sq)
 }
 
 static double
-check_send_command(struct ethcatqueue *sq, int pending, double eventtime)
+check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 {
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
@@ -491,7 +487,7 @@ check_send_command(struct ethcatqueue *sq, int pending, double eventtime)
      * Check for free buffer slots on slave side only. There is no need to check tx side
      * since when this function is called it is guaranteed to have all pdo slots free.
      */
-    for (uint8_t i = 0; i < ETHCAT_DRIVES; i++)
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave */
         slave = &master->monitor[i];
@@ -654,7 +650,7 @@ check_send_command(struct ethcatqueue *sq, int pending, double eventtime)
 }
 
 static double
-command_event(struct ethcatqueue *sq, double eventtime)
+command_event(struct ethercatqueue *sq, double eventtime)
 {
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
@@ -712,7 +708,7 @@ command_event(struct ethcatqueue *sq, double eventtime)
         if ((waketime != PR_NOW) || (master->full_counter))
         {
             /* loop over common domains */
-            for (uint8_t i = ETHCAT_PVT_DOMAINS; i < ETHCAT_DOMAINS; i++)
+            for (uint8_t i = ETHERCAT_PVT_DOMAINS; i < ETHERCAT_DOMAINS; i++)
             {
                 /* get domain */
                 struct domainmonitor *dm = &master->domains[i];
@@ -725,13 +721,13 @@ command_event(struct ethcatqueue *sq, double eventtime)
             if (buflen)
             {
                 /* loop over domains */
-                for (uint8_t i = 0; i < ETHCAT_PVT_DOMAINS; i++)
+                for (uint8_t i = 0; i < ETHERCAT_PVT_DOMAINS; i++)
                 {
                     /* get domain */
                     struct domainmonitor *dm = master->domains[i].domain;
 
                     /* data consistency check (step for each axis) */
-                    if (dm->mask == ETHCAT_DRIVE_MASK)
+                    if (dm->mask == ETHERCAT_DRIVE_MASK)
                     {
                         /* update domain */
                         ecrt_domain_queue(master->domains[i].domain);
@@ -755,7 +751,7 @@ command_event(struct ethcatqueue *sq, double eventtime)
                 master->full_counter = 0; //pdo slots free
 
                 /* reset slaves tx counter */
-                for (uint8_t i = 0; i < ETHCAT_DRIVES; i++)
+                for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
                 {
                     master->monitor[i].master_window = 0;
                 }
@@ -789,7 +785,7 @@ static void *
 background_thread(void *data)
 {
     /* pointer to shared ethercatqueue */
-    struct ethcatqueue *sq = data;
+    struct ethercatqueue *sq = data;
 
     /* 
      * Cyclic function checking for timers and fd events and invoking
@@ -815,17 +811,24 @@ background_thread(void *data)
 /****************************************************************
  * Public functions
  ****************************************************************/
+/** configure ethercat low level thread dedicated cpu */
+void __visible
+ethercatqueue_config_cpu(struct ethercatqueue *sq, int cpu)
+{
+    sq->cpu = cpu;
+}
+
 /** initialize ethercat slave */
 void __visible
-ethcatqueue_slave_config(struct ethcatqueue *sq,
-                         uint8_t index,
-                         uint16_t alias,
-                         uint16_t position,
-                         uint32_t vendor_id,
-                         uint32_t product_code,
-                         uint16_t assign_activate,
-                         double sync0_st,
-                         double sync1_st)
+ethercatqueue_slave_config(struct ethercatqueue *sq,
+                           uint8_t index,
+                           uint16_t alias,
+                           uint16_t position,
+                           uint32_t vendor_id,
+                           uint32_t product_code,
+                           uint16_t assign_activate,
+                           double sync0_st,
+                           double sync1_st)
 {
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -843,14 +846,14 @@ ethcatqueue_slave_config(struct ethcatqueue *sq,
 
 /** configure ethercat slava pdos for a sync manager */
 void __visible
-ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
-                              uint8_t slave_index,
-                              uint8_t sync_index,
-                              uint8_t direction,
-                              uint8_t n_pdo_entries,
-                              ec_pdo_entry_info_t *pdo_entries,
-                              uint8_t n_pdos,
-                              ec_pdo_info_t *pdos)
+ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
+                                uint8_t slave_index,
+                                uint8_t sync_index,
+                                uint8_t direction,
+                                uint8_t n_pdo_entries,
+                                ec_pdo_entry_info_t *pdo_entries,
+                                uint8_t n_pdos,
+                                ec_pdo_info_t *pdos)
 {
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -889,9 +892,9 @@ ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
 
 /** configure ethercat master */
 void __visible 
-ethcatqueue_master_config(struct ethcatqueue *sq,
-                          double sync0_ct,
-                          double sync1_ct)
+ethercatqueue_master_config(struct ethercatqueue *sq,
+                            double sync0_ct,
+                            double sync1_ct)
 {
     /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -901,10 +904,10 @@ ethcatqueue_master_config(struct ethcatqueue *sq,
 
 /** configure ethercat master domain registers */
 void __visible 
-ethcatqueue_master_config_registers(struct ethcatqueue *sq,
-                                    uint8_t index,
-                                    uint8_t n_registers,
-                                    ec_pdo_entry_reg_t *registers)
+ethercatqueue_master_config_registers(struct ethercatqueue *sq,
+                                      uint8_t index,
+                                      uint8_t n_registers,
+                                      ec_pdo_entry_reg_t *registers)
 {
     /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -924,19 +927,19 @@ ethcatqueue_master_config_registers(struct ethcatqueue *sq,
     dm->registers[n_registers] = (ec_pdo_entry_reg_t){};
 }
 
-/** create an empty ethcatqueue object */
-struct ethcatqueue * __visible
-ethcatqueue_alloc(void)
+/** create an empty ethercatqueue object */
+struct ethercatqueue * __visible
+ethercatqueue_alloc(void)
 {
     /* allocate serialqueue */
-    struct ethcatqueue *sq = malloc(sizeof(*sq));
+    struct ethercatqueue *sq = malloc(sizeof(*sq));
     memset(sq, 0, sizeof(*sq));
     return sq;
 }
 
-/** initialize ethcatqueue */
+/** initialize ethercatqueue */
 int __visible
-ethcatqueue_init(struct ethcatqueue *sq)
+ethercatqueue_init(struct ethercatqueue *sq)
 {
     /* shared error code */
     int ret;
@@ -949,7 +952,7 @@ ethcatqueue_init(struct ethcatqueue *sq)
     HANDLE_ERROR(!master->master, klipper)
 
     /* create domains */
-    for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
@@ -960,7 +963,7 @@ ethcatqueue_init(struct ethcatqueue *sq)
     }
 
     /* initialize ethercat slaves */
-    for (uint8_t i = 0; i < ETHCAT_DRIVES; i++)
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave monitor */
         struct slavemonitor *slave = &master->monitor[i];
@@ -987,7 +990,7 @@ ethcatqueue_init(struct ethcatqueue *sq)
     }
 
     /* configure master domain registers */
-    for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
@@ -1002,7 +1005,7 @@ ethcatqueue_init(struct ethcatqueue *sq)
     HANDLE_ERROR(ret, fail)
 
     /* get domain data addresses */
-    for (uint8_t i = 0; i < ETHCAT_DOMAINS; i++)
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
@@ -1096,9 +1099,19 @@ klipper:
     ret = pthread_create(&sq->tid, &sq->sched_policy, background_thread, sq);
     HANDLE_ERROR(ret, fail)
 
+    /* set cpu affinity for background thread */
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(sq->cpu, &cpuset);
+    ret = pthread_setaffinity_np(sq->tid, sizeof(cpu_set_t), &cpuset);
+    HANDLE_ERROR(ret, fail)
+
 fail:
     /* error handling */
-    report_errno("Ethercat queue allocation", ret);
+    if (ret)
+    {
+        report_errno("Ethercat queue allocation error", ret);
+    }
     
     return ret;
 }
@@ -1108,7 +1121,7 @@ fail:
  * communication with the drives is interrupted.
  */
 void __visible
-ethcatqueue_exit(struct ethcatqueue *sq)
+ethercatqueue_exit(struct ethercatqueue *sq)
 {
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
@@ -1122,9 +1135,9 @@ ethcatqueue_exit(struct ethcatqueue *sq)
     }
 }
 
-/** free all resources associated with a ethcatqueue */
+/** free all resources associated with a ethercatqueue */
 void __visible
-ethcatqueue_free(struct ethcatqueue *sq)
+ethercatqueue_free(struct ethercatqueue *sq)
 {
     if (!sq)
     {
@@ -1132,7 +1145,7 @@ ethcatqueue_free(struct ethcatqueue *sq)
     }
     if (!pollreactor_is_exit(sq->pr))
     {
-        ethcatqueue_exit(sq);
+        ethercatqueue_exit(sq);
     }
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
@@ -1167,7 +1180,7 @@ ethcatqueue_free(struct ethcatqueue *sq)
 
 /** allocate a command_queue */
 struct command_queue * __visible
-ethcatqueue_alloc_commandqueue(void)
+ethercatqueue_alloc_commandqueue(void)
 {
     struct command_queue *cq = malloc(sizeof(*cq));
     memset(cq, 0, sizeof(*cq));
@@ -1178,7 +1191,7 @@ ethcatqueue_alloc_commandqueue(void)
 
 /** free a command_queue */
 void __visible
-ethcatqueue_free_commandqueue(struct command_queue *cq)
+ethercatqueue_free_commandqueue(struct command_queue *cq)
 {
     /* check command queue */
     if (!cq)
@@ -1196,12 +1209,12 @@ ethcatqueue_free_commandqueue(struct command_queue *cq)
 
 /** send a single synchronous command from high to low level thread */
 void __visible
-ethcatqueue_send_command(struct ethcatqueue *sq,
-                         uint8_t *msg,
-                         int len,
-                         uint64_t min_clock,
-                         uint64_t req_clock,
-                         uint64_t notify_id)
+ethercatqueue_send_command(struct ethercatqueue *sq,
+                           uint8_t *msg,
+                           int len,
+                           uint64_t min_clock,
+                           uint64_t req_clock,
+                           uint64_t notify_id)
 {
     /* crete new queue message */
     struct queue_message *qm = message_alloc();
@@ -1235,7 +1248,7 @@ ethcatqueue_send_command(struct ethcatqueue *sq,
 
 /** add a batch of messages (pvt only) to the upcoming command queue */
 void
-ethcatqueue_send_batch(struct ethcatqueue *sq, struct command_queue *cq, struct list_head *msgs)
+ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, struct list_head *msgs)
 {
     /* data */
     int len = 0;
@@ -1318,7 +1331,7 @@ ethcatqueue_send_batch(struct ethcatqueue *sq, struct command_queue *cq, struct 
  * the low levelthread and handles it properly using the main reactor.
  */
 void __visible
-ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm)
+ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm)
 {
     /* lock mutex */
     pthread_mutex_lock(&sq->lock);
@@ -1370,7 +1383,7 @@ ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm)
  * be received back by the ethercat master.
  */
 void __visible
-ethcatqueue_set_wire_frequency(struct ethcatqueue *sq, double frequency)
+ethercatqueue_set_wire_frequency(struct ethercatqueue *sq, double frequency)
 {
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
@@ -1388,11 +1401,11 @@ ethcatqueue_set_wire_frequency(struct ethcatqueue *sq, double frequency)
  * drives. The main mcu is taken as reference clock.
  */
 void __visible
-ethcatqueue_set_clock_est(struct ethcatqueue *sq,
-                          double est_freq,
-                          double conv_time,
-                          uint64_t conv_clock,
-                          uint64_t last_clock)
+ethercatqueue_set_clock_est(struct ethercatqueue *sq,
+                            double est_freq,
+                            double conv_time,
+                            uint64_t conv_clock,
+                            uint64_t last_clock)
 {
     pthread_mutex_lock(&sq->lock);
     sq->ce.est_freq = est_freq;
@@ -1404,18 +1417,18 @@ ethcatqueue_set_clock_est(struct ethcatqueue *sq,
 
 /** return the latest clock estimate */
 void
-ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce)
+ethercatqueue_get_clock_est(struct ethercatqueue *sq, struct clock_estimate *ce)
 {
     pthread_mutex_lock(&sq->lock);
     memcpy(ce, &sq->ce, sizeof(sq->ce));
     pthread_mutex_unlock(&sq->lock);
 }
 
-/* return a string buffer containing statistics for the ethcat port */
+/* return a string buffer containing statistics for the ethercat port */
 void __visible
-ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len)
+ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len)
 {
-    struct ethcatqueue stats;
+    struct ethercatqueue stats;
     pthread_mutex_lock(&sq->lock);
     memcpy(&stats, sq, sizeof(stats));
     pthread_mutex_unlock(&sq->lock);

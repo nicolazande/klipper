@@ -445,7 +445,7 @@ command_encode_and_frame(uint8_t *buf, const struct command_encoder *ce, ...)
  * Command parser list
  ****************************************************************/
 /* default command parser */
-static int cp_f_default(struct ethcatqueue *sq, void *out, uint32_t *args)
+static int cp_f_default(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
     return 0;
 }
@@ -461,7 +461,7 @@ static struct command_parser cp_default =
 };
 
 /* reset step clock command parser */
-static int cp_f_command_reset_step_clock(struct ethcatqueue *sq, void *out, uint32_t *args)
+static int cp_f_command_reset_step_clock(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
     struct stepper *s = NULL;
     /* get drive oid and target buffer */
@@ -482,7 +482,7 @@ static struct command_parser cp_reset_step_clock =
 };
 
 /** stepper get position command parser */
-static int cp_f_stepper_get_position(struct ethcatqueue *sq, void *out, uint32_t *args)
+static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
@@ -507,7 +507,7 @@ static struct command_parser cp_stepper_get_position =
 };
 
 /** endstop home command parser */
-static int cp_f_endstop_home(struct ethcatqueue *sq, void *out, uint32_t *args)
+static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
@@ -530,7 +530,7 @@ static struct command_parser cp_endstop_home =
 };
 
 /** endstop query state command parser */
-static int cp_f_endstop_query_state(struct ethcatqueue *sq, void *out, uint32_t *args)
+static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
@@ -561,7 +561,7 @@ static struct command_parser cp_endstop_query_state =
 };
 
 /** stepper stop on trigger command parser */
-static int cp_f_stepper_stop_on_trigger(struct ethcatqueue *sq, void *out, uint32_t *args)
+static int cp_f_stepper_stop_on_trigger(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];

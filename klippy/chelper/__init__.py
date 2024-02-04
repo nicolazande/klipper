@@ -21,7 +21,7 @@ COMPILE_ARGS = ("-Wall -g -O2 -shared -fPIC"
                 f" -o %s %s {ADDITIONAL_LIB_PATHS} {ADDITIONAL_LIBS}")
 SSE_FLAGS = "-mfpmath=sse -msse2"
 SOURCE_FILES = [
-    'command.c', 'ethcatqueue.c', 'kin_hash.c', 'pvtcompress.c', 'pvtsolve.c',
+    'command.c', 'ethercatqueue.c', 'kin_hash.c', 'pvtcompress.c', 'pvtsolve.c',
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c', 'trapq.c',
     'pollreactor.c', 'msgblock.c', 'trdispatch.c',
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
@@ -30,7 +30,7 @@ SOURCE_FILES = [
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
-    'command.h', 'ethcatqueue.h', 'ethercatmsg.h', 'pvtcompress.h',
+    'command.h', 'ethercatqueue.h', 'ethercatmsg.h', 'pvtcompress.h',
     'list.h', 'serialqueue.h', 'stepcompress.h', 'itersolve.h', 'pyhelper.h',
     'trapq.h', 'pollreactor.h', 'msgblock.h'
 ]
@@ -56,7 +56,7 @@ defs_pvtcompress = """
                                 int max,
                                 uint64_t start_clock,
                                 uint64_t end_clock);
-    struct drivesync *drivesync_alloc(struct ethcatqueue *sq,
+    struct drivesync *drivesync_alloc(struct ethercatqueue *sq,
                                       struct pvtcompress **sc_list,
                                       int sc_num,
                                       int move_num);
@@ -80,7 +80,7 @@ defs_kin_hash = """
     struct drive_kinematics *hash_drive_alloc(char axis);
 """
 
-defs_ethcatqueue = """
+defs_ethercatqueue = """
     typedef struct
     {
         uint16_t alias;
@@ -104,54 +104,55 @@ defs_ethcatqueue = """
         unsigned int n_entries;
         ec_pdo_entry_info_t *entries;
     } ec_pdo_info_t;
-    void ethcatqueue_slave_config(struct ethcatqueue *sq,
-                              uint8_t index,
-                              uint16_t alias,
-                              uint16_t position,
-                              uint32_t vendor_id,
-                              uint32_t product_code,
-                              uint16_t assign_activate,
-                              double sync0_st,
-                              double sync1_st);
-    void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
-                                    uint8_t slave_index,
-                                    uint8_t sync_index,
-                                    uint8_t direction,
-                                    uint8_t n_pdo_entries,
-                                    ec_pdo_entry_info_t *pdo_entries,
-                                    uint8_t n_pdos,
-                                    ec_pdo_info_t *pdos);
-    void ethcatqueue_master_config(struct ethcatqueue *sq,
-                                   double sync0_ct,
-                                   double sync1_ct);
-    void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
-                                            uint8_t index,
-                                            uint8_t n_registers,
-                                            ec_pdo_entry_reg_t *registers);
-    struct ethcatqueue *ethcatqueue_alloc(void);
-    int ethcatqueue_init(struct ethcatqueue *sq);
-    void ethcatqueue_exit(struct ethcatqueue *sq);
-    void ethcatqueue_free(struct ethcatqueue *sq);
-    struct command_queue *ethcatqueue_alloc_commandqueue(void);
-    void ethcatqueue_free_commandqueue(struct command_queue *cq);
-    void ethcatqueue_send_command(struct ethcatqueue *sq,
-                                  uint8_t *msg,
-                                  int len,
-                                  uint64_t min_clock,
-                                  uint64_t req_clock,
-                                  uint64_t notify_id);
-    void ethcatqueue_send_batch(struct ethcatqueue *sq,
-                                struct command_queue *cq,
-                                struct list_head *msgs);
-    void ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm);
-    void ethcatqueue_set_wire_frequency(struct ethcatqueue *sq, double frequency);
-    void ethcatqueue_set_clock_est(struct ethcatqueue *sq,
-                                   double est_freq,
-                                   double conv_time,
-                                   uint64_t conv_clock,
-                                   uint64_t last_clock);
-    void ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce);
-    void ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len);
+    void ethercatqueue_config_cpu(struct ethercatqueue *sq, int cpu);
+    void ethercatqueue_slave_config(struct ethercatqueue *sq,
+                                    uint8_t index,
+                                    uint16_t alias,
+                                    uint16_t position,
+                                    uint32_t vendor_id,
+                                    uint32_t product_code,
+                                    uint16_t assign_activate,
+                                    double sync0_st,
+                                    double sync1_st);
+    void ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
+                                         uint8_t slave_index,
+                                         uint8_t sync_index,
+                                         uint8_t direction,
+                                         uint8_t n_pdo_entries,
+                                         ec_pdo_entry_info_t *pdo_entries,
+                                         uint8_t n_pdos,
+                                         ec_pdo_info_t *pdos);
+    void ethercatqueue_master_config(struct ethercatqueue *sq,
+                                     double sync0_ct,
+                                     double sync1_ct);
+    void ethercatqueue_master_config_registers(struct ethercatqueue *sq,
+                                               uint8_t index,
+                                               uint8_t n_registers,
+                                               ec_pdo_entry_reg_t *registers);
+    struct ethercatqueue *ethercatqueue_alloc(void);
+    int ethercatqueue_init(struct ethercatqueue *sq);
+    void ethercatqueue_exit(struct ethercatqueue *sq);
+    void ethercatqueue_free(struct ethercatqueue *sq);
+    struct command_queue *ethercatqueue_alloc_commandqueue(void);
+    void ethercatqueue_free_commandqueue(struct command_queue *cq);
+    void ethercatqueue_send_command(struct ethercatqueue *sq,
+                                    uint8_t *msg,
+                                    int len,
+                                    uint64_t min_clock,
+                                    uint64_t req_clock,
+                                    uint64_t notify_id);
+    void ethercatqueue_send_batch(struct ethercatqueue *sq,
+                                  struct command_queue *cq,
+                                  struct list_head *msgs);
+    void ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm);
+    void ethercatqueue_set_wire_frequency(struct ethercatqueue *sq, double frequency);
+    void ethercatqueue_set_clock_est(struct ethercatqueue *sq,
+                                     double est_freq,
+                                     double conv_time,
+                                     uint64_t conv_clock,
+                                     uint64_t last_clock);
+    void ethercatqueue_get_clock_est(struct ethercatqueue *sq, struct clock_estimate *ce);
+    void ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len);
 """
 
 defs_stepcompress = """
@@ -343,7 +344,7 @@ defs_std = """
 """
 
 defs_all = [
-    defs_pvtcompress, defs_pvtsolve, defs_kin_hash, defs_ethcatqueue,
+    defs_pvtcompress, defs_pvtsolve, defs_kin_hash, defs_ethercatqueue,
     defs_pyhelper, defs_serialqueue, defs_std, defs_stepcompress,
     defs_itersolve, defs_trapq, defs_trdispatch,
     defs_kin_cartesian, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
