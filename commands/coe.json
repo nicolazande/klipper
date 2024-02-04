@@ -111,6 +111,30 @@
 						"bit_position" : 0
 					}
 				]
+			},
+			{
+				"registers" : [
+					{
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 12228,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 12229,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					}
+				]
 			}
 		]
 	}	
