@@ -50,7 +50,6 @@ defs_pvtcompress = """
     int pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock);
     int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double last_position);
     double pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock);
-    int pvtcompress_queue_msg(struct pvtcompress *sc, uint32_t *data, int len);
     int pvtcompress_extract_old(struct pvtcompress *sc,
                                 struct pull_history_pvt_steps *p,
                                 int max,
@@ -113,7 +112,8 @@ defs_ethercatqueue = """
                                     uint32_t product_code,
                                     uint16_t assign_activate,
                                     double sync0_st,
-                                    double sync1_st);
+                                    double sync1_st,
+                                    uint16_t rx_size);
     void ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
                                          uint8_t slave_index,
                                          uint8_t sync_index,

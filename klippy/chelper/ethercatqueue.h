@@ -175,7 +175,8 @@ void ethercatqueue_slave_config(struct ethercatqueue *sq,
                                 uint32_t product_code,
                                 uint16_t assign_activate,
                                 double sync0_st,
-                                double sync1_st);
+                                double sync1_st,
+                                uint16_t rx_size);
 
 /** configure ethercat slava pdos for a sync manager */
 void ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,

@@ -61,9 +61,6 @@ int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double
 /** search history of moves to find a past position at a given clock */
 double pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock);
 
-/** queue an mcu command to go out in order with other commands */
-int pvtcompress_queue_msg(struct pvtcompress *sc, uint32_t *data, int len);
-
 /** return history of queue_step commands */
 int pvtcompress_extract_old(struct pvtcompress *sc,
                             struct pull_history_pvt_steps *p,

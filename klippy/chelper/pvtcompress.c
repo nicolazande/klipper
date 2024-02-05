@@ -132,7 +132,7 @@ pvtcompress_set_time(struct pvtcompress *sc, double time_offset, double mcu_freq
 void
 pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
 {
-    /* update next move clock (wrt main mcu) */
+    /* update next move clock (wrt main mcu clock) */
     double first_offset = pose->time - sc->last_step_print_time;
     double last_offset = first_offset + move_time;
 
@@ -141,8 +141,8 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     uint64_t last_clock = first_clock + (uint64_t)(last_offset * sc->mcu_freq);
 
     /* create a queue message */
-    struct pvtmsg *qm = malloc(sizeof(struct pvtmsg));
-    memset(qm, 0, sizeof(struct pvtmsg));
+    struct pvtmsg *qm = malloc(sizeof(*qm));
+    memset(qm, 0, sizeof(*qm));
 
     /**
      * Cast the queue message buffer to a pvt move and fill it (avoid redundant copies).
@@ -154,35 +154,35 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     move->header.type = 0; //0 = buffer mode, 1 = command mode
     move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
     move->header.format = 0; //0 = buffer mode, 1 = command mode
-    move->position = pose->position; //move absolute start position.
-    move->velocity = pose->velocity; //move constant velocity.
-    move->time = (uint8_t)(move_time * 1000); //move time duration (up to next pose)
+    move->position = pose->position; //move absolute start position [ticks].
+    move->velocity = pose->velocity; //move constant velocity [ticks/s].
+    move->time = (uint8_t)(move_time * 1000.); //move time duration [ms] (up to next pose)
 
     /*
      * Queue messages from different pvtcompress objects are merged in a single
      * command queue, but in the ethercat frame each drive pdo has a specific
-     * position, therefore we need to the source stepcompress object id (drive)
-     * to each pvt queue mesage.
+     * position, therefore we need to store the source stepcompress object id
+     * (drive) in each pvt queue mesage.
      */
     qm->oid = sc->oid;
-    qm->len = sizeof(struct pvtmove); //message data size
+    qm->len = sizeof(*move); //message data size
 
     /* assign min clock and required clock (same during initialization) */
     qm->min_clock = sc->last_step_clock;
     qm->req_clock = sc->last_step_clock;
 
-    /* take into account high delay between steps */
-    uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
-    if (first_clock_offset > CLOCK_DIFF_MAX)
-    {
-        /* 
-         * The delta time between current and last step is too high to
-         * be ignored, therefore move forward the required clock and
-         * accept a delay between steps (this happens for both X and Y
-         * axis --> no positioning error).
-         */
-        qm->req_clock = first_clock + first_clock_offset;
-    }
+    // /* take into account high delay between steps */
+    // uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
+    // if (first_clock_offset > CLOCK_DIFF_MAX)
+    // {
+    //     /* 
+    //      * The delta time between current and last step is too high to
+    //      * be ignored, therefore move forward the required clock and
+    //      * accept a delay between steps (this happens for both X and Y
+    //      * axis --> no positioning error).
+    //      */
+    //     qm->req_clock = first_clock + first_clock_offset;
+    // }
 
     /* add message to queue */
     list_add_tail(&qm->node, &sc->msg_queue);
@@ -191,7 +191,7 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     sc->last_step_clock = last_clock;
 
     /* update stepcompress position (start of next move) */
-    sc->last_position = pose->position + pose->velocity * move_time; //check data type
+    sc->last_position = pose->position + pose->velocity * move_time;
 
     /* update step sequence number (avoid overflow) */
     sc->seq_num++ % (SEQ_NUM_MASK + 1);
@@ -205,10 +205,10 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     list_add_head(&hs->node, &sc->history_list);
 
     /* 
-     * Open loop update of step print time, the correction update based
-     * on the mcu time offset is done only when the queue is flushed.
+     * Open loop update of step print time, the correction update based on
+     * the mcu time offset is done periodically through the serial module.
      */
-    sc->last_step_print_time += move_time;
+    calc_last_step_print_time(sc);
 }
 
 /** 
@@ -347,24 +347,6 @@ pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock)
 }
 
 /** 
- * Queue an mcu command to go out in order with stepper commands.
- * NOTE: most likely this function will not be used and substituted
- *       with SDO specific commands.
- */
-int __visible
-pvtcompress_queue_msg(struct pvtcompress *sc, uint32_t *data, int len)
-{
-    /* add message to queue manually */
-    struct pvtmsg *qm = malloc(sizeof(struct pvtmsg));
-    memset(qm, 0, sizeof(struct pvtmsg));
-    memcpy(qm->msg, data, len);
-    qm->len = len;
-    qm->req_clock = sc->last_step_clock;
-    list_add_tail(&qm->node, &sc->msg_queue);
-    return 0;
-}
-
-/** 
  * Return history of queue_step commands.
  * TODO: check compatibility with pvthistory new format.
  */
@@ -470,12 +452,6 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
     struct list_head msgs;
     list_init(&msgs);
 
-    /* update print time and free history for all compressors */
-    for (uint8_t i = 0; i < ss->sc_num; i++)
-    {
-        calc_last_step_print_time(ss->sc_list[i]);
-    }
-
     /* order commands by requested clock for each drive */
     for (;;)
     {
@@ -495,6 +471,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
             {
                 /* get requested clock of first step for the selected drive */
                 struct pvtmsg *m = list_first_entry(&sc->msg_queue, struct pvtmsg, node);
+
                 /* compare it with the current min (from previous drives) */
                 if (m->req_clock < req_clock)
                 {
@@ -503,6 +480,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
                 }
             }
         }
+
         /* 
          * Check if the selected step is inside the flush time window.
          * Since the compressor queues are ordered (by earliest required time)

@@ -9,6 +9,7 @@
 			"assign_activate" : 0,
 			"sync0_st" : 0,
 			"sync1_st" : 0,
+			"rx_size" : 32,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -24,12 +25,12 @@
 						{
 							"index": 12228,
 							"subindex": 0,
-							"bit_length": 16
+							"bit_length": 64
 						},
 						{
 							"index": 12229,
 							"subindex": 0,
-							"bit_length": 16
+							"bit_length": 64
 						}
 					]
             	},
@@ -50,6 +51,7 @@
 			"assign_activate" : 0,
 			"sync0_st" : 0,
 			"sync1_st" : 0,
+			"rx_size" : 32,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -65,12 +67,12 @@
 						{
 							"index": 12230,
 							"subindex": 0,
-							"bit_length": 16
+							"bit_length": 64
 						},
 						{
 							"index": 12231,
 							"subindex": 0,
-							"bit_length": 16
+							"bit_length": 64
 						}
 					]
             	},

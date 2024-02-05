@@ -1209,7 +1209,7 @@ class MCU:
         '''
         Check for activity.
         '''
-	# TODO: add drivesync check
+	    # TODO: add drivesync check
         if self._steppersync is None:
             return
         # calibrate clock

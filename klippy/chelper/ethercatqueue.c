@@ -308,12 +308,6 @@ static double process_request(struct ethercatqueue *sq, double eventtime)
 static double
 input_event(struct ethercatqueue *sq, double eventtime)
 {
-    static double old_eventtime;
-    errorf(".");
-    errorf("delta time input_event = %lf", eventtime-old_eventtime);
-    errorf(".");
-    old_eventtime = eventtime;
-
     /* get master interface */
     struct mastermonitor *ifc = &sq->masterifc;
 
@@ -460,7 +454,7 @@ build_and_send_command(struct ethercatqueue *sq)
             /* increase master tx index */
             slave->master_window++;
 
-            /* increase slave rx index */
+            /* increase slave rx index in advance */
             slave->slave_window++;            
         }
         else
@@ -533,6 +527,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         {
             /* get first message in queue */
             struct pvtmsg *qm = list_first_entry(&cq->upcoming_queue, struct pvtmsg, node);
+
             /* 
              * Select only the pending messages that can be sent before the current estimated drive
              * reception clock. In this case qm->min_clock represents the earliest time when the
@@ -670,12 +665,6 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 static double
 command_event(struct ethercatqueue *sq, double eventtime)
 {
-    static double old_eventtime;
-    errorf(".");
-    errorf("delta time command_event = %lf", eventtime-old_eventtime);
-    errorf(".");
-    old_eventtime = eventtime;
-
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
@@ -848,7 +837,8 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
                            uint32_t product_code,
                            uint16_t assign_activate,
                            double sync0_st,
-                           double sync1_st)
+                           double sync1_st,
+                           uint16_t rx_size)
 {
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -862,7 +852,7 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
     slave->assign_activate = assign_activate;
     slave->sync0_st = sync0_st;
     slave->sync1_st = sync1_st;
-    slave->rx_size = 32;
+    slave->rx_size = rx_size;
     slave->tx_size = ETHERCAT_PVT_DOMAINS;
     slave->oid = index;
 }
@@ -923,7 +913,7 @@ ethercatqueue_master_config(struct ethercatqueue *sq,
     struct mastermonitor *master = &sq->masterifc;
     master->sync0_ct = sync0_ct;
     master->sync1_ct = sync1_ct;
-    master->frame_size = 4096;
+    master->frame_size = 0;
 }
 
 /** configure ethercat master domain registers */
@@ -1036,7 +1026,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
 
         /* initialize domain data */
         dm->domain_pd = ecrt_domain_data(dm->domain);
-        HANDLE_ERROR(!dm->domain_pd, fail)
+
+        /* get domian data size */
+        dm->domain_size = ecrt_domain_size(dm->domain);
+
+        /* udate expected frame size */
+        master->frame_size += dm->domain_size;
     }
 
     /* assign drive domain starting addresses */
@@ -1057,7 +1052,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
              *       therefore the index of the offset corresponds
              *       to the drive index. All other registers have
              *       to be mapped to common domains (after drive
-             *       pvt specific domains).
+             *       pvt specific domains)
              */
             uint32_t offset = dm->offsets[i];
             /* drive private starting domain address */
