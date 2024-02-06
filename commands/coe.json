@@ -17,18 +17,14 @@
 					"pdos" : [
 						{
 							"index": 5632,
-							"n_entries": 2,
+							"n_entries": 1,
 							"entries": 0
 						}
 					],
 					"pdo_entries": [
-						{
-							"index": 12228,
-							"subindex": 0,
-							"bit_length": 64
-						},
-						{
-							"index": 12229,
+						{ 
+							"name" : "ip move segment command",
+							"index": 8208,
 							"subindex": 0,
 							"bit_length": 64
 						}
@@ -37,8 +33,27 @@
 				{
 					"index" : 1,
 					"direction" : 1,
-					"pdos" : [],
-					"pdo_entries": []
+					"pdos" : [
+						{
+							"index": 5633,
+							"n_entries": 2,
+							"entries": 1
+						}
+					],
+					"pdo_entries": [
+						{
+							"name" : "trajectory buffer free count",
+							"index": 8209,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "trajectory buffer status",
+							"index": 8210,
+							"subindex": 0,
+							"bit_length": 32
+						}
+					]
 				}
         	]
     	},
@@ -59,18 +74,14 @@
 					"pdos" : [
 						{
 							"index": 5632,
-							"n_entries": 2,
+							"n_entries": 1,
 							"entries": 0
 						}
         			],
 					"pdo_entries": [
 						{
-							"index": 12230,
-							"subindex": 0,
-							"bit_length": 64
-						},
-						{
-							"index": 12231,
+							"name" : "ip move segment command",
+							"index": 8208,
 							"subindex": 0,
 							"bit_length": 64
 						}
@@ -79,8 +90,27 @@
 				{
 					"index" : 1,
 					"direction" : 1,
-					"pdos" : [],
-					"pdo_entries": []
+					"pdos" : [
+						{
+							"index": 5633,
+							"n_entries": 2,
+							"entries": 1
+						}
+					],
+					"pdo_entries": [
+						{
+							"name" : "trajectory buffer free count",
+							"index": 8209,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "trajectory buffer status",
+							"index": 8210,
+							"subindex": 0,
+							"bit_length": 32
+						}
+					]
 				}
         	]
     	}
@@ -91,23 +121,26 @@
 		"sync1_ct" : 0.001,
 		"domains" : [
 			{
+				"type" : "pvt",
 				"registers" : [
 					{
+						"name" : "ip move segment command",
 						"alias": 0,
 						"position": 0,
 						"vendor_id": 1,
 						"product_code": 1,
-						"index" : 12228,
+						"index" : 8208,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
 					},
 					{
-						"alias": 0,
-						"position": 0,
-						"vendor_id": 1,
-						"product_code": 1,
-						"index" : 12229,
+						"name" : "ip move segment command",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 8208,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -115,23 +148,75 @@
 				]
 			},
 			{
+				"type" : "pvt",
 				"registers" : [
 					{
+						"name" : "ip move segment command",
 						"alias": 0,
 						"position": 0,
 						"vendor_id": 1,
 						"product_code": 1,
-						"index" : 12228,
+						"index" : 8208,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
 					},
 					{
+						"name" : "ip move segment command",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 8208,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					}
+				]
+			},
+			{
+				"type" : "generic",
+				"registers" : [
+					{
+						"name" : "trajectory buffer free count",
 						"alias": 0,
 						"position": 0,
 						"vendor_id": 1,
 						"product_code": 1,
-						"index" : 12229,
+						"index" : 8209,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer free count",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 8209,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer status",
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 8210,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer status",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 8210,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0

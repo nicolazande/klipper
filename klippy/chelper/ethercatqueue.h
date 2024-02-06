@@ -30,9 +30,9 @@
 #define ETHERCAT_STANDARD_DOMAINS 1  //number of pvt domains (one for each pdo instance)
 #define ETHERCAT_DOMAINS (ETHERCAT_PVT_DOMAINS + ETHERCAT_STANDARD_DOMAINS) //total number of domains
 #define ETHERCAT_MAX_SYNCS 3 //max number of syncs per slave
-#define ETHERCAT_MAX_REGISTERS 3 //max number of master registers
-#define ETHERCAT_MAX_PDOS 3 //max number of slave pdos (per slave)
-#define ETHERCAT_MAX_PDO_ENTRIES 3 //max number of pdo enries per slave
+#define ETHERCAT_MAX_REGISTERS 10 //max number of master registers
+#define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
+#define ETHERCAT_MAX_PDO_ENTRIES 10 //max number of pdo enries per slave
 #define ETHERCAT_DRIVE_MASK ((1 << (ETHERCAT_DRIVES)) - 1) //operation complete mask
 
 
@@ -91,7 +91,7 @@ struct slavemonitor
     double sync1_st;                        //ethercat sync1 shify time (in seconds)
     uint8_t n_pdo_entries;                  //number of slave pdo entries
     ec_pdo_entry_info_t pdo_entries[ETHERCAT_MAX_PDO_ENTRIES]; //slave pdo entries
-    uint8_t n_pdos;                         //number of slave pdos
+    uint8_t n_pdos;                           //number of slave pdos
     ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS];    //slave pdos
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
     uint8_t *pvtdata[ETHERCAT_PVT_DOMAINS];   //pvt domain addresses
@@ -101,7 +101,8 @@ struct slavemonitor
 struct mastermonitor
 {
     ec_master_t *master;                          //ethercat master
-    uint16_t frame_size;                          //total size in bytes of pvt data (sum of domains.domain_size)
+    uint16_t frame_size;                          //total size in bytes of data (all domains)
+    uint16_t frame_pvt_size;                      //total size in bytes of data (pvt domains only)
     uint8_t full_counter;                         //counter for signaling number of slaves for which pdo slots are full
     double sync0_ct;                              //ethercat sync0 cycle time (in seconds)
     double sync1_ct;                              //ethercat sync1 cycle time (in seconds)
@@ -178,8 +179,8 @@ void ethercatqueue_slave_config(struct ethercatqueue *sq,
                                 double sync1_st,
                                 uint16_t rx_size);
 
-/** configure ethercat slava pdos for a sync manager */
-void ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
+/** configure an ethercat sync manager */
+void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
                                      uint8_t slave_index,
                                      uint8_t sync_index,
                                      uint8_t direction,

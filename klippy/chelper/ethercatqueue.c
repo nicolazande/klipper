@@ -581,12 +581,13 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
      * specific check is performed in build_and_send_command(), but
      * this avoids to have an undefinitely growing ready queue.
      */
-    if (sq->ready_bytes >= master->frame_size)
+    if (sq->ready_bytes >= master->frame_pvt_size)
     {
         /* 
          * Cannot add more bytes, data has to be transmitted in the current cycle.
          * The remaining messages will be transmitted in the next cycle.
          */
+        errorf("ready bytes = %u, pvt frame size = %u", sq->ready_bytes, master->frame_pvt_size);
         return PR_NOW;
     }
     /* check clock estimate */
@@ -855,11 +856,13 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
     slave->rx_size = rx_size;
     slave->tx_size = ETHERCAT_PVT_DOMAINS;
     slave->oid = index;
+    slave->n_pdo_entries = 0;
+    slave->n_pdos = 0;
 }
 
-/** configure ethercat slava pdos for a sync manager */
+/** configure an ethercat sync manager */
 void __visible
-ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
+ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
                                 uint8_t slave_index,
                                 uint8_t sync_index,
                                 uint8_t direction,
@@ -873,20 +876,23 @@ ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
     struct slavemonitor *slave = &master->monitor[slave_index];
 
     /* store pdo entries */
-    slave->n_pdo_entries = n_pdo_entries;
+    uint8_t old_n_pdo_entries = slave->n_pdo_entries;
+    slave->n_pdo_entries += n_pdo_entries;
     for (uint8_t i = 0; i < n_pdo_entries; i++)
     {
-        slave->pdo_entries[i] = pdo_entries[i];
+        uint8_t idx = i + old_n_pdo_entries;
+        slave->pdo_entries[idx] = pdo_entries[i];
     }
 
     /* store pdos */
-    slave->n_pdos = n_pdos;
+    uint8_t old_n_pdos = slave->n_pdos;
+    slave->n_pdos += n_pdos;
     for (uint8_t i = 0; i < n_pdos; i++)
     {
-        slave->pdos[i].index = pdos[i].index;
-        slave->pdos[i].n_entries = pdos[i].n_entries;
-        uint8_t position = (uint8_t)pdos[i].entries;
-        slave->pdos[i].entries = &slave->pdo_entries[position];
+        uint8_t idx = i + old_n_pdos;
+        slave->pdos[idx].index = pdos[i].index;
+        slave->pdos[idx].n_entries = pdos[i].n_entries;
+        slave->pdos[idx].entries = &slave->pdo_entries[old_n_pdo_entries];
     }
 
     /* get number of available syncs */
@@ -896,7 +902,7 @@ ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
         slave->syncs[sync_index].index = sync_index;
         slave->syncs[sync_index].dir = direction;
         slave->syncs[sync_index].n_pdos = n_pdos;
-        slave->syncs[sync_index].pdos = slave->pdos;
+        slave->syncs[sync_index].pdos = &slave->pdos[old_n_pdos];
     }
 
     /* reset stop flag (last sync) */
@@ -914,6 +920,14 @@ ethercatqueue_master_config(struct ethercatqueue *sq,
     master->sync0_ct = sync0_ct;
     master->sync1_ct = sync1_ct;
     master->frame_size = 0;
+    master->frame_pvt_size = 0;
+
+    /* reset domain register counter (incremental) */
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
+    {
+        struct domainmonitor *dm = &master->domains[i];
+        dm->n_registers = 0;
+    }
 }
 
 /** configure ethercat master domain registers */
@@ -928,17 +942,20 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
     struct domainmonitor *dm = &master->domains[index];
 
     /* store registers */
-    dm->n_registers = n_registers;
+    uint8_t old_n_registers = dm->n_registers;
+    dm->n_registers += n_registers;
     for (uint8_t i = 0; i < n_registers; i++)
     {
+        /* cumulative index */
+        uint8_t idx = i + old_n_registers;
         /* assign register */
-        dm->registers[i] = registers[i];
+        dm->registers[idx] = registers[i];
         /* assign register offset */
-        dm->registers[i].offset = &dm->offsets[i];
+        dm->registers[idx].offset = &dm->offsets[i];
     }
 
     /* reset stop flag (last empty register) */
-    dm->registers[n_registers] = (ec_pdo_entry_reg_t){};
+    dm->registers[dm->n_registers] = (ec_pdo_entry_reg_t){};
 }
 
 /** create an empty ethercatqueue object */
@@ -963,18 +980,6 @@ ethercatqueue_init(struct ethercatqueue *sq)
 
     /* create ethercat master */
     master->master = ecrt_request_master(0);
-    HANDLE_ERROR(!master->master, klipper)
-
-    /* create domains */
-    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
-    {
-        /* get domain monitor */
-        struct domainmonitor *dm = &master->domains[i];
-
-        /* create domain */
-        dm->domain = ecrt_master_create_domain(master->master);
-        HANDLE_ERROR(!dm->domain, klipper)
-    }
 
     /* initialize ethercat slaves */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
@@ -988,11 +993,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
                                                          slave->position,
                                                          slave->vendor_id,
                                                          slave->product_code);
-        HANDLE_ERROR(!sc, klipper)
 
         /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
-        HANDLE_ERROR(ret, klipper)
 
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
@@ -1003,22 +1006,27 @@ ethercatqueue_init(struct ethercatqueue *sq)
                              TIMES2NS(slave->sync1_st)); //sync0 shift time
     }
 
-    /* configure master domain registers */
+    /* configure master domains */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain monitor */
         struct domainmonitor *dm = &master->domains[i];
 
+        /* create domain */
+        dm->domain = ecrt_master_create_domain(master->master);
+
         /* register mapped pdo entries to domain */
         ret = ecrt_domain_reg_pdo_entry_list(dm->domain, dm->registers);
-        HANDLE_ERROR(ret, klipper)
     }
 
     /* activate master */
     ret = ecrt_master_activate(master->master);
-    HANDLE_ERROR(ret, fail)
 
-    /* get domain data addresses */
+    /**
+     * Get domain data addresses. NOTE: perform this operation only
+     * after master activation since the process data image map
+     * from kernel to userspace has to be already valid.
+     */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain monitor */
@@ -1032,6 +1040,13 @@ ethercatqueue_init(struct ethercatqueue *sq)
 
         /* udate expected frame size */
         master->frame_size += dm->domain_size;
+
+        /** TODO: move outside maybe */
+        if (i < ETHERCAT_PVT_DOMAINS)
+        {
+            /* update expected pvt frame size */
+            master->frame_pvt_size += dm->domain_size;
+        }
     }
 
     /* assign drive domain starting addresses */
@@ -1052,7 +1067,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
              *       therefore the index of the offset corresponds
              *       to the drive index. All other registers have
              *       to be mapped to common domains (after drive
-             *       pvt specific domains)
+             *       pvt specific domains).
              */
             uint32_t offset = dm->offsets[i];
             /* drive private starting domain address */

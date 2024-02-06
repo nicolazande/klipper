@@ -114,7 +114,7 @@ defs_ethercatqueue = """
                                     double sync0_st,
                                     double sync1_st,
                                     uint16_t rx_size);
-    void ethercatqueue_slave_config_pdos(struct ethercatqueue *sq,
+    void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
                                          uint8_t slave_index,
                                          uint8_t sync_index,
                                          uint8_t direction,

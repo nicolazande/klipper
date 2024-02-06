@@ -91,8 +91,10 @@ class EthercatReader:
         except:
             pass
         # get master and slaves data
-        slaves = identify_data["slaves"]
         master = identify_data["master"]
+        slaves = identify_data["slaves"]
+        # initilaize master configuration
+        self.ffi_lib.ethercatqueue_master_config(self.ethercatqueue, master["sync0_ct"], master["sync1_ct"])
         # process slaves
         for slave_idx, slave in enumerate(slaves):
             # configure slave
@@ -110,7 +112,6 @@ class EthercatReader:
                 for pdo_idx, pdo in enumerate(pdos):
                     cpdos[pdo_idx].index = pdo["index"]
                     cpdos[pdo_idx].n_entries = pdo["n_entries"]
-                    cpdos[pdo_idx].entries = self.ffi_main.cast("ec_pdo_entry_info_t *", pdo["entries"])                    
                 # get sync pdo entries
                 pdo_entries = sync["pdo_entries"]
                 cpdo_entries = self.ffi_main.new('ec_pdo_entry_info_t['+str(len(pdo_entries))+']')
@@ -119,10 +120,10 @@ class EthercatReader:
                     cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
                     cpdo_entries[pdo_entry_idx].bit_length = pdo_entry["bit_length"]
                 # configure sync (pdos and pdo entries)
-                self.ffi_lib.ethercatqueue_slave_config_pdos(self.ethercatqueue,
-                                                           slave_idx, sync["index"], sync["direction"],
-                                                           len(pdo_entries), cpdo_entries,
-                                                           len(pdos), cpdos)
+                self.ffi_lib.ethercatqueue_slave_config_sync(self.ethercatqueue,
+                                                             slave_idx, sync["index"], sync["direction"],
+                                                             len(pdo_entries), cpdo_entries,
+                                                             len(pdos), cpdos)
         # process master
         domains = master["domains"]
         for domain_idx, domain in enumerate(domains):
@@ -139,8 +140,6 @@ class EthercatReader:
                 cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
             # configure common master domain registers
             self.ffi_lib.ethercatqueue_master_config_registers(self.ethercatqueue, domain_idx, len(registers), cregisters)
-        # finalize master configuration
-        self.ffi_lib.ethercatqueue_master_config(self.ethercatqueue, master["sync0_ct"], master["sync1_ct"])
 
     def _start_session(self):
         '''
