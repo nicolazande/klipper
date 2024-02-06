@@ -459,12 +459,16 @@ build_and_send_command(struct ethercatqueue *sq)
         }
         else
         {
+            errorf("full");
+
             /* no space (tx or rx) */
             master->full_counter = 1;
 
             /* stop as soon as one of the drive buffers (tx or rx) is full */
             break;
         }
+
+        errorf("received: min_clock = %u, req_clock = %u, oid = %u", qm->min_clock, qm->req_clock, qm->oid);
 
         /* remove message from ready queue */
         list_del(&qm->node);
@@ -587,7 +591,6 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
          * Cannot add more bytes, data has to be transmitted in the current cycle.
          * The remaining messages will be transmitted in the next cycle.
          */
-        errorf("ready bytes = %u, pvt frame size = %u", sq->ready_bytes, master->frame_pvt_size);
         return PR_NOW;
     }
     /* check clock estimate */
@@ -668,6 +671,14 @@ command_event(struct ethercatqueue *sq, double eventtime)
 {
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
+
+    static double old_eventtime = 0;
+    errorf(".");
+    errorf(" --> received move_clock = %u, delta = %lf",
+    clock_from_time(&sq->ce, eventtime),
+    eventtime-old_eventtime);
+    errorf(".");
+    old_eventtime = eventtime;
 
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
@@ -767,14 +778,13 @@ command_event(struct ethercatqueue *sq, double eventtime)
                 }
             }
 
+            errorf("SENT FRAME");
+
             /* write ethercat frame (always) */
             ecrt_master_send(master->master);
 
-            if (waketime != PR_NOW)
-            {
-                /* stop (frame transmitted and nothing else to send) */
-                break;
-            }
+            /* stop (frame transmitted) */
+            break;
         }
 
         /* build or update data to be sent */

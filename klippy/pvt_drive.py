@@ -391,7 +391,7 @@ def PrinterStepper(config, units_in_radians=False):
     '''
     printer = config.get_printer()
     name = config.get_name()
-    simtime = config.getfloat('sampling_time', 0.001, minval=0.001, maxval=1)
+    simtime = config.getfloat('sampling_time', 0.01, minval=0.001, maxval=1)
     '''
     NOTE: the proper way to get it is through the pin module which is
     guaranteed to be instantiated, however the mcu should be always
