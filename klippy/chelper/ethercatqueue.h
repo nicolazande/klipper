@@ -106,6 +106,7 @@ struct mastermonitor
     uint8_t full_counter;                         //counter for signaling number of slaves for which pdo slots are full
     double sync0_ct;                              //ethercat sync0 cycle time (in seconds)
     double sync1_ct;                              //ethercat sync1 cycle time (in seconds)
+    double wr_offset;                             //time offset between next write and read operation
     double frame_time;                            //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
     uint8_t n_domains;                            //number of ethercat domains in use
     struct domainmonitor domains[ETHERCAT_DOMAINS]; //pvt private domains
@@ -243,9 +244,6 @@ void ethercatqueue_send_batch(struct ethercatqueue *sq,
  */
 void ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm);
 
-/** ffi c-helper function used to set ethercat frequency */
-void ethercatqueue_set_wire_frequency(struct ethercatqueue *sq, double frequency);
-
 /**
  * Set the estimated clock rate of the mcu on the other end of the
  * ethercat port.
@@ -255,9 +253,6 @@ void ethercatqueue_set_clock_est(struct ethercatqueue *sq,
                                  double conv_time,
                                  uint64_t conv_clock,
                                  uint64_t last_clock);
-
-/** return the latest clock estimate */
-void ethercatqueue_get_clock_est(struct ethercatqueue *sq, struct clock_estimate *ce);
 
 /* return a string buffer containing statistics for the ethercat port */
 void ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len);

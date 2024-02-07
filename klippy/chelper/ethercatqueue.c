@@ -41,7 +41,7 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time and memory limits */
-#define WR_TIME_OFFSET        0     //offset between write and next read operation (without frame_time)
+#define WR_TIME_OFFSET    0.002     //offset between write and next read operation (without frame_time)
 #define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
@@ -308,6 +308,9 @@ static double process_request(struct ethercatqueue *sq, double eventtime)
 static double
 input_event(struct ethercatqueue *sq, double eventtime)
 {
+    /* acquire mutex */
+    pthread_mutex_lock(&sq->lock);
+
     /* get master interface */
     struct mastermonitor *ifc = &sq->masterifc;
 
@@ -352,6 +355,9 @@ input_event(struct ethercatqueue *sq, double eventtime)
     /*wake up high level thread (will process response) */
     //check_wake_receive(sq);
 
+    /* release mutex */
+    pthread_mutex_unlock(&sq->lock);
+
     /* reset input event timer (command_event will reschedule it when needed)  */
     return PR_NEVER;
 }
@@ -359,13 +365,16 @@ input_event(struct ethercatqueue *sq, double eventtime)
 static double
 protocol_event(struct ethercatqueue *sq, double eventtime)
 {
+    /* next protocol event time */
     double next_event = PR_NEVER;
 
+    /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
     /* process a high level thread request */
     next_event = process_request(sq, eventtime);
 
+    /* release mutex */
     pthread_mutex_unlock(&sq->lock);
 
     return next_event;
@@ -672,11 +681,12 @@ command_event(struct ethercatqueue *sq, double eventtime)
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
-    static double old_eventtime = 0;
+    static double old_eventtime;
+    double delta = eventtime-old_eventtime;
     errorf(".");
     errorf(" --> received move_clock = %u, delta = %lf",
     clock_from_time(&sq->ce, eventtime),
-    eventtime-old_eventtime);
+    delta);
     errorf(".");
     old_eventtime = eventtime;
 
@@ -778,7 +788,7 @@ command_event(struct ethercatqueue *sq, double eventtime)
                 }
             }
 
-            errorf("SENT FRAME");
+            //errorf("SENT FRAME");
 
             /* write ethercat frame (always) */
             ecrt_master_send(master->master);
@@ -792,7 +802,7 @@ command_event(struct ethercatqueue *sq, double eventtime)
     }
 
     /* set input event timer (when the frame is expected to be received back) */
-    pollreactor_update_timer(sq->pr, EQPT_INPUT, sq->idle_time + WR_TIME_OFFSET);
+    pollreactor_update_timer(sq->pr, EQPT_INPUT, sq->idle_time + master->wr_offset);
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
@@ -927,10 +937,15 @@ ethercatqueue_master_config(struct ethercatqueue *sq,
 {
     /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
+
+    /* reset and initialize master */
     master->sync0_ct = sync0_ct;
     master->sync1_ct = sync1_ct;
+    master->wr_offset = sync0_ct / 2; /** TODO: add to config file if needed */
     master->frame_size = 0;
     master->frame_pvt_size = 0;
+    master->frame_time = 0.; /** TODO: add proper value */
+    master->full_counter = 0;
 
     /* reset domain register counter (incremental) */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
@@ -1120,7 +1135,7 @@ klipper:
      *                              EtherCAT thread) or scheduled immediately by the
      *                              high level thread through the pipe.
      */
-    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10.);
+    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10., 1.);
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
     pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
@@ -1182,6 +1197,8 @@ fail:
     {
         report_errno("Ethercat queue allocation error", ret);
     }
+
+    kick_bg_thread(sq, EQPT_COMMAND);
     
     return ret;
 }
@@ -1390,7 +1407,7 @@ ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, str
     /* wake the background thread if necessary (limit case) */
     if (mustwake)
     {
-        kick_bg_thread(sq, EQPT_COMMAND);
+        //kick_bg_thread(sq, EQPT_COMMAND);
     }
 }
 
@@ -1402,7 +1419,7 @@ ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, str
  */
 void __visible
 ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm)
-{
+{    
     /* lock mutex */
     pthread_mutex_lock(&sq->lock);
 
@@ -1448,23 +1465,6 @@ ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm)
     pthread_mutex_unlock(&sq->lock);
 }
 
-/** 
- * Set ethercat frequency, it defines the time a frame needs to
- * be received back by the ethercat master.
- */
-void __visible
-ethercatqueue_set_wire_frequency(struct ethercatqueue *sq, double frequency)
-{
-    /* acquire mutex */
-    pthread_mutex_lock(&sq->lock);
-
-    /* time to transmit one bit (baud) */
-    sq->masterifc.frame_time = 1. / frequency;
-
-    /* unlock mutex */
-    pthread_mutex_unlock(&sq->lock);
-}
-
 /**
  * Set the estimated clock rate of the main mcu. This function is
  * used to maintain synchronization between main mcu, host and
@@ -1485,25 +1485,15 @@ ethercatqueue_set_clock_est(struct ethercatqueue *sq,
     pthread_mutex_unlock(&sq->lock);
 }
 
-/** return the latest clock estimate */
-void
-ethercatqueue_get_clock_est(struct ethercatqueue *sq, struct clock_estimate *ce)
-{
-    pthread_mutex_lock(&sq->lock);
-    memcpy(ce, &sq->ce, sizeof(sq->ce));
-    pthread_mutex_unlock(&sq->lock);
-}
-
 /* return a string buffer containing statistics for the ethercat port */
 void __visible
 ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len)
 {
     struct ethercatqueue stats;
-    pthread_mutex_lock(&sq->lock);
+    //pthread_mutex_lock(&sq->lock);
     memcpy(&stats, sq, sizeof(stats));
-    pthread_mutex_unlock(&sq->lock);
+    //pthread_mutex_unlock(&sq->lock);
     /* print to bufffer */
-    snprintf(buf, len,
-            " ready_bytes=%u upcoming_bytes=%u",
-            stats.ready_bytes, stats.upcoming_bytes);
+    snprintf(buf, len, " ready_bytes=%u upcoming_bytes=%u",
+             stats.ready_bytes, stats.upcoming_bytes);
 }

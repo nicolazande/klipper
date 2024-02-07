@@ -145,13 +145,11 @@ defs_ethercatqueue = """
                                   struct command_queue *cq,
                                   struct list_head *msgs);
     void ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm);
-    void ethercatqueue_set_wire_frequency(struct ethercatqueue *sq, double frequency);
     void ethercatqueue_set_clock_est(struct ethercatqueue *sq,
                                      double est_freq,
                                      double conv_time,
                                      uint64_t conv_clock,
                                      uint64_t last_clock);
-    void ethercatqueue_get_clock_est(struct ethercatqueue *sq, struct clock_estimate *ce);
     void ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len);
 """
 

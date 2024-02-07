@@ -117,8 +117,8 @@
     ],
 	"master" :
 	{
-		"sync0_ct" : 0.001,
-		"sync1_ct" : 0.001,
+		"sync0_ct" : 0.005,
+		"sync1_ct" : 0.005,
 		"domains" : [
 			{
 				"type" : "pvt",

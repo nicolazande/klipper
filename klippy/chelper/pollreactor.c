@@ -33,9 +33,9 @@ struct pollreactor
     int num_fds;
     int num_timers;
     int must_exit;
-    double resolution;
     double tmin;
     double tmax;
+    double offset;
     void *callback_data;
     double next_timer;
     struct pollfd *fds;
@@ -49,7 +49,8 @@ struct pollreactor
  ****************************************************************/
 /** allocate a pollreactor object */
 struct pollreactor *
-pollreactor_alloc(int num_fds, int num_timers, void *callback_data, double tmin, double tmax)
+pollreactor_alloc(int num_fds, int num_timers, void *callback_data,
+                  double tmin, double tmax, double offset)
 {
     /* allocate poll ractor */
     struct pollreactor *pr = malloc(sizeof(*pr));
@@ -62,6 +63,7 @@ pollreactor_alloc(int num_fds, int num_timers, void *callback_data, double tmin,
     pr->next_timer = PR_NEVER;
     pr->tmin = tmin;
     pr->tmax = tmax;
+    pr->offset = offset;
     pr->fds = malloc(num_fds * sizeof(*pr->fds));
     memset(pr->fds, 0, num_fds * sizeof(*pr->fds));
     /* setup callbacks */
@@ -167,7 +169,7 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime, int busy)
     }
 
     /* calculate sleep duration in ms */
-    double timeout = floor((pr->next_timer - eventtime) * 1000.);
+    double timeout = floor((pr->next_timer - eventtime) * 1000. - pr->offset);
 
     /* limit sleep time */
     if (timeout > pr->tmax)
