@@ -25,7 +25,7 @@
  ****************************************************************/
 /** allocate a pollreactor object */
 struct pollreactor *pollreactor_alloc(int num_fds, int num_timers, void *callback_data,
-                                      double tmin, double tmax, double offset);
+                                      double tmin, double tmax, int offset);
 
 /** free resources associated with a pollreactor object */
 void pollreactor_free(struct pollreactor *pr);

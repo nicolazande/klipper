@@ -35,14 +35,14 @@
 /* timers */
 #define EQPT_INPUT      0           //position of input timer in ethercatqueue timer list
 #define EQPT_COMMAND    1           //position of command timer in ethercatqueue timer list
-#define EQPT_PROTOCOL   2           //position of command timer in ethercatqueue timer list
-#define EQPT_NUM        3           //number of timer used by a ethercatqueue
+#define EQPT_NUM        2           //number of timer used by a ethercatqueue
 /* transport layer */
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time and memory limits */
 #define WR_TIME_OFFSET    0.002     //offset between write and next read operation (without frame_time)
 #define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
+#define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
@@ -83,7 +83,7 @@ static void kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd);
  * and only one command at a time can be processed since there is a single
  * instance of sharedmonitor in the ethercatqueue.
  */
-static double process_request(struct ethercatqueue *sq, double eventtime);
+static void process_request(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Read EtherCAT frame coming back from the drives and update internal structures.
@@ -91,11 +91,6 @@ static double process_request(struct ethercatqueue *sq, double eventtime);
 static double
 input_event(struct ethercatqueue *sq, double eventtime);
 
-/**
- * Precess a request coming from the EtherCAT high level thread.
- */
-static double
-protocol_event(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Callback for input activity on the pipe. This function is continuosly
@@ -155,10 +150,9 @@ kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd)
     }
 }
 
-static double process_request(struct ethercatqueue *sq, double eventtime)
+static void 
+process_request(struct ethercatqueue *sq, double eventtime)
 {
-    double next_event = PR_NEVER;
-
     /* check request from high level thread */
     if (!list_empty(&sq->request_queue))
     {
@@ -243,7 +237,7 @@ static double process_request(struct ethercatqueue *sq, double eventtime)
                 if (ret)
                 {
                     message_free(response);
-                    return PR_NOW;
+                    return;
                 }
             }
         }
@@ -301,8 +295,6 @@ static double process_request(struct ethercatqueue *sq, double eventtime)
 
     /* wake up high level thread */
     check_wake_receive(sq);
-
-    return next_event;
 };
 
 static double
@@ -350,10 +342,7 @@ input_event(struct ethercatqueue *sq, double eventtime)
     }
 
     /* process a high level thread request */
-    //process_request(sq);
-
-    /*wake up high level thread (will process response) */
-    //check_wake_receive(sq);
+    process_request(sq, eventtime);
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);
@@ -362,38 +351,27 @@ input_event(struct ethercatqueue *sq, double eventtime)
     return PR_NEVER;
 }
 
-static double
-protocol_event(struct ethercatqueue *sq, double eventtime)
-{
-    /* next protocol event time */
-    double next_event = PR_NEVER;
-
-    /* acquire mutex */
-    pthread_mutex_lock(&sq->lock);
-
-    /* process a high level thread request */
-    next_event = process_request(sq, eventtime);
-
-    /* release mutex */
-    pthread_mutex_unlock(&sq->lock);
-
-    return next_event;
-};
-
 static void
 kick_event(struct ethercatqueue *sq, double eventtime)
 {
     /* protocol command */
-    uint8_t cmd;
+    uint8_t timer;
+
     /* read rx-command pipe */
-    int ret = read(sq->pipe_sched[0], &cmd, sizeof(cmd));
+    int ret = read(sq->pipe_sched[0], &timer, sizeof(timer));
+
     /* check data */
     if (ret < 0)
     {
         report_errno("pipe read", ret);
     }
-    /* update command timer (force ethercat command transmission) */
-    pollreactor_update_timer(sq->pr, cmd, PR_NOW);
+    
+    /* check timer index */
+    if (timer < EQPT_NUM)
+    {
+        /* update command timer */
+        pollreactor_update_timer(sq->pr, timer, PR_NOW);
+    }
 }
 
 static int
@@ -1106,7 +1084,7 @@ klipper:
     ret = pipe(sq->pipe_sched);
     HANDLE_ERROR(ret, fail)
 
-    /* 
+    /**
      * Ethercat low level thread reactor setup. It handles low level
      * ethercet communication where:
      *  - pipe_sched[0]: RX side of scheduling pipe used for triggering the low level
@@ -1116,6 +1094,8 @@ klipper:
      *  - pipe_sched[1]: TX side of the scheduling pipe, used by the low level ethercat
      *                   thread to schedule unexpected command events (command events 
      *                   that send additional frames in the same sync cycle).
+     *                   NOTE: pipe_sched will be removed in the future since the ethercat
+     *                         communication model avoids pipes for real time requirements.
      *  - timers: there is only one associated timer:
      *            1) EQPT_COMMAND: used to trigger the command_event callback,
      *                             forcing the transmission of data to the drives.
@@ -1130,16 +1110,11 @@ klipper:
      *                           directly by command_event after a fixed amount of
      *                           time when the frame is guaranteed to be received
      *                           back by the master.
-     *            3) EQPT_PROTOCOL: used to trigger protocol_event, its value is defined
-     *                              can be defined by the input_event (in the low level
-     *                              EtherCAT thread) or scheduled immediately by the
-     *                              high level thread through the pipe.
      */
-    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10., 1.);
+    sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10., PR_OFFSET);
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
     pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
-    pollreactor_add_timer(sq->pr, EQPT_PROTOCOL, protocol_event); //protocol timer
 
     /* 
      * Set pipe for low level thread scheduling in non blocking mode.
@@ -1191,14 +1166,15 @@ klipper:
     ret = pthread_setaffinity_np(sq->tid, sizeof(cpu_set_t), &cpuset);
     HANDLE_ERROR(ret, fail)
 
+    /* start cyclic ethercat frame transmission */
+    pollreactor_update_timer(sq->pr, EQPT_COMMAND, PR_NOW);
+
 fail:
     /* error handling */
     if (ret)
     {
         report_errno("Ethercat queue allocation error", ret);
     }
-
-    kick_bg_thread(sq, EQPT_COMMAND);
     
     return ret;
 }
@@ -1212,8 +1188,8 @@ ethercatqueue_exit(struct ethercatqueue *sq)
 {
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
-    /* wake ethercat high level thread (last time) */
-    kick_bg_thread(sq, EQPT_PROTOCOL);
+    /* process last eventual request */
+    process_request(sq, PR_NOW);
     /* join and stop current thread */
     int ret = pthread_join(sq->tid, NULL);
     if (ret)
@@ -1329,8 +1305,6 @@ ethercatqueue_send_command(struct ethercatqueue *sq,
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);
-
-    kick_bg_thread(sq, EQPT_PROTOCOL);    
 }
 
 /** add a batch of messages (pvt only) to the upcoming command queue */
@@ -1401,14 +1375,15 @@ ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, str
         mustwake = 1;
     }
 
-    /* release mutex */
-    pthread_mutex_unlock(&sq->lock);
-
     /* wake the background thread if necessary (limit case) */
     if (mustwake)
     {
-        //kick_bg_thread(sq, EQPT_COMMAND);
+        /** NOTE: disabled anticipated transmission */
+        //pollreactor_update_timer(sq->pr, EQPT_COMMAND, PR_NOW);
     }
+
+    /* release mutex */
+    pthread_mutex_unlock(&sq->lock);
 }
 
 /**

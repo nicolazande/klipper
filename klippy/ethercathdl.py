@@ -272,8 +272,7 @@ class EthercatReader:
         Send raw command.
         '''
         # add command message to request queue
-        self.ffi_lib.ethercatqueue_send_command(self.ethercatqueue, cmd, len(cmd),
-                                              minclock, reqclock, 0)
+        self.ffi_lib.ethercatqueue_send_command(self.ethercatqueue, cmd, len(cmd), minclock, reqclock, 0)
         
     def raw_send_wait_ack(self, cmd, minclock, reqclock, cmd_queue=None):
         '''
@@ -286,8 +285,7 @@ class EthercatReader:
         # add request to waiting list
         self.pending_notifications[nid] = completion
         # add command message to request queue
-        self.ffi_lib.ethercatqueue_send_command(self.ethercatqueue, cmd, len(cmd),
-                                              minclock, reqclock, nid)
+        self.ffi_lib.ethercatqueue_send_command(self.ethercatqueue, cmd, len(cmd), minclock, reqclock, nid)
         # wait for completion
         params = completion.wait()
         if params is None:

@@ -15,6 +15,7 @@
 #include <string.h> // memset
 #include "pollreactor.h" // pollreactor_alloc
 #include "pyhelper.h" // report_errno
+#include <sched.h>
 
 
 /****************************************************************
@@ -35,7 +36,7 @@ struct pollreactor
     int must_exit;
     double tmin;
     double tmax;
-    double offset;
+    int offset;
     void *callback_data;
     double next_timer;
     struct pollfd *fds;
@@ -50,7 +51,7 @@ struct pollreactor
 /** allocate a pollreactor object */
 struct pollreactor *
 pollreactor_alloc(int num_fds, int num_timers, void *callback_data,
-                  double tmin, double tmax, double offset)
+                  double tmin, double tmax, int offset)
 {
     /* allocate poll ractor */
     struct pollreactor *pr = malloc(sizeof(*pr));
@@ -169,7 +170,7 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime, int busy)
     }
 
     /* calculate sleep duration in ms */
-    double timeout = floor((pr->next_timer - eventtime) * 1000. - pr->offset);
+    double timeout = ceil((pr->next_timer - eventtime) * 1000.);
 
     /* limit sleep time */
     if (timeout > pr->tmax)
@@ -192,17 +193,27 @@ pollreactor_run(struct pollreactor *pr)
     /* get event time */
     double eventtime = get_monotonic();
     int busy = 1;
+    int ret = 0;
 
     while (!pr->must_exit)
     {
         /* check timers and update timeout */
         int timeout = pollreactor_check_timers(pr, eventtime, busy);
         busy = 0;
+        ret = 0;
 
-        /* poll fd and wait until timeout */
-        int ret = poll(pr->fds, pr->num_fds, timeout);
+        /**
+         * Poll fd and wait until timeout only if there is
+         * enough time, otherwise enter in spinning mode.
+         */
+        if (timeout > pr->offset)
+        {
+            ret = poll(pr->fds, pr->num_fds, timeout);
+        }
+
+        /* update event time */
         eventtime = get_monotonic();
-
+        
         /* check for async commands on fd */
         if (ret > 0)
         {
