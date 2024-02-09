@@ -117,83 +117,29 @@
     ],
 	"master" :
 	{
-		"sync0_ct" : 0.01,
-		"sync1_ct" : 0.01,
+		"sync0_ct" : 0.005,
+		"sync1_ct" : 0.005,
 		"domains" : [
-			{
-				"type" : "pvt",
-				"registers" : [
-					{
-						"name" : "ip move segment command",
-						"alias": 0,
-						"position": 0,
-						"vendor_id": 1,
-						"product_code": 1,
-						"index" : 8208,
-						"subindex" : 0,
-						"offset" : 0,
-						"bit_position" : 0
-					},
-					{
-						"name" : "ip move segment command",
-						"alias": 1,
-						"position": 1,
-						"vendor_id": 2,
-						"product_code": 2,
-						"index" : 8208,
-						"subindex" : 0,
-						"offset" : 0,
-						"bit_position" : 0
-					}
-				]
-			},
-			{
-				"type" : "pvt",
-				"registers" : [
-					{
-						"name" : "ip move segment command",
-						"alias": 0,
-						"position": 0,
-						"vendor_id": 1,
-						"product_code": 1,
-						"index" : 8208,
-						"subindex" : 0,
-						"offset" : 0,
-						"bit_position" : 0
-					},
-					{
-						"name" : "ip move segment command",
-						"alias": 1,
-						"position": 1,
-						"vendor_id": 2,
-						"product_code": 2,
-						"index" : 8208,
-						"subindex" : 0,
-						"offset" : 0,
-						"bit_position" : 0
-					}
-				]
-			},
 			{
 				"type" : "generic",
 				"registers" : [
 					{
-						"name" : "trajectory buffer free count",
+						"name" : "ip move segment command",
 						"alias": 0,
 						"position": 0,
 						"vendor_id": 1,
 						"product_code": 1,
-						"index" : 8209,
+						"index" : 8208,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
 					},
 					{
 						"name" : "trajectory buffer free count",
-						"alias": 1,
-						"position": 1,
-						"vendor_id": 2,
-						"product_code": 2,
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
 						"index" : 8209,
 						"subindex" : 0,
 						"offset" : 0,
@@ -206,6 +152,28 @@
 						"vendor_id": 1,
 						"product_code": 1,
 						"index" : 8210,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "ip move segment command",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 8208,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer free count",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 8209,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0

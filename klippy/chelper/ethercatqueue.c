@@ -304,19 +304,19 @@ input_event(struct ethercatqueue *sq, double eventtime)
     pthread_mutex_lock(&sq->lock);
 
     /* get master interface */
-    struct mastermonitor *ifc = &sq->masterifc;
+    struct mastermonitor *master = &sq->masterifc;
 
     /* domain monitor */
-    struct domainmonitor *dm;
+    struct domainmonitor *base_domain = &master->domains[0];
     
     /* receive process data */
-    ecrt_master_receive(ifc->master);
+    ecrt_master_receive(master->master);
 
     /* loop over domains */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
         /* get domain */
-        dm = &ifc->domains[i];
+        struct domainmonitor *dm = &master->domains[i];
 
         /* process received data (from datagram to domain) */
         ecrt_domain_process(dm->domain);
@@ -330,15 +330,16 @@ input_event(struct ethercatqueue *sq, double eventtime)
      * NOTE: the slave_window objects (one for each drive) are all
      *       registered in the first common domain.
      */
-    dm = &ifc->domains[ETHERCAT_PVT_DOMAINS];
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave */
-        struct slavemonitor *slave = &ifc->monitor[i];
+        struct slavemonitor *slave = &master->monitor[i];
+
         /* read current slave receive window */
-        ifc->monitor[i].slave_window = EC_READ_U32(dm->domain_pd + slave->off_slave_window);
+        slave->slave_window = EC_READ_U32(base_domain->domain_pd + slave->off_slave_window);
+        
         /** NOTE: following line only for test purpose, remove it!!!! */
-        ifc->monitor[i].slave_window = 0;
+        slave->slave_window = 0;
     }
 
     /* process a high level thread request */
@@ -434,9 +435,6 @@ build_and_send_command(struct ethercatqueue *sq)
         {
             /* populate domain data (directly mapped to kernel) */
             memcpy(slave->pvtdata[slave->master_window], qm->msg, qm->len);
-
-            /* increase slave counter in domain */
-            master->domains[slave->master_window].mask |= (1 << qm->oid);
             
             /* increase master tx index */
             slave->master_window++;
@@ -716,60 +714,36 @@ command_event(struct ethercatqueue *sq, double eventtime)
          */
         if ((waketime != PR_NOW) || (master->full_counter))
         {
-            /* loop over common domains */
-            for (uint8_t i = ETHERCAT_PVT_DOMAINS; i < ETHERCAT_DOMAINS; i++)
+            /* loop over domains */
+            for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
             {
                 /* get domain */
                 struct domainmonitor *dm = &master->domains[i];
 
-                /* upate common domain datagram (always) */
+                /* update domain */
                 ecrt_domain_queue(dm->domain);
             }
 
-            /* check if there is something to send */
-            if (buflen)
-            {
-                /* loop over domains */
-                for (uint8_t i = 0; i < ETHERCAT_PVT_DOMAINS; i++)
-                {
-                    /* get domain */
-                    struct domainmonitor *dm = master->domains[i].domain;
-
-                    /* data consistency check (step for each axis) */
-                    if (dm->mask == ETHERCAT_DRIVE_MASK)
-                    {
-                        /* update domain */
-                        ecrt_domain_queue(master->domains[i].domain);
-
-                        /* reset domain drive mask */
-                        dm->mask = 0;
-                    }
-                    else
-                    {
-                        /* stop (domains are ordered) */
-                        break;
-                    }
-                }
-
-                /* update idle time (take into account current transmission) */
-                double idletime = (eventtime > sq->idle_time ? eventtime : sq->idle_time);
-                sq->idle_time = idletime + master->frame_time;
-
-                /* reset transmission parameters */
-                buflen = 0; //buffer free
-                master->full_counter = 0; //pdo slots free
-
-                /* reset slaves tx counter */
-                for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-                {
-                    master->monitor[i].master_window = 0;
-                }
-            }
-
-            //errorf("SENT FRAME");
-
             /* write ethercat frame (always) */
             ecrt_master_send(master->master);
+
+            /* update idle time (take into account current transmission) */
+            double idletime = (eventtime > sq->idle_time ? eventtime : sq->idle_time);
+            sq->idle_time = idletime + master->frame_time;
+
+            /* reset transmission parameters */
+            buflen = 0; //buffer free
+            master->full_counter = 0; //pdo slots free
+
+            /* reset slaves tx counter */
+            for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+            {
+                /* get slave */
+                struct slavemonitor *slave = &master->monitor[i];
+
+                /* reset window */
+                slave->master_window = 0;
+            }
 
             /* stop (frame transmitted) */
             break;
@@ -852,7 +826,7 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
     slave->sync0_st = sync0_st;
     slave->sync1_st = sync1_st;
     slave->rx_size = rx_size;
-    slave->tx_size = ETHERCAT_PVT_DOMAINS;
+    slave->tx_size = ETHERCAT_DOMAINS;
     slave->oid = index;
     slave->n_pdo_entries = 0;
     slave->n_pdos = 0;
@@ -1044,37 +1018,28 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* udate expected frame size */
         master->frame_size += dm->domain_size;
 
-        /** TODO: move outside maybe */
-        if (i < ETHERCAT_PVT_DOMAINS)
-        {
-            /* update expected pvt frame size */
-            master->frame_pvt_size += dm->domain_size;
-        }
-    }
+        /* update expected pvt frame size */
+        master->frame_pvt_size += dm->domain_size;
 
-    /* assign drive domain starting addresses */
-    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    {
-        /* get slave monitor */
-        struct slavemonitor *slave = &master->monitor[i];
-
-        /* loop over pvt domains */
-        for (uint8_t j = 0; j < ETHERCAT_PVT_DOMAINS; j++)
+        /* assign drive domain starting addresses */
+        for (uint8_t j = 0; j < ETHERCAT_DRIVES; j++)
         {
-            /* get pvt domain monitor */
-            struct domainmonitor *dm = &master->domains[j];
-            /**
-             * Get drive domain offset (one object per pvt sample).
-             * NOTE: for pvt domains only one register per drive is
-             *       configured, corresponding to the pvt sample,
-             *       therefore the index of the offset corresponds
-             *       to the drive index. All other registers have
-             *       to be mapped to common domains (after drive
-             *       pvt specific domains).
-             */
-            uint32_t offset = dm->offsets[i];
-            /* drive private starting domain address */
-            slave->pvtdata[j] = dm->domain_pd + offset;
+            /* offset data */
+            uint16_t offset_idx;
+            uint32_t offset;
+
+            /* get slave monitor */
+            struct slavemonitor *slave = &master->monitor[j];
+
+            /* get slave move segment offset */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MOVE_SEGMENT;
+            offset = dm->offsets[offset_idx];
+            slave->pvtdata[i] = dm->domain_pd + offset;
+
+            /* get slave buffer free count offset */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_BUFFER_FREE_COUNT;
+            offset = dm->offsets[offset_idx];
+            slave->off_slave_window = dm->domain_pd + offset;
         }
     }
 

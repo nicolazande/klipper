@@ -452,10 +452,6 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
     struct list_head msgs;
     list_init(&msgs);
 
-    errorf(".");
-    errorf(" --> sent move_clock = %u", move_clock);
-    errorf(".");
-
     /* order commands by requested clock for each drive */
     for (;;)
     {
@@ -524,8 +520,6 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
          * scheduled move step (from previous cycle).
          */
         qm->min_clock = next_avail;
-
-        errorf("sent: min_clock = %u, req_clock = %u, oid = %u", qm->min_clock, qm->req_clock, qm->oid);
 
         /* add to message queue */
         list_del(&qm->node);

@@ -26,25 +26,32 @@
 #define MAX_CLOCK 0x7fffffffffffffffLL
 #endif
 #define ETHERCAT_DRIVES 2  //number of ethercat drives
-#define ETHERCAT_PVT_DOMAINS 2 //number of pvt domains (one for each pdo instance)
-#define ETHERCAT_STANDARD_DOMAINS 1  //number of pvt domains (one for each pdo instance)
-#define ETHERCAT_DOMAINS (ETHERCAT_PVT_DOMAINS + ETHERCAT_STANDARD_DOMAINS) //total number of domains
+#define ETHERCAT_DOMAINS 1 //total number of domains
 #define ETHERCAT_MAX_SYNCS 3 //max number of syncs per slave
 #define ETHERCAT_MAX_REGISTERS 10 //max number of master registers
 #define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
 #define ETHERCAT_MAX_PDO_ENTRIES 10 //max number of pdo enries per slave
-#define ETHERCAT_DRIVE_MASK ((1 << (ETHERCAT_DRIVES)) - 1) //operation complete mask
 
 
 /****************************************************************
  * Custom data types
  ****************************************************************/
+/* ethercat slave offsets */
+enum
+{
+    ETHERCAT_OFFSET_MOVE_SEGMENT,
+    ETHERCAT_OFFSET_BUFFER_FREE_COUNT,
+    ETHERCAT_OFFSET_BUFFER_STATUS,
+    ETHERCAT_OFFSET_MAX
+};
+
 /* pull queue message complete forward declaration */
 struct pull_queue_message
 {
     uint8_t msg[MESSAGE_MAX];
     int len;
-    double sent_time, receive_time;
+    double sent_time;
+    double receive_time;
     uint64_t notify_id;
 };
 
@@ -67,7 +74,6 @@ struct domainmonitor
     ec_domain_state_t domain_state;     //domain state
     uint8_t *domain_pd;                 //domain process data pointer
     uint16_t domain_size;               //size in bytes of the domain
-    uint8_t mask;                       //number of active associated drives (in current cycle)
     uint8_t n_registers;                //number of registers in the domain
     uint32_t offsets[ETHERCAT_MAX_REGISTERS]; //domain register offsets
     ec_pdo_entry_reg_t registers[ETHERCAT_MAX_REGISTERS]; //domain registers
@@ -94,7 +100,7 @@ struct slavemonitor
     uint8_t n_pdos;                           //number of slave pdos
     ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS];    //slave pdos
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
-    uint8_t *pvtdata[ETHERCAT_PVT_DOMAINS];   //pvt domain addresses
+    uint8_t *pvtdata[ETHERCAT_DOMAINS];   //pvt domain addresses
 };
 
 /* EtherCAT master status monitor */
