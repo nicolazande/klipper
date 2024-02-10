@@ -151,7 +151,7 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
      * TODO: check Copley manualfor proper position, velocity, time format, ...
      */
     struct pvtmove *move = (struct pvtmove *)qm->msg;
-    move->header.type = 0; //0 = buffer mode, 1 = command mode
+    move->header.type = COPLEY_MODE_BUFFER;
     move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
     move->header.format = 0; //0 = buffer mode, 1 = command mode
     move->position = pose->position; //move absolute start position [ticks].
@@ -171,18 +171,18 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     qm->min_clock = sc->last_step_clock;
     qm->req_clock = sc->last_step_clock;
 
-    // /* take into account high delay between steps */
-    // uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
-    // if (first_clock_offset > CLOCK_DIFF_MAX)
-    // {
-    //     /* 
-    //      * The delta time between current and last step is too high to
-    //      * be ignored, therefore move forward the required clock and
-    //      * accept a delay between steps (this happens for both X and Y
-    //      * axis --> no positioning error).
-    //      */
-    //     qm->req_clock = first_clock + first_clock_offset;
-    // }
+    /* take into account high delay between steps */
+    uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
+    if (first_clock_offset > CLOCK_DIFF_MAX)
+    {
+        /* 
+         * The delta time between current and last step is too high to
+         * be ignored, therefore move forward the required clock and
+         * accept a delay between steps (this happens for both X and Y
+         * axis --> no positioning error).
+         */
+        qm->req_clock = first_clock + first_clock_offset;
+    }
 
     /* add message to queue */
     list_add_tail(&qm->node, &sc->msg_queue);

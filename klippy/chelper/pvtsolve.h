@@ -23,6 +23,23 @@ enum
     AF_X = 1 << 0, AF_Y = 1 << 1, AF_Z = 1 << 2,
 };
 
+/* copley buffer or command mode */
+enum
+{
+    COPLEY_MODE_BUFFER,
+    COPLEY_MODE_CMD
+};
+
+/* copley buffer commands */
+enum
+{
+    COPLEY_CMD_CLEAR_BUFFER,
+    COPLEY_CMD_POP_SEGMENTS,
+    COPLEY_CMD_CLEAR_ERRORS,
+    COPLEY_CMD_RESET_SEGMENT_ID,
+    COPLEY_CMD_NO_OPERATION
+};
+
 /**
  * Move (command, position, velocity, time) segment.
  * TODO: it depends on the specific drive selected (Copley), maybe it is metter

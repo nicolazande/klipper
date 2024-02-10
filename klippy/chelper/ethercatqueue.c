@@ -24,6 +24,7 @@
 #include "pollreactor.h" //pollreactor_alloc
 #include "pyhelper.h" //get_monotonic
 #include "ethercatqueue.h" //struct pvtmsg
+#include "pvtsolve.h" //pvtmove
 
 
 /****************************************************************
@@ -119,6 +120,9 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
 /* callback timer to send data to the ethercat port */
 static double
 command_event(struct ethercatqueue *sq, double eventtime);
+
+static void
+clean_ethercat_frame(struct ethercatqueue *sq);
 
 /** main background thread for reading/writing to ethercat port */
 static void *
@@ -336,7 +340,7 @@ input_event(struct ethercatqueue *sq, double eventtime)
         struct slavemonitor *slave = &master->monitor[i];
 
         /* read current slave receive window */
-        slave->slave_window = EC_READ_U32(base_domain->domain_pd + slave->off_slave_window);
+        slave->slave_window = EC_READ_U16(slave->off_slave_window);
         
         /** NOTE: following line only for test purpose, remove it!!!! */
         slave->slave_window = 0;
@@ -364,7 +368,7 @@ kick_event(struct ethercatqueue *sq, double eventtime)
     /* check data */
     if (ret < 0)
     {
-        report_errno("pipe read", ret);
+        report_errno("pipe read error", ret);
     }
     
     /* check timer index */
@@ -651,6 +655,39 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
 }
 
+static void
+clean_ethercat_frame(struct ethercatqueue *sq)
+{
+    /* get master */
+    struct mastermonitor *master = &sq->masterifc;
+
+    /* loop over domains */
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
+    {
+        /* loop over domain associated drives */
+        for (uint8_t j = 0; j < ETHERCAT_DRIVES; j++)
+        {
+            /* get slave */
+            struct slavemonitor *slave = &master->monitor[j];
+
+            /* get domain data */
+            struct pvtmove *data = (struct pvtmove *)slave->pvtdata[i];
+
+            /**
+             * Reset segment slot in doamin. This allows to have  
+             */
+            if (data)
+            {
+                data->command.type = COPLEY_MODE_CMD;
+                data->command.code = COPLEY_CMD_NO_OPERATION;
+                data->time = 0;
+                data->position = 0;
+                data->velocity = 0;
+            }
+        }
+    }
+}
+
 static double
 command_event(struct ethercatqueue *sq, double eventtime)
 {
@@ -686,6 +723,9 @@ command_event(struct ethercatqueue *sq, double eventtime)
      * synchronized with the reference clock (first DC capable slave).
      */
     ecrt_master_sync_slave_clocks(master->master);
+
+    /* reset ethercat frame */
+    clean_ethercat_frame(sq);
 
     /* prepare data for frame transmission */
     for (;;)
@@ -1034,12 +1074,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
             /* get slave move segment offset */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MOVE_SEGMENT;
             offset = dm->offsets[offset_idx];
-            slave->pvtdata[i] = dm->domain_pd + offset;
+            slave->pvtdata[i] = (uint8_t *)(dm->domain_pd + offset);
 
             /* get slave buffer free count offset */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_BUFFER_FREE_COUNT;
             offset = dm->offsets[offset_idx];
-            slave->off_slave_window = dm->domain_pd + offset;
+            slave->off_slave_window = (uint8_t *)(dm->domain_pd + offset);
         }
     }
 

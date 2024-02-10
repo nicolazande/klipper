@@ -99,10 +99,10 @@ class EthercatReader:
         for slave_idx, slave in enumerate(slaves):
             # configure slave
             self.ffi_lib.ethercatqueue_slave_config(self.ethercatqueue, slave_idx,
-                                                  slave["alias"], slave["position"],
-                                                  slave["vendor_id"], slave["product_code"],
-                                                  slave["assign_activate"], slave["sync0_st"],
-                                                  slave["sync1_st"], slave["rx_size"])
+                                                    slave["alias"], slave["position"],
+                                                    slave["vendor_id"], slave["product_code"],
+                                                    slave["assign_activate"], slave["sync0_st"],
+                                                    slave["sync1_st"], slave["rx_size"])
             # get slave syncs and process them
             syncs = slave["syncs"]
             for sync_idx, sync in enumerate(syncs):

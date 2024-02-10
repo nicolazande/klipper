@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "pollreactor.h": "c"
+        "pollreactor.h": "c",
+        "pvtcompress.h": "c",
+        "ethercatqueue.h": "c"
     }
 }

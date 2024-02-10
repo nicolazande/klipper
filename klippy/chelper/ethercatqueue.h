@@ -83,7 +83,7 @@ struct domainmonitor
 struct slavemonitor
 {
     uint16_t master_window;                 //number of commands currently in frame buffer (1 or more pdo instances).
-    uint32_t off_slave_window;              //offset for slave window in the domain.
+    uint8_t *off_slave_window;              //offset for slave window in the domain.
     uint16_t slave_window;                  //number of commands currently in drive buffer.
     uint16_t tx_size;                       //number tx pdo instances in the frame.
     uint16_t rx_size;                       //size of pvt buffer on slave side.

@@ -74,7 +74,11 @@ gen_steps_range(struct drive_kinematics *sk, struct move *m, double abs_start, d
     /* run simulation */
     while (start < end)
     {
-        /* smooth stop check */
+        /**
+         * Smooth stop check. NOTE: the delta time needs to be a positive
+         * integer multiple of 1ms in order for the drive to perform a
+         * proper interpolation, therfore try to always round up time.
+         */
         if (end - start < 2. * dt)
         {
             /* adapt last step time duration */
@@ -98,7 +102,7 @@ gen_steps_range(struct drive_kinematics *sk, struct move *m, double abs_start, d
      * Update final position, take into account also the delta
      * time of the last step since it produces a movement too.
      */
-    sk->commanded_pos = pose.position + pose.velocity*dt;
+    sk->commanded_pos = pose.position + pose.velocity * dt;
 
     /* execute optinal post callback */
     if (sk->post_cb)
