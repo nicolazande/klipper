@@ -10,6 +10,7 @@
 			"sync0_st" : 0,
 			"sync1_st" : 0,
 			"rx_size" : 32,
+			"slave_min_window" : 3,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -27,6 +28,12 @@
 							"index": 8208,
 							"subindex": 0,
 							"bit_length": 64
+						},
+						{
+							"name" : "control word",
+							"index": 24640,
+							"subindex": 0,
+							"bit_length": 16
 						}
 					]
             	},
@@ -52,6 +59,12 @@
 							"index": 8210,
 							"subindex": 0,
 							"bit_length": 32
+						},
+						{
+							"name" : "status word",
+							"index": 24641,
+							"subindex": 0,
+							"bit_length": 16
 						}
 					]
 				}
@@ -67,6 +80,7 @@
 			"sync0_st" : 0,
 			"sync1_st" : 0,
 			"rx_size" : 32,
+			"slave_min_window" : 3,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -84,6 +98,12 @@
 							"index": 8208,
 							"subindex": 0,
 							"bit_length": 64
+						},
+						{
+							"name" : "control word",
+							"index": 24640,
+							"subindex": 0,
+							"bit_length": 16
 						}
 					]
             	},
@@ -109,6 +129,12 @@
 							"index": 8210,
 							"subindex": 0,
 							"bit_length": 32
+						},
+						{
+							"name" : "status word",
+							"index": 24641,
+							"subindex": 0,
+							"bit_length": 16
 						}
 					]
 				}
@@ -157,6 +183,28 @@
 						"bit_position" : 0
 					},
 					{
+						"name" : "control word",
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 24640,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "status word",
+						"alias": 0,
+						"position": 0,
+						"vendor_id": 1,
+						"product_code": 1,
+						"index" : 24641,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
 						"name" : "ip move segment command",
 						"alias": 1,
 						"position": 1,
@@ -185,6 +233,28 @@
 						"vendor_id": 2,
 						"product_code": 2,
 						"index" : 8210,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "control word",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 24640,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "status word",
+						"alias": 1,
+						"position": 1,
+						"vendor_id": 2,
+						"product_code": 2,
+						"index" : 24641,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0

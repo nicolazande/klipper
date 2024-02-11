@@ -105,12 +105,16 @@ class PVT_drive:
     '''
     Interface to low-level mcu and chelper code for pvt drive.
     '''
-    def __init__(self, name, mcu, units_in_radians, simtime):
+    def __init__(self, name, mcu,
+                 units_in_radians, simtime,
+                 position_scaling, velocity_scaling):
         # parameters
         self._name = name
         self._units_in_radians = units_in_radians
         self._step_dist = 1
         self._simtime = simtime
+        self._position_scaling = position_scaling
+        self._velocity_scaling = velocity_scaling
         # keep virtual connection with the mcu module
         self._mcu = mcu
         self._oid = oid = self._mcu.create_ethercat_oid() #oid used as ethercat slave address
@@ -122,7 +126,8 @@ class PVT_drive:
         # get C helpers
         ffi_main, ffi_lib = chelper.get_ffi()
         # allocate and register (in the MCU module) the private compressor object
-        self._stepqueue = ffi_main.gc(ffi_lib.pvtcompress_alloc(oid), ffi_lib.pvtcompress_free)
+        self._stepqueue = ffi_main.gc(ffi_lib.pvtcompress_alloc(oid, self._position_scaling, self._velocity_scaling),
+                                      ffi_lib.pvtcompress_free)
         self._mcu.register_pvtqueue(self._stepqueue)
         self._stepper_kinematics = None
         self._pvtsolve_generate_steps = ffi_lib.pvtsolve_generate_steps #function to sample and generate move steps
@@ -392,6 +397,8 @@ def PrinterStepper(config, units_in_radians=False):
     printer = config.get_printer()
     name = config.get_name()
     simtime = config.getfloat('sampling_time', 0.01, minval=0.001, maxval=1)
+    position_scaling = config.getfloat('position_scaling', 1, minval=1, maxval=1e6)
+    velocity_scaling = config.getfloat('velocity_scaling', 1, minval=1, maxval=1e6)
     '''
     NOTE: the proper way to get it is through the pin module which is
     guaranteed to be instantiated, however the mcu should be always
@@ -400,7 +407,9 @@ def PrinterStepper(config, units_in_radians=False):
     '''
     mcu = printer.lookup_object('mcu')
     # create drive object
-    mcu_drive = PVT_drive(name=name, mcu=mcu, units_in_radians=False, simtime=simtime)
+    mcu_drive = PVT_drive(name=name, mcu=mcu, units_in_radians=False,
+                          simtime=simtime, position_scaling=position_scaling,
+                          velocity_scaling=velocity_scaling)
     '''
     Register helper modules.
     TODO check which are really needed for servos and adapt them

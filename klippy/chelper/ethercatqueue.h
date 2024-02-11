@@ -42,6 +42,8 @@ enum
     ETHERCAT_OFFSET_MOVE_SEGMENT,
     ETHERCAT_OFFSET_BUFFER_FREE_COUNT,
     ETHERCAT_OFFSET_BUFFER_STATUS,
+    ETHERCAT_OFFSET_CONTROL_WORD,
+    ETHERCAT_OFFSET_STATUS_WORD,
     ETHERCAT_OFFSET_MAX
 };
 
@@ -84,9 +86,14 @@ struct slavemonitor
 {
     uint16_t master_window;                 //number of commands currently in frame buffer (1 or more pdo instances).
     uint8_t *off_slave_window;              //offset for slave window in the domain.
-    uint16_t slave_window;                  //number of commands currently in drive buffer.
+    uint16_t slave_window;                  //number of commands currently in drive buffer (local copy).
+    uint8_t *off_control_word;
+    uint16_t control_word;
+    uint8_t *off_status_word;
+    uint16_t status_word;
     uint16_t tx_size;                       //number tx pdo instances in the frame.
     uint16_t rx_size;                       //size of pvt buffer on slave side.
+    uint8_t slave_min_window;
     uint16_t oid;                           //pvtcompress object id (position in mastermonitor->monitor)
     uint16_t alias;                         //slave alias
     uint16_t position;                      //slave position
@@ -184,7 +191,8 @@ void ethercatqueue_slave_config(struct ethercatqueue *sq,
                                 uint16_t assign_activate,
                                 double sync0_st,
                                 double sync1_st,
-                                uint16_t rx_size);
+                                uint8_t rx_size,
+                                uint8_t slave_min_window);
 
 /** configure an ethercat sync manager */
 void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,

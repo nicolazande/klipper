@@ -42,10 +42,12 @@ struct pvtcompress
     double mcu_freq; //drive frequency
     double last_step_print_time; //print time of the last scheduled move
     uint64_t last_step_clock; //drive clock value of the last scheduled move
-    struct list_head msg_queue; //linked list of commands (moves) to be executed on the drive
     uint32_t oid; //object id associated with the pvt step compressor (unique for each drive)
     uint32_t seq_num; //sequence number of last scheduled step
+    double position_scaling;
+    double velocity_scaling;
     double last_position; //last known position of the drive
+    struct list_head msg_queue; //linked list of commands (moves) to be executed on the drive
     struct list_head history_list; //linked list of historical drive information
 };
 
@@ -148,15 +150,14 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
      * Cast the queue message buffer to a pvt move and fill it (avoid redundant copies).
      * This can be done only because the queue message msg field is guaranteed to be 8
      * bytes aligned.
-     * TODO: check Copley manualfor proper position, velocity, time format, ...
      */
     struct pvtmove *move = (struct pvtmove *)qm->msg;
     move->header.type = COPLEY_MODE_BUFFER;
     move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
     move->header.format = 0; //0 = buffer mode, 1 = command mode
-    move->position = pose->position; //move absolute start position [ticks].
-    move->velocity = pose->velocity; //move constant velocity [ticks/s].
-    move->time = (uint8_t)(move_time * 1000.); //move time duration [ms] (up to next pose)
+    move->position = (int32_t)(pose->position * sc->position_scaling) & 0xFFFFFF; //move absolute start position [ticks].
+    move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling) & 0xFFFFFF; //move constant velocity [ticks/s].
+    move->time = (uint8_t)(move_time * 1000.);  //move time duration [ms] (up to next pose)
 
     /*
      * Queue messages from different pvtcompress objects are merged in a single
@@ -194,7 +195,7 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     sc->last_position = pose->position + pose->velocity * move_time;
 
     /* update step sequence number (avoid overflow) */
-    sc->seq_num++ % (SEQ_NUM_MASK + 1);
+    sc->seq_num = (sc->seq_num + 1) & SEQ_NUM_MASK;
 
     /* create and store move in history tracking */
     struct pvthistory *hs = malloc(sizeof(*hs));
@@ -251,13 +252,15 @@ heap_replace(struct drivesync *ss, uint64_t req_clock)
  ****************************************************************/
 /** allocate a new pvtcompress object */
 struct pvtcompress * __visible
-pvtcompress_alloc(uint32_t oid)
+pvtcompress_alloc(uint32_t oid, double position_scaling, double velocity_scaling)
 {
     struct pvtcompress *sc = malloc(sizeof(*sc));
     memset(sc, 0, sizeof(*sc));
     list_init(&sc->msg_queue);
     list_init(&sc->history_list);
     sc->oid = oid;
+    sc->position_scaling = position_scaling;
+    sc->velocity_scaling = velocity_scaling;
     return sc;
 }
 

@@ -2,7 +2,10 @@
  * \file pvtsolve.h
  *
  * \brief PVT specific iterative solver for kinematic moves.
- * 
+ *        TODO: it depends on the specific drive selected (Copley),
+ *              maybe it is metter to move this definition in an
+ *              external hardware dependent only file and keep here
+ *              only a forward declaration.
  */
 
 #ifndef PVTSOLVE_H
@@ -40,11 +43,41 @@ enum
     COPLEY_CMD_NO_OPERATION
 };
 
+/* control word */
+struct coe_control_word
+{
+    uint8_t power_switch:1;
+    uint8_t voltage_switch:1;
+    uint8_t quick_stop:1;
+    uint8_t enable_operation:1;
+    uint8_t operation_mode:3;
+    uint8_t reset_fault:1;
+    uint8_t halt:1;
+    uint8_t padding:7;
+} __attribute((aligned(1), packed));
+
+/* status word */
+struct coe_status_word
+{
+    uint8_t switch_ready:1;
+    uint8_t switch_on:1;
+    uint8_t operation_enabled:1;
+    uint8_t fault:1;
+    uint8_t voltage_enabled:1;
+    uint8_t quick_stop:1;
+    uint8_t switch_diabled:1;
+    uint8_t warning:1;
+    uint8_t aborted:1;
+    uint8_t remote:1;
+    uint8_t target_reached:1;
+    uint8_t limit_active:1;
+    uint8_t generic:2;
+    uint8_t moving:1;
+    uint8_t homed:1;
+} __attribute((aligned(1), packed));
+
 /**
  * Move (command, position, velocity, time) segment.
- * TODO: it depends on the specific drive selected (Copley), maybe it is metter
- *       to move this definition in an external hardware dependent only file
- *       and keep here only a forward declaration.
  */
 struct pvtmove
 {
@@ -68,7 +101,7 @@ struct pvtmove
     uint8_t time; //time in ms
     int32_t position:24; //current position
     int32_t velocity:24; //current speed
-} __attribute((aligned(8), packed));
+} __attribute((aligned(1), packed));
 
 /* drive pose */
 struct pose

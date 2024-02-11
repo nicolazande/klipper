@@ -41,7 +41,7 @@ struct ethercatqueue;
  * Public functions
  ****************************************************************/
 /** allocate a new compressor */
-struct pvtcompress *pvtcompress_alloc(uint32_t oid);
+struct pvtcompress *pvtcompress_alloc(uint32_t oid, double position_scaling, double velocity_scaling);
 
 /** free memory associated with a compressor */
 void pvtcompress_free(struct pvtcompress *sc);

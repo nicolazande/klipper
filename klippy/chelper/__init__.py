@@ -43,7 +43,7 @@ defs_pvtcompress = """
         double start_position;
         double velocity;
     };
-    struct pvtcompress *pvtcompress_alloc(uint32_t oid);
+    struct pvtcompress *pvtcompress_alloc(uint32_t oid, double position_scaling, double velocity_scaling);
     void pvtcompress_free(struct pvtcompress *sc);
     uint32_t pvtcompress_get_oid(struct pvtcompress *sc);
     void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time);
@@ -113,7 +113,8 @@ defs_ethercatqueue = """
                                     uint16_t assign_activate,
                                     double sync0_st,
                                     double sync1_st,
-                                    uint16_t rx_size);
+                                    uint8_t rx_size,
+                                    uint8_t slave_min_window);
     void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
                                          uint8_t slave_index,
                                          uint8_t sync_index,

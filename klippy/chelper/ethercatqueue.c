@@ -122,7 +122,7 @@ static double
 command_event(struct ethercatqueue *sq, double eventtime);
 
 static void
-clean_ethercat_frame(struct ethercatqueue *sq);
+preprocess_ethercat_frame(struct ethercatqueue *sq);
 
 /** main background thread for reading/writing to ethercat port */
 static void *
@@ -340,10 +340,14 @@ input_event(struct ethercatqueue *sq, double eventtime)
         struct slavemonitor *slave = &master->monitor[i];
 
         /* read current slave receive window */
-        slave->slave_window = EC_READ_U16(slave->off_slave_window);
+        //slave->slave_window = EC_READ_U16(slave->off_slave_window);
         
         /** NOTE: following line only for test purpose, remove it!!!! */
-        slave->slave_window = 0;
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        if ((slave->slave_window > 0) && (cw->enable_operation))
+        {
+            slave->slave_window--;
+        }   
     }
 
     /* process a high level thread request */
@@ -656,7 +660,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 }
 
 static void
-clean_ethercat_frame(struct ethercatqueue *sq)
+preprocess_ethercat_frame(struct ethercatqueue *sq)
 {
     /* get master */
     struct mastermonitor *master = &sq->masterifc;
@@ -670,19 +674,49 @@ clean_ethercat_frame(struct ethercatqueue *sq)
             /* get slave */
             struct slavemonitor *slave = &master->monitor[j];
 
-            /* get domain data */
-            struct pvtmove *data = (struct pvtmove *)slave->pvtdata[i];
+            /* get slave segment buffer data */
+            struct pvtmove *move = (struct pvtmove *)slave->pvtdata[i];
 
             /**
-             * Reset segment slot in doamin. This allows to have  
+             * Reset segment slot in doamin. This allows to schedule command
+             * events at regular intervals, even without active segments.
              */
-            if (data)
+            if (move)
             {
-                data->command.type = COPLEY_MODE_CMD;
-                data->command.code = COPLEY_CMD_NO_OPERATION;
-                data->time = 0;
-                data->position = 0;
-                data->velocity = 0;
+                move->command.type = COPLEY_MODE_CMD;
+                move->command.code = COPLEY_CMD_NO_OPERATION;
+                move->time = 0;
+                move->position = 0;
+                move->velocity = 0;
+            }
+
+            /** 
+             * Configure slave specific control word. NOTE: if using multiple domains
+             * register the control word object only once so that for the other ones
+             * off_control_word is NULL.
+             */
+            if (slave->off_control_word)
+            {
+                /* get control word */
+                struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
+                /**
+                 * Check receive buffer status and perform automatic transition
+                 * of enable operation command, i.e. automatic start when there
+                 * are enough samples in the buffer and automatic stop when the
+                 * low limit of segments in the drive budder is reached.
+                 */
+                if (slave->slave_window < slave->slave_min_window)
+                {
+                    /** NOTE: this causes hard stop (remove if unwanted) */
+                    cw->enable_operation = 0;
+                }
+                else
+                {
+                    cw->enable_operation = 1;
+                }
+
+                errorf("SLAVE OID = %u, window = %u, enabled = %u", slave->oid, slave->slave_window, cw->enable_operation);
             }
         }
     }
@@ -724,8 +758,8 @@ command_event(struct ethercatqueue *sq, double eventtime)
      */
     ecrt_master_sync_slave_clocks(master->master);
 
-    /* reset ethercat frame */
-    clean_ethercat_frame(sq);
+    /* pre process ethercat frame */
+    preprocess_ethercat_frame(sq);
 
     /* prepare data for frame transmission */
     for (;;)
@@ -851,7 +885,8 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
                            uint16_t assign_activate,
                            double sync0_st,
                            double sync1_st,
-                           uint16_t rx_size)
+                           uint8_t rx_size,
+                           uint8_t slave_min_window)
 {
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -870,6 +905,7 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
     slave->oid = index;
     slave->n_pdo_entries = 0;
     slave->n_pdos = 0;
+    slave->slave_min_window = slave_min_window;
 }
 
 /** configure an ethercat sync manager */
@@ -1071,15 +1107,25 @@ ethercatqueue_init(struct ethercatqueue *sq)
             /* get slave monitor */
             struct slavemonitor *slave = &master->monitor[j];
 
-            /* get slave move segment offset */
+            /* setup interpolation move segment */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MOVE_SEGMENT;
             offset = dm->offsets[offset_idx];
             slave->pvtdata[i] = (uint8_t *)(dm->domain_pd + offset);
 
-            /* get slave buffer free count offset */
+            /* setup buffer free slot count */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_BUFFER_FREE_COUNT;
             offset = dm->offsets[offset_idx];
             slave->off_slave_window = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave control word */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_CONTROL_WORD;
+            offset = dm->offsets[offset_idx];
+            slave->off_control_word = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave status word */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_STATUS_WORD;
+            offset = dm->offsets[offset_idx];
+            slave->off_status_word = (uint8_t *)(dm->domain_pd + offset);
         }
     }
 
