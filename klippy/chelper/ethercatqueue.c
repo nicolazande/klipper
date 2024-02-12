@@ -121,8 +121,9 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
 static double
 command_event(struct ethercatqueue *sq, double eventtime);
 
+/** pre process ethercat frame (reset and configuration check) */
 static void
-preprocess_ethercat_frame(struct ethercatqueue *sq);
+preprocess_frame(struct ethercatqueue *sq);
 
 /** main background thread for reading/writing to ethercat port */
 static void *
@@ -309,9 +310,6 @@ input_event(struct ethercatqueue *sq, double eventtime)
 
     /* get master interface */
     struct mastermonitor *master = &sq->masterifc;
-
-    /* domain monitor */
-    struct domainmonitor *base_domain = &master->domains[0];
     
     /* receive process data */
     ecrt_master_receive(master->master);
@@ -342,13 +340,16 @@ input_event(struct ethercatqueue *sq, double eventtime)
         /* read current slave receive window */
         //slave->slave_window = EC_READ_U16(slave->off_slave_window);
         
-        /** NOTE: following line only for test purpose, remove it!!!! */
-        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-        if ((slave->slave_window > 0) && (cw->enable_operation))
+        /** NOTE: following lines only for test purpose, remove it!!!! */
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;        
+        if ((slave->slave_window > slave->slave_min_window) && cw->enable_operation)
         {
             slave->slave_window--;
         }   
     }
+
+    /* pre process ethercat frame */
+    preprocess_frame(sq);
 
     /* process a high level thread request */
     process_request(sq, eventtime);
@@ -448,7 +449,7 @@ build_and_send_command(struct ethercatqueue *sq)
             slave->master_window++;
 
             /* increase slave rx index in advance */
-            slave->slave_window++;            
+            slave->slave_window++;
         }
         else
         {
@@ -461,7 +462,8 @@ build_and_send_command(struct ethercatqueue *sq)
             break;
         }
 
-        errorf("received: min_clock = %u, req_clock = %u, oid = %u", qm->min_clock, qm->req_clock, qm->oid);
+        errorf("received: min_clock = %u, req_clock = %u, oid = %u",
+        qm->min_clock, qm->req_clock, qm->oid);
 
         /* remove message from ready queue */
         list_del(&qm->node);
@@ -600,7 +602,6 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
             return PR_NOW;
         }
         /* disable timer and stop (error or stopped) */
-        sq->need_kick_clock = MAX_CLOCK;
         return PR_NEVER;
     }
 
@@ -627,10 +628,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 
     /*
      * Min requested clock for scheduling next command event without
-     * taking into account the synch cycle time, i.e. in normal
-     * operation timer scheduling happens always earlier than the
-     * poll one, but if it fails we have a second way to send the
-     * commands in time (sq->need_kick_clock).
+     * taking into account the synch cycle time.
      */
     uint64_t wantclock = min_ready_clock - (MIN_REQTIME_DELTA * sq->ce.est_freq);
 
@@ -647,20 +645,15 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     }
 
     /* 
-     * Update ethercatqueue poll option, wantclock should always be
-     * greater than the next timer command_event() execution time.
-     */
-    sq->need_kick_clock = wantclock;
-
-    /* 
      * Ideal walue of next command_event(), unused since the ethercat
      * synch cycle time has to be constant.
      */
     return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
 }
 
+/** pre process ethercat frame (reset and configuration check) */
 static void
-preprocess_ethercat_frame(struct ethercatqueue *sq)
+preprocess_frame(struct ethercatqueue *sq)
 {
     /* get master */
     struct mastermonitor *master = &sq->masterifc;
@@ -691,9 +684,9 @@ preprocess_ethercat_frame(struct ethercatqueue *sq)
             }
 
             /** 
-             * Configure slave specific control word. NOTE: if using multiple domains
-             * register the control word object only once so that for the other ones
-             * off_control_word is NULL.
+             * Configure slave specific control word.
+             * NOTE: if using multiple domains register the control word object only
+             *       once so that for the other ones off_control_word is NULL.
              */
             if (slave->off_control_word)
             {
@@ -713,10 +706,9 @@ preprocess_ethercat_frame(struct ethercatqueue *sq)
                 }
                 else
                 {
+                    /* enable operation (interpolation can be performed) */
                     cw->enable_operation = 1;
                 }
-
-                errorf("SLAVE OID = %u, window = %u, enabled = %u", slave->oid, slave->slave_window, cw->enable_operation);
             }
         }
     }
@@ -731,7 +723,7 @@ command_event(struct ethercatqueue *sq, double eventtime)
     static double old_eventtime;
     double delta = eventtime-old_eventtime;
     errorf(".");
-    errorf(" --> received move_clock = %u, delta = %lf",
+    errorf(" --> command eventtime: move_clock = %u, delta = %lf",
     clock_from_time(&sq->ce, eventtime),
     delta);
     errorf(".");
@@ -757,9 +749,6 @@ command_event(struct ethercatqueue *sq, double eventtime)
      * synchronized with the reference clock (first DC capable slave).
      */
     ecrt_master_sync_slave_clocks(master->master);
-
-    /* pre process ethercat frame */
-    preprocess_ethercat_frame(sq);
 
     /* prepare data for frame transmission */
     for (;;)
@@ -1003,8 +992,8 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
         uint8_t idx = i + old_n_registers;
         /* assign register */
         dm->registers[idx] = registers[i];
-        /* assign register offset */
-        dm->registers[idx].offset = &dm->offsets[i];
+        /* assign register offset (overwrite) */
+        dm->registers[idx].offset = &dm->offsets[idx];
     }
 
     /* reset stop flag (last empty register) */
@@ -1091,18 +1080,18 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* get domian data size */
         dm->domain_size = ecrt_domain_size(dm->domain);
 
-        /* udate expected frame size */
+        /* udate expected frame total size */
         master->frame_size += dm->domain_size;
 
-        /* update expected pvt frame size */
-        master->frame_pvt_size += dm->domain_size;
-
-        /* assign drive domain starting addresses */
+        /* setup domain drive specific objects */
         for (uint8_t j = 0; j < ETHERCAT_DRIVES; j++)
         {
             /* offset data */
             uint16_t offset_idx;
             uint32_t offset;
+
+            /* update expected pvt frame size */
+            master->frame_pvt_size += ETHERCAT_PVT_SIZE;
 
             /* get slave monitor */
             struct slavemonitor *slave = &master->monitor[j];
@@ -1129,9 +1118,11 @@ ethercatqueue_init(struct ethercatqueue *sq)
         }
     }
 
-klipper:
-
-    /* crete pipe for internal event scheduling */
+    /** 
+     * Crete pipe for internal event scheduling. NOTE: this can be
+     * removed in the future since command and input event run at
+     * with a constant interval (ethercat sync cycle time).
+     */
     ret = pipe(sq->pipe_sched);
     HANDLE_ERROR(ret, fail)
 
@@ -1177,7 +1168,6 @@ klipper:
     ret = fd_set_non_blocking(sq->pipe_sched[1]);
 
     /* queues */
-    sq->need_kick_clock = MAX_CLOCK; //background thread wuke up time
     list_init(&sq->pending_queues);  //messages waiting to be sent
     list_init(&sq->request_queue);   //request messages form high to low level thread
     list_init(&sq->response_queue);  //response messages form low to high level thread
@@ -1198,11 +1188,16 @@ klipper:
     ret = pthread_cond_init(&sq->cond, NULL);
     HANDLE_ERROR(ret, fail)
 
-    /* set scheduling policy */
+    /**
+     * Set scheduling fifo policy so that backgrond_thread never releases the
+     * cpu and no time consuming context switching is performed (only specific
+     * system interrupts can preempt it but they don't require a complete
+     * context switching).
+     */
     pthread_attr_init(&sq->sched_policy);
     pthread_attr_setschedpolicy(&sq->sched_policy, SCHED_FIFO);
 
-    /* set thread scheduling priority */
+    /* set max possible background_thread scheduling priority */
     sq->sched_param.sched_priority = 1;
     pthread_attr_setschedparam(&sq->sched_policy, &sq->sched_param);    
 
@@ -1210,7 +1205,11 @@ klipper:
     ret = pthread_create(&sq->tid, &sq->sched_policy, background_thread, sq);
     HANDLE_ERROR(ret, fail)
 
-    /* set cpu affinity for background thread */
+    /** 
+     * Set cpu affinity for background_thread. The selected cpu has been
+     * isolated, therefor background_thread is the only process running
+     * there, meaning only system interrupts can preempt it.
+     */
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(sq->cpu, &cpuset);
@@ -1351,7 +1350,10 @@ ethercatqueue_send_command(struct ethercatqueue *sq,
     /* acquire mutex (this operation has to be as fast as possible) */
     pthread_mutex_lock(&sq->lock);
 
-    /* merge message queue with upcoming queue */
+    /**
+     * Merge message queue with upcoming queue.
+     * NOTE: lock for the min amountof time possible.
+     */
     list_add_tail(&qm->node, &sq->request_queue);
 
     /* release mutex */
@@ -1406,32 +1408,6 @@ ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, str
     /* merge message queue with upcoming queue */
     list_join_tail(msgs, &cq->upcoming_queue);
     sq->upcoming_bytes += len;
-
-    /* 
-     * Schedule new transmission if the current message min clock
-     * is lower than the current need_kick_clock, otherwise the
-     * message will not be sent in time but should not happen in
-     * in normal cases since it means that either the queues
-     * are not ordered or the command_event has been delayed for
-     * a very long time. The effect of an early call is to send
-     * an additional ethercat frame in the same sync cycle that
-     * will not contain the DC clock reference.
-     */
-    int mustwake = 0;
-    if (qm->min_clock < sq->need_kick_clock)
-    {
-        /* min possible kick clock */
-        sq->need_kick_clock = 0;
-        /* force background thread execution */
-        mustwake = 1;
-    }
-
-    /* wake the background thread if necessary (limit case) */
-    if (mustwake)
-    {
-        /** NOTE: disabled anticipated transmission */
-        //pollreactor_update_timer(sq->pr, EQPT_COMMAND, PR_NOW);
-    }
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);

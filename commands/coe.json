@@ -18,7 +18,7 @@
 					"pdos" : [
 						{
 							"index": 5632,
-							"n_entries": 1,
+							"n_entries": 2,
 							"entries": 0
 						}
 					],
@@ -43,8 +43,8 @@
 					"pdos" : [
 						{
 							"index": 5633,
-							"n_entries": 2,
-							"entries": 1
+							"n_entries": 3,
+							"entries": 0
 						}
 					],
 					"pdo_entries": [
@@ -88,7 +88,7 @@
 					"pdos" : [
 						{
 							"index": 5632,
-							"n_entries": 1,
+							"n_entries": 2,
 							"entries": 0
 						}
         			],
@@ -113,8 +113,8 @@
 					"pdos" : [
 						{
 							"index": 5633,
-							"n_entries": 2,
-							"entries": 1
+							"n_entries": 3,
+							"entries": 0
 						}
 					],
 					"pdo_entries": [

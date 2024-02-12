@@ -11,7 +11,7 @@
 /****************************************************************
  * Defines
  ****************************************************************/
-#define ETHERCATPVT_SIZE 8U //ethercat message size in bytes
+#define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
 
 
 /****************************************************************
@@ -22,7 +22,7 @@ struct pvtmsg
 {
     int len; //message size in bytes
     uint32_t oid; //associated compressor id
-    __attribute__((aligned(8))) uint8_t msg[ETHERCATPVT_SIZE]; //message data (keep alignment)
+    __attribute__((aligned(8))) uint8_t msg[ETHERCAT_PVT_SIZE]; //message data (keep alignment)
     union
     {
         /* filled when on a command queue */

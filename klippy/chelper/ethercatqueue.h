@@ -87,13 +87,13 @@ struct slavemonitor
     uint16_t master_window;                 //number of commands currently in frame buffer (1 or more pdo instances).
     uint8_t *off_slave_window;              //offset for slave window in the domain.
     uint16_t slave_window;                  //number of commands currently in drive buffer (local copy).
-    uint8_t *off_control_word;
-    uint16_t control_word;
-    uint8_t *off_status_word;
-    uint16_t status_word;
+    uint8_t *off_control_word;              //control word image offset
+    uint16_t control_word;                  //local copy of control word
+    uint8_t *off_status_word;               //status word image offset
+    uint16_t status_word;                   //local copy of status word
     uint16_t tx_size;                       //number tx pdo instances in the frame.
     uint16_t rx_size;                       //size of pvt buffer on slave side.
-    uint8_t slave_min_window;
+    uint8_t slave_min_window;               //slave windom minimum active size
     uint16_t oid;                           //pvtcompress object id (position in mastermonitor->monitor)
     uint16_t alias;                         //slave alias
     uint16_t position;                      //slave position
@@ -104,10 +104,10 @@ struct slavemonitor
     double sync1_st;                        //ethercat sync1 shify time (in seconds)
     uint8_t n_pdo_entries;                  //number of slave pdo entries
     ec_pdo_entry_info_t pdo_entries[ETHERCAT_MAX_PDO_ENTRIES]; //slave pdo entries
-    uint8_t n_pdos;                           //number of slave pdos
-    ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS];    //slave pdos
+    uint8_t n_pdos;                         //number of slave pdos
+    ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS];  //slave pdos
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
-    uint8_t *pvtdata[ETHERCAT_DOMAINS];   //pvt domain addresses
+    uint8_t *pvtdata[ETHERCAT_DOMAINS];     //pvt domain addresses
 };
 
 /* EtherCAT master status monitor */
@@ -162,7 +162,6 @@ struct ethercatqueue
     struct list_head pending_queues; //drive queues of pending messages waiting to be sent
     int ready_bytes; //number of bytes ready to be sent (depends on drive pvt buffer size)
     int upcoming_bytes; //number of bytes in upcoming messages to be sent (depends on drive pvt buffer size)
-    uint64_t need_kick_clock; //clock value at which the background thread needs to be woken up
     /* ethercat interface data */
     struct mastermonitor masterifc; //EtherCAT master interface
     struct sharedmonitor klippyifc; //klippy interface
