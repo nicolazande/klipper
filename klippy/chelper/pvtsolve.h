@@ -26,6 +26,34 @@ enum
     AF_X = 1 << 0, AF_Y = 1 << 1, AF_Z = 1 << 2,
 };
 
+/* ethercat slave offsets */
+enum
+{
+    ETHERCAT_OFFSET_MOVE_SEGMENT,
+    ETHERCAT_OFFSET_BUFFER_FREE_COUNT,
+    ETHERCAT_OFFSET_BUFFER_STATUS,
+    ETHERCAT_OFFSET_CONTROL_WORD,
+    ETHERCAT_OFFSET_STATUS_WORD,
+    ETHERCAT_OFFSET_MODE_OF_OPERATION,
+    ETHERCAT_OFFSET_POSITION_ACTUAL,
+    ETHERCAT_OFFSET_VELOCITY_ACTUAL,
+    ETHERCAT_OFFSET_MAX
+};
+
+/* copley operation mode */
+enum
+{
+    COPLEY_OPERATION_MODE_POSITION = 1,
+    COLPEY_OPERATION_MODE_VELOCITY = 3,
+    COLPEY_OPERATION_MODE_TORQUE = 4,
+    COLPEY_OPERATION_MODE_HOMING = 6,
+    COLPEY_OPERATION_MODE_INTERPOLATION = 7,
+    COLPEY_OPERATION_MODE_SYNC_POSITION = 8,
+    COLPEY_OPERATION_MODE_SYNC_VELOCITY = 9,
+    COLPEY_OPERATION_MODE_SYNC_TORQUE = 10,
+    COLPEY_OPERATION_MODE_SYNC_ANGLE = 11,
+};
+
 /* copley buffer or command mode */
 enum
 {
@@ -71,7 +99,8 @@ struct coe_status_word
     uint8_t remote:1;
     uint8_t target_reached:1;
     uint8_t limit_active:1;
-    uint8_t generic:2;
+    uint8_t homing_attained:1;
+    uint8_t generic_error:1;
     uint8_t moving:1;
     uint8_t homed:1;
 } __attribute((aligned(1), packed));

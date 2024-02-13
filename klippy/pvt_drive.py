@@ -87,9 +87,14 @@ class PVT_endstop:
                 break
         # get homing time
         next_clock = self._mcu.clock32_to_clock64(params['next_clock'])
-        next_clock = home_end_time/2 #TODO: remove later
-        if next_clock > home_end_time:
+        '''
+        TODO: uncomment if timeout enabled.
+        '''
+        '''
+        home_end_clock = self._mcu.print_time_to_clock(home_end_time)
+        if next_clock > home_end_clock:
             return -1.
+        '''
         return self._mcu.clock_to_print_time(next_clock - self._rest_ticks)
     
     def query_endstop(self, print_time):
@@ -99,8 +104,7 @@ class PVT_endstop:
         params = self._query_cmd.send([self._oid], minclock=clock)
         return params['finished']
 
-    
-        
+
 class PVT_drive:
     '''
     Interface to low-level mcu and chelper code for pvt drive.

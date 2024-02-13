@@ -17,6 +17,7 @@
 #include "ethercatmsg.h"
 #include "command.h"
 #include "ecrt.h"
+#include "pvtsolve.h"
 
 
 /****************************************************************
@@ -28,25 +29,14 @@
 #define ETHERCAT_DRIVES 2  //number of ethercat drives
 #define ETHERCAT_DOMAINS 1 //total number of domains
 #define ETHERCAT_MAX_SYNCS 3 //max number of syncs per slave
-#define ETHERCAT_MAX_REGISTERS 10 //max number of master registers
+#define ETHERCAT_MAX_REGISTERS 20 //max number of master registers
 #define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
-#define ETHERCAT_MAX_PDO_ENTRIES 10 //max number of pdo enries per slave
+#define ETHERCAT_MAX_PDO_ENTRIES 20 //max number of pdo enries per slave
 
 
 /****************************************************************
  * Custom data types
  ****************************************************************/
-/* ethercat slave offsets */
-enum
-{
-    ETHERCAT_OFFSET_MOVE_SEGMENT,
-    ETHERCAT_OFFSET_BUFFER_FREE_COUNT,
-    ETHERCAT_OFFSET_BUFFER_STATUS,
-    ETHERCAT_OFFSET_CONTROL_WORD,
-    ETHERCAT_OFFSET_STATUS_WORD,
-    ETHERCAT_OFFSET_MAX
-};
-
 /* pull queue message complete forward declaration */
 struct pull_queue_message
 {
@@ -84,6 +74,7 @@ struct domainmonitor
 /* EtherCAT slave status monitor */
 struct slavemonitor
 {
+    ec_slave_config_t *slave;
     uint16_t master_window;                 //number of commands currently in frame buffer (1 or more pdo instances).
     uint8_t *off_slave_window;              //offset for slave window in the domain.
     uint16_t slave_window;                  //number of commands currently in drive buffer (local copy).
@@ -91,6 +82,12 @@ struct slavemonitor
     uint16_t control_word;                  //local copy of control word
     uint8_t *off_status_word;               //status word image offset
     uint16_t status_word;                   //local copy of status word
+    uint8_t *off_operation_mode;
+    uint16_t operation_mode;
+    uint8_t *off_position_actual;
+    int32_t position_actual;
+    uint8_t *off_velocity_actual;
+    int32_t velocity_actual;
     uint16_t tx_size;                       //number tx pdo instances in the frame.
     uint16_t rx_size;                       //size of pvt buffer on slave side.
     uint8_t slave_min_window;               //slave windom minimum active size
@@ -156,8 +153,8 @@ struct ethercatqueue
     pthread_cond_t cond; //condition variable used for thread synchronization
     int receive_waiting; //flag indicating whether the ethercatqueue is waiting to receive data
     /* baud and clock tracking */
-    double idle_time; //next time when the ethernet port is idle (ready for next operation)
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
+    uint32_t last_clock;
     /* message queues */
     struct list_head pending_queues; //drive queues of pending messages waiting to be sent
     int ready_bytes; //number of bytes ready to be sent (depends on drive pvt buffer size)

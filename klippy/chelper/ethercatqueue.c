@@ -24,7 +24,6 @@
 #include "pollreactor.h" //pollreactor_alloc
 #include "pyhelper.h" //get_monotonic
 #include "ethercatqueue.h" //struct pvtmsg
-#include "pvtsolve.h" //pvtmove
 
 
 /****************************************************************
@@ -341,12 +340,17 @@ input_event(struct ethercatqueue *sq, double eventtime)
         //slave->slave_window = EC_READ_U16(slave->off_slave_window);
         
         /** NOTE: following lines only for test purpose, remove it!!!! */
-        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;        
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
         if ((slave->slave_window > slave->slave_min_window) && cw->enable_operation)
         {
             slave->slave_window--;
-        }   
+        }
+        sw->homing_attained = 1;
     }
+
+    /* update last clock for protocol */
+    sq->last_clock = clock_from_time(&sq->ce, eventtime);
 
     /* pre process ethercat frame */
     preprocess_frame(sq);
@@ -453,17 +457,12 @@ build_and_send_command(struct ethercatqueue *sq)
         }
         else
         {
-            errorf("full");
-
             /* no space (tx or rx) */
             master->full_counter = 1;
 
             /* stop as soon as one of the drive buffers (tx or rx) is full */
             break;
         }
-
-        errorf("received: min_clock = %u, req_clock = %u, oid = %u",
-        qm->min_clock, qm->req_clock, qm->oid);
 
         /* remove message from ready queue */
         list_del(&qm->node);
@@ -511,8 +510,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     }
 
     /* time parameters */
-    double idletime = eventtime > sq->idle_time ? eventtime : sq->idle_time; //current host time (limited by idle time)
-    idletime += master->frame_time; //current transmission estimated drive reception time (frame is back to master).
+    double idletime = eventtime + master->frame_time; //current transmission estimated drive reception time (frame is back to master).
     uint64_t ack_clock = clock_from_time(&sq->ce, idletime); //current transmission estimated drive reception clock
     uint64_t min_stalled_clock = MAX_CLOCK; //min clock among stalled messages (for next cycle)
     uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
@@ -720,15 +718,6 @@ command_event(struct ethercatqueue *sq, double eventtime)
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
-    static double old_eventtime;
-    double delta = eventtime-old_eventtime;
-    errorf(".");
-    errorf(" --> command eventtime: move_clock = %u, delta = %lf",
-    clock_from_time(&sq->ce, eventtime),
-    delta);
-    errorf(".");
-    old_eventtime = eventtime;
-
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
     int buflen = 0; //length (in bytes) of data to be transmitted
@@ -790,10 +779,6 @@ command_event(struct ethercatqueue *sq, double eventtime)
             /* write ethercat frame (always) */
             ecrt_master_send(master->master);
 
-            /* update idle time (take into account current transmission) */
-            double idletime = (eventtime > sq->idle_time ? eventtime : sq->idle_time);
-            sq->idle_time = idletime + master->frame_time;
-
             /* reset transmission parameters */
             buflen = 0; //buffer free
             master->full_counter = 0; //pdo slots free
@@ -816,8 +801,11 @@ command_event(struct ethercatqueue *sq, double eventtime)
         buflen += build_and_send_command(sq);
     }
 
+    /* update idle time (take into account current transmission) */
+    double idletime = eventtime + master->frame_time + master->wr_offset;
+
     /* set input event timer (when the frame is expected to be received back) */
-    pollreactor_update_timer(sq->pr, EQPT_INPUT, sq->idle_time + master->wr_offset);
+    pollreactor_update_timer(sq->pr, EQPT_INPUT, idletime);
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
@@ -930,6 +918,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
         slave->pdos[idx].index = pdos[i].index;
         slave->pdos[idx].n_entries = pdos[i].n_entries;
         slave->pdos[idx].entries = &slave->pdo_entries[old_n_pdo_entries];
+        old_n_pdo_entries += pdos[i].n_entries;
     }
 
     /* get number of available syncs */
@@ -1036,6 +1025,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
                                                          slave->vendor_id,
                                                          slave->product_code);
 
+        /* register slave */
+        slave->slave = sc;
+
         /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
 
@@ -1115,6 +1107,21 @@ ethercatqueue_init(struct ethercatqueue *sq)
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_STATUS_WORD;
             offset = dm->offsets[offset_idx];
             slave->off_status_word = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave operation mode */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MODE_OF_OPERATION;
+            offset = dm->offsets[offset_idx];
+            slave->off_operation_mode = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave position actual offset */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_POSITION_ACTUAL;
+            offset = dm->offsets[offset_idx];
+            slave->off_position_actual = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave velocity actual offset */
+            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_VELOCITY_ACTUAL;
+            offset = dm->offsets[offset_idx];
+            slave->off_velocity_actual = (uint8_t *)(dm->domain_pd + offset);
         }
     }
 

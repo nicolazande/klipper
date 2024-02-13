@@ -512,10 +512,26 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-    /**
-     * TODO: add ethercat logic to send homing request to
-     *       the selected drive axis.
-     */
+    
+    /* check oid */
+    if (oid < ETHERCAT_DRIVES)
+    {
+        /* get slave */
+        struct slavemonitor *slave = &sq->masterifc.monitor[oid];
+        /* control word */
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
+        /* set homing mode */
+        if (slave->off_operation_mode)
+        {
+            /* operation mode in frame */
+            *slave->off_operation_mode = COLPEY_OPERATION_MODE_HOMING;
+            /* local copy of operation mode */
+            slave->operation_mode = COLPEY_OPERATION_MODE_HOMING;
+            /* start homing */
+            cw->enable_operation = 1;
+        }
+    }
     return 0;
 }
 static int cp_p_endstop_home[1] = {PT_byte}; //oid
@@ -535,18 +551,36 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-    /**
-     * TODO: add ethercat logic to read the homing status
-     *       of the selected drive axis.
-     */
-    static uint8_t gg = 5;
-    /* get command encoder */
-    struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
-    /* create response  */
-    int8_t homing = 1;
-    int8_t finished = 1;
-    uint32_t next_clock = sq->idle_time;
-    uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
+    
+    /* check oid */
+    if (oid < ETHERCAT_DRIVES)
+    {
+        /* get slave */
+        struct slavemonitor *slave = &sq->masterifc.monitor[oid];
+        /* control word */
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        /* status word */
+        struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
+        /* check data */
+        if (cw && sw)
+        {
+            /* get data */
+            int8_t homing = (cw->operation_mode == COLPEY_OPERATION_MODE_HOMING);
+            int8_t finished = sw->homing_attained; //homed
+            uint32_t next_clock = sq->last_clock; //current input event clock
+            /* get command encoder */
+            struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
+            /* create response  */
+            uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
+            errorf("ENDSTOP OID = %u, STATUS = %u", oid, finished);
+            /* check if homing finished */
+            if (finished)
+            {
+                /* reset standard interpolation mode */
+                cw->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+            }
+        }
+    }
     return 0;
 }
 static int cp_p_endstop_query_state[1] = {PT_byte}; //oid
@@ -566,9 +600,21 @@ static int cp_f_stepper_stop_on_trigger(struct ethercatqueue *sq, void *out, uin
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-    /**
-     * TODO: add ethercat logic to stop the selected drive axis.
-     */
+    
+    /* check oid */
+    if (oid < ETHERCAT_DRIVES)
+    {
+        /* get slave */
+        struct slavemonitor *slave = &sq->masterifc.monitor[oid];
+        /* control word */
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        /** hard stop (NOTE: maybe sustitute with soft one) */
+        if (cw)
+        {
+            cw->enable_operation = 0;
+        }
+    }
+
     return 0;
 }
 static int cp_p_stepper_stop_on_trigger[1] = {PT_byte}; //oid

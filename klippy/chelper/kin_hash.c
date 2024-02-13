@@ -21,7 +21,7 @@
  * Private functions
  ****************************************************************/
 /** velocity step update helper */
-static double
+static inline double
 move_get_velocity(struct move *m, double move_time)
 {
     return (m->start_v + 2 * m->half_accel * move_time);
@@ -33,7 +33,7 @@ x_axis_forward_kinematics(struct drive_kinematics *sk, struct move *m, double mo
 {
     struct pose pose;
     pose.position = move_get_coord(m, move_time).x;
-    pose.velocity = move_get_velocity(m, move_time);
+    pose.velocity = move_get_velocity(m, move_time) * m->axes_r.x;
     pose.time = m->print_time + move_time;
     return pose;
 }
@@ -44,7 +44,7 @@ y_axis_forward_kinematics(struct drive_kinematics *sk, struct move *m, double mo
 {
     struct pose pose;
     pose.position = move_get_coord(m, move_time).y;
-    pose.velocity = move_get_velocity(m, move_time);
+    pose.velocity = move_get_velocity(m, move_time) * m->axes_r.y;
     pose.time = m->print_time + move_time;
     return pose;
 }
@@ -55,7 +55,7 @@ z_axis_forward_kinematics(struct drive_kinematics *sk, struct move *m, double mo
 {
     struct pose pose;
     pose.position = move_get_coord(m, move_time).z;
-    pose.velocity = move_get_velocity(m, move_time);
+    pose.velocity = move_get_velocity(m, move_time) * m->axes_r.z;
     pose.time = m->print_time + move_time;
     return pose;
 }

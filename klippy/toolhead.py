@@ -6,10 +6,11 @@
 import math, logging, importlib
 import mcu, chelper, kinematics.extruder
 
-# Common suffixes: _d is distance (in mm), _v is velocity (in
-#   mm/second), _v2 is velocity squared (mm^2/s^2), _t is time (in
-#   seconds), _r is ratio (scalar between 0.0 and 1.0)
-
+'''
+Common suffixes: _d is distance (in mm), _v is velocity (in mm/second),
+_v2 is velocity squared (mm^2/s^2), _t is time (in seconds),
+_r is ratio (scalar between 0.0 and 1.0)
+'''
 class Move:
     '''
     Move request.
@@ -23,12 +24,13 @@ class Move:
         self.timing_callbacks = []
         velocity = min(speed, toolhead.max_velocity)
         self.is_kinematic_move = True
+        # displacement for each axis (x, y, z, extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in (0, 1, 2, 3)]
+        # get total move in (x, y, z)
         self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:3]]))
         if move_d < .000000001:
-            # Extrude only move
-            self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
-                            end_pos[3])
+            # extrude only move
+            self.end_pos = (start_pos[0], start_pos[1], start_pos[2], end_pos[3])
             axes_d[0] = axes_d[1] = axes_d[2] = 0.
             self.move_d = move_d = abs(axes_d[3])
             inv_move_d = 0.
@@ -39,11 +41,13 @@ class Move:
             self.is_kinematic_move = False
         else:
             inv_move_d = 1. / move_d
+        # relative move for (x, y, z, extruder)
         self.axes_r = [d * inv_move_d for d in axes_d]
         self.min_move_t = move_d / velocity
-        # Junction speeds are tracked in velocity squared.  The
-        # delta_v2 is the maximum amount of this squared-velocity that
-        # can change in this move.
+        '''
+        Junction speeds are tracked in velocity squared. The delta_v2 is the maximum
+        amount of this squared-velocity that can change in this move.
+        '''
         self.max_start_v2 = 0.
         self.max_cruise_v2 = velocity**2
         self.delta_v2 = 2.0 * move_d * self.accel
@@ -76,9 +80,9 @@ class Move:
         '''
         if not self.is_kinematic_move or not prev_move.is_kinematic_move:
             return
-        # Allow extruder to calculate its maximum junction
+        # allow extruder to calculate its maximum junction
         extruder_v2 = self.toolhead.extruder.calc_junction(prev_move, self)
-        # Find max velocity using "approximated centripetal velocity"
+        # find max velocity using approximated centripetal velocity
         axes_r = self.axes_r
         prev_axes_r = prev_move.axes_r
         junction_cos_theta = -(axes_r[0] * prev_axes_r[0]
@@ -89,12 +93,11 @@ class Move:
         junction_cos_theta = max(junction_cos_theta, -0.999999)
         sin_theta_d2 = math.sqrt(0.5*(1.0-junction_cos_theta))
         R_jd = sin_theta_d2 / (1. - sin_theta_d2)
-        # Approximated circle must contact moves no further away than mid-move
+        # approximated circle must contact moves no further away than mid-move
         tan_theta_d2 = sin_theta_d2 / math.sqrt(0.5*(1.0+junction_cos_theta))
         move_centripetal_v2 = .5 * self.move_d * tan_theta_d2 * self.accel
-        prev_move_centripetal_v2 = (.5 * prev_move.move_d * tan_theta_d2
-                                    * prev_move.accel)
-        # Apply limits
+        prev_move_centripetal_v2 = (.5 * prev_move.move_d * tan_theta_d2 * prev_move.accel)
+        # apply limits
         self.max_start_v2 = min(
             R_jd * self.junction_deviation * self.accel,
             R_jd * prev_move.junction_deviation * prev_move.accel,
@@ -117,17 +120,19 @@ class Move:
         '''
         # time resolution (decimal position)
         TIME_RESOLUTION = 3 #milliseconds
-        # Determine accel, cruise, and decel portions of the move distance
+        # determine accel, cruise, and decel portions of the move distance
         half_inv_accel = .5 / self.accel
         accel_d = (cruise_v2 - start_v2) * half_inv_accel
         decel_d = (cruise_v2 - end_v2) * half_inv_accel
         cruise_d = self.move_d - accel_d - decel_d
-        # Determine move velocities
+        # determine move velocities
         self.start_v = start_v = math.sqrt(start_v2)
         self.cruise_v = cruise_v = math.sqrt(cruise_v2)
         self.end_v = end_v = math.sqrt(end_v2)
-        # Determine time spent in each portion of move (time is the
-        # distance divided by average velocity)
+        '''
+        Determine time spent in each portion of move (time is the distance
+        divided by average velocity).
+        '''
         self.accel_t = round(accel_d / ((start_v + cruise_v) * 0.5), TIME_RESOLUTION)
         self.cruise_t = round(cruise_d / cruise_v, TIME_RESOLUTION)
         self.decel_t = round(decel_d / ((end_v + cruise_v) * 0.5), TIME_RESOLUTION)
@@ -161,9 +166,11 @@ class MoveQueue:
         update_flush_count = lazy
         queue = self.queue
         flush_count = len(queue)
-        # Traverse queue from last to first move and determine maximum
-        # junction speed assuming the robot comes to a complete stop
-        # after the last move.
+        '''
+        Traverse queue from last to first move and determine maximum
+        junction speed assuming the robot comes to a complete stop
+        after the last move.
+        '''
         delayed = []
         next_end_v2 = next_smoothed_v2 = peak_cruise_v2 = 0.
         for i in range(flush_count-1, -1, -1):
@@ -173,24 +180,25 @@ class MoveQueue:
             reachable_smoothed_v2 = next_smoothed_v2 + move.smooth_delta_v2
             smoothed_v2 = min(move.max_smoothed_v2, reachable_smoothed_v2)
             if smoothed_v2 < reachable_smoothed_v2:
-                # It's possible for this move to accelerate
+                # it's possible for this move to accelerate
                 if (smoothed_v2 + move.smooth_delta_v2 > next_smoothed_v2
                     or delayed):
-                    # This move can decelerate or this is a full accel
-                    # move after a full decel move
+                    '''
+                    This move can decelerate or this is a full accel move
+                    after a full decel move.
+                    '''
                     if update_flush_count and peak_cruise_v2:
                         flush_count = i
                         update_flush_count = False
                     peak_cruise_v2 = min(move.max_cruise_v2, (
                         smoothed_v2 + reachable_smoothed_v2) * .5)
                     if delayed:
-                        # Propagate peak_cruise_v2 to any delayed moves
+                        # propagate peak_cruise_v2 to any delayed moves
                         if not update_flush_count and i < flush_count:
                             mc_v2 = peak_cruise_v2
                             for m, ms_v2, me_v2 in reversed(delayed):
                                 mc_v2 = min(mc_v2, ms_v2)
-                                m.set_junction(min(ms_v2, mc_v2), mc_v2
-                                               , min(me_v2, mc_v2))
+                                m.set_junction(min(ms_v2, mc_v2), mc_v2, min(me_v2, mc_v2))
                         del delayed[:]
                 if not update_flush_count and i < flush_count:
                     cruise_v2 = min((start_v2 + reachable_start_v2) * .5
@@ -198,15 +206,15 @@ class MoveQueue:
                     move.set_junction(min(start_v2, cruise_v2), cruise_v2
                                       , min(next_end_v2, cruise_v2))
             else:
-                # Delay calculating this move until peak_cruise_v2 is known
+                # delay calculating this move until peak_cruise_v2 is known
                 delayed.append((move, start_v2, next_end_v2))
             next_end_v2 = start_v2
             next_smoothed_v2 = smoothed_v2
         if update_flush_count or not flush_count:
             return
-        # Generate step times for all moves ready to be flushed
+        # generate step times for all moves ready to be flushed
         self.toolhead._process_moves(queue[:flush_count])
-        # Remove processed moves from the queue
+        # remove processed moves from the queue
         del queue[:flush_count]
 
     def add_move(self, move):
@@ -216,7 +224,7 @@ class MoveQueue:
         move.calc_junction(self.queue[-2])
         self.junction_flush -= move.min_move_t
         if self.junction_flush <= 0.:
-            # Enough moves have been queued to reach the target flush time.
+            # enough moves have been queued to reach the target flush time.
             self.flush(lazy=True)
 
 
