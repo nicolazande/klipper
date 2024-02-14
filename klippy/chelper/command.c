@@ -11,6 +11,7 @@
 #include <stdarg.h> // va_start
 #include <string.h> // memcpy
 #include "command.h" // output_P
+#include "pyhelper.h"
 
 
 /****************************************************************
@@ -48,11 +49,13 @@ static uint8_t command_encodef(uint8_t *buf, const struct command_encoder *ce, v
 /* add header and trailer bytes to a response message */
 static void command_add_frame(uint8_t *buf, uint8_t msglen);
 
+/* implement the standard crc ccitt algorithm on the given buffer */
+static uint16_t crc16_ccitt(uint8_t *buf, uint_fast8_t len);
+
 
 /****************************************************************
  * Private functions
  ****************************************************************/
-/* encode an integer as a variable length quantity (vlq) */
 static uint8_t *
 encode_int(uint8_t *p, uint32_t v)
 {
@@ -88,7 +91,6 @@ f4: *p++ = v & 0x7f;                //one byte
     return p;
 }
 
-/* parse a vlq integer */
 static uint32_t
 parse_int(uint8_t **pp)
 {
@@ -119,7 +121,6 @@ parse_int(uint8_t **pp)
     return v;
 }
 
-/* encode a response message */
 static uint8_t
 command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
 {
@@ -231,21 +232,32 @@ command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
     return p - buf + MESSAGE_TRAILER_SIZE;
 
 error:
-    errorf("Message encode error");
     return 0;
 }
 
-/* add header and trailer bytes to a response message block */
 static void
 command_add_frame(uint8_t *buf, uint8_t msglen)
 {
     buf[MESSAGE_POS_LEN] = msglen;
     buf[MESSAGE_POS_SEQ] = next_sequence;
-    //uint16_t crc = crc16_ccitt(buf, msglen - MESSAGE_TRAILER_SIZE);
-    uint16_t crc = 0;
+    uint16_t crc = crc16_ccitt(buf, msglen - MESSAGE_TRAILER_SIZE);
     buf[msglen - MESSAGE_TRAILER_CRC + 0] = crc >> 8;
     buf[msglen - MESSAGE_TRAILER_CRC + 1] = crc;
     buf[msglen - MESSAGE_TRAILER_SYNC] = MESSAGE_SYNC;
+}
+
+static uint16_t
+crc16_ccitt(uint8_t *buf, uint_fast8_t len)
+{
+    uint16_t crc = 0xffff;
+    while (len--)
+    {
+        uint8_t data = *buf++;
+        data ^= crc & 0xff;
+        data ^= data << 4;
+        crc = ((((uint16_t)data << 8) | (crc >> 8)) ^ (uint8_t)(data >> 4) ^ ((uint16_t)data << 3));
+    }
+    return crc;
 }
 
 
@@ -585,8 +597,17 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             /* check if homing finished */
             if (finished)
             {
-                /* reset standard interpolation mode */
-                cw->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+                /* reset operation mode in frame */
+                if (slave->off_operation_mode)
+                {
+                    *slave->off_operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+                }
+
+                /* reset local copy of interpolation mode */
+                slave->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+
+                /* disable operation (wait for activation) */
+                cw->enable_operation = 0;
             }
         }
     }

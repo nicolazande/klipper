@@ -66,7 +66,7 @@ struct coe_control_word
     uint8_t voltage_switch:1;
     uint8_t quick_stop:1;
     uint8_t enable_operation:1;
-    uint8_t operation_mode:3;
+    uint8_t operation_mode:3; //operation mode specific
     uint8_t reset_fault:1;
     uint8_t halt:1;
     uint8_t padding:7;

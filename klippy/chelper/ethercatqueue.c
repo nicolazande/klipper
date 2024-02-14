@@ -364,7 +364,7 @@ input_event(struct ethercatqueue *sq, double eventtime)
     /* update last clock for protocol */
     sq->last_clock = clock_from_time(&sq->ce, eventtime);
 
-    /* pre process ethercat frame */
+    /* prepare frame for next cycle */
     preprocess_frame(sq);
 
     /* process a high level thread request */
@@ -698,7 +698,7 @@ preprocess_frame(struct ethercatqueue *sq)
              * NOTE: if using multiple domains register the control word object only
              *       once so that for the other ones off_control_word is NULL.
              */
-            if (slave->off_control_word)
+            if ((slave->operation_mode == COLPEY_OPERATION_MODE_INTERPOLATION) && slave->off_control_word)
             {
                 /* get control word */
                 struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
