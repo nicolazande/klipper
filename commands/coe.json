@@ -10,7 +10,7 @@
 			"sync0_st" : 0,
 			"sync1_st" : 0,
 			"rx_size" : 32,
-			"slave_min_window" : 3,
+			"interpolation_window" : 3,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -109,7 +109,7 @@
 			"sync0_st" : 0,
 			"sync1_st" : 0,
 			"rx_size" : 32,
-			"slave_min_window" : 3,
+			"interpolation_window" : 3,
 			"syncs" : [
 				{
 					"index" : 0,

@@ -37,7 +37,7 @@
 /****************************************************************
  * Custom data types
  ****************************************************************/
-/* pull queue message complete forward declaration */
+/* pull queue message */
 struct pull_queue_message
 {
     uint8_t msg[MESSAGE_MAX];
@@ -55,11 +55,7 @@ struct command_queue
     struct list_node node;
 };
 
-/* 
- * Domain dedicated to a single pvt instance. A pvt instance is composed by
- * a pdo for each of the associated drives (X and Y coordinates have to be
- * transmitted together).
- */
+/* ethercat domain wrapper */
 struct domainmonitor
 {
     ec_domain_t *domain;                //domain used for drive pdos
@@ -71,74 +67,68 @@ struct domainmonitor
     ec_pdo_entry_reg_t registers[ETHERCAT_MAX_REGISTERS]; //domain registers
 };
 
-/* EtherCAT slave status monitor */
+/* ethercat slave wrapper */
 struct slavemonitor
 {
-    ec_slave_config_t *slave;
-    uint16_t master_window;                 //number of commands currently in frame buffer (1 or more pdo instances).
-    uint8_t *off_slave_window;              //offset for slave window in the domain.
-    uint16_t slave_window;                  //number of commands currently in drive buffer (local copy).
-    uint8_t *off_control_word;              //control word image offset
-    uint16_t control_word;                  //local copy of control word
-    uint8_t *off_status_word;               //status word image offset
-    uint16_t status_word;                   //local copy of status word
-    uint8_t *off_operation_mode;
-    uint16_t operation_mode;
-    uint8_t *off_position_actual;
-    int32_t position_actual;
-    uint8_t *off_velocity_actual;
-    int32_t velocity_actual;
-    uint16_t tx_size;                       //number tx pdo instances in the frame.
-    uint16_t rx_size;                       //size of pvt buffer on slave side.
-    uint8_t slave_min_window;               //slave windom minimum active size
-    uint16_t oid;                           //pvtcompress object id (position in mastermonitor->monitor)
-    uint16_t alias;                         //slave alias
-    uint16_t position;                      //slave position
-    uint32_t vendor_id;                     //slave vendor_id
-    uint32_t product_code;                  //slave product_code
-    uint16_t assign_activate;               //bitmask for dc clock channel used for synchronization
-    double sync0_st;                        //ethercat sync0 shify time (in seconds)
-    double sync1_st;                        //ethercat sync1 shify time (in seconds)
-    uint8_t n_pdo_entries;                  //number of slave pdo entries
+    /* etherlab master */
+    ec_slave_config_t *slave;      //ethercat slave
+    /* objects */
+    uint8_t *off_slave_window;     //offset for slave window in the domain.
+    uint16_t slave_window;         //number of commands currently in drive buffer (local copy).
+    uint8_t *off_control_word;     //control word image offset
+    uint16_t control_word;         //local copy of control word
+    uint8_t *off_status_word;      //status word image offset
+    uint16_t status_word;          //local copy of status word
+    uint8_t *off_operation_mode;   //operation mode offset
+    uint16_t operation_mode;       //local copy of operation mode
+    uint8_t *off_position_actual;  //actual position offset
+    int32_t position_actual;       //local copy of actual position
+    uint8_t *off_velocity_actual;  //actual velocity offset
+    int32_t velocity_actual;       //local copy of actual velocity
+    /* monitoring */
+    uint16_t tx_size;              //number tx pdo instances in the frame
+    uint16_t rx_size;              //size of pvt buffer on slave side
+    uint8_t interpolation_window;  //slave windom minimum active size for interpolation
+    uint16_t master_window;        //number of commands currently in frame buffer (1 or more pdo instances)
+    /* configuration */
+    uint16_t alias;                //slave alias
+    uint16_t position;             //slave position
+    uint32_t vendor_id;            //slave vendor_id
+    uint32_t product_code;         //slave product_code
+    uint16_t assign_activate;      //bitmask for dc clock channel used for synchronization
+    double sync0_st;               //ethercat sync0 shify time (in seconds)
+    double sync1_st;               //ethercat sync1 shify time (in seconds)
+    uint16_t oid;                  //compressor object id (position in mastermonitor->monitor)
+    /* pdo data */
+    uint8_t n_pdo_entries;         //number of slave pdo entries
     ec_pdo_entry_info_t pdo_entries[ETHERCAT_MAX_PDO_ENTRIES]; //slave pdo entries
-    uint8_t n_pdos;                         //number of slave pdos
-    ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS];  //slave pdos
+    uint8_t n_pdos;                //number of slave pdos
+    ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS]; //slave pdos
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
-    uint8_t *pvtdata[ETHERCAT_DOMAINS];     //pvt domain addresses
+    uint8_t *movedata[ETHERCAT_DOMAINS]; //ip segment move offset (support for multiple domains)
 };
 
-/* EtherCAT master status monitor */
+/* ethecat master wrapper */
 struct mastermonitor
 {
-    ec_master_t *master;                          //ethercat master
-    uint16_t frame_size;                          //total size in bytes of data (all domains)
-    uint16_t frame_pvt_size;                      //total size in bytes of data (pvt domains only)
-    uint8_t full_counter;                         //counter for signaling number of slaves for which pdo slots are full
-    double sync0_ct;                              //ethercat sync0 cycle time (in seconds)
-    double sync1_ct;                              //ethercat sync1 cycle time (in seconds)
-    double wr_offset;                             //time offset between next write and read operation
-    double frame_time;                            //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
-    uint8_t n_domains;                            //number of ethercat domains in use
+    /* etherlab master */
+    ec_master_t *master;                            //ethercat master
+    /* monitoring */
+    uint16_t frame_size;                            //total size in bytes of data (all domains)
+    uint16_t frame_pvt_size;                        //total size in bytes of data (pvt domains only)
+    uint8_t full_counter;                           //counter for signaling number of slaves for which pdo slots are full
+    /* configuration */
+    double sync0_ct;                                //ethercat sync0 cycle time (in seconds)
+    double sync1_ct;                                //ethercat sync1 cycle time (in seconds)
+    double wr_offset;                               //time offset between next write and read operation
+    double frame_time;                              //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
+    /* data buffers */
+    uint8_t n_domains;                              //number of ethercat domains in use
     struct domainmonitor domains[ETHERCAT_DOMAINS]; //pvt private domains
     struct slavemonitor monitor[ETHERCAT_DRIVES];   //storage for associated slave monitors
 };
 
-/* Shared interface (between high and low level ethercat threads) */
-struct sharedmonitor
-{
-    /* object dictionary */
-    uint16_t obj_index;
-    uint8_t obj_subindex;
-    uint8_t obj_len;
-    /* raw data */
-    void *data_in;
-    void *data_out;
-    uint16_t data_len;
-    /* callback table */
-    struct command_parser **cp_table;
-};
-
-/* EtherCAT message queue */
+/* ethercat message queue */
 struct ethercatqueue
 {
     /* reactor and scheduling */
@@ -154,20 +144,18 @@ struct ethercatqueue
     int receive_waiting; //flag indicating whether the ethercatqueue is waiting to receive data
     /* baud and clock tracking */
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
-    uint32_t last_clock;
+    uint32_t last_clock; //last input event (read operation) clock time
     /* message queues */
     struct list_head pending_queues; //drive queues of pending messages waiting to be sent
     int ready_bytes; //number of bytes ready to be sent (depends on drive pvt buffer size)
     int upcoming_bytes; //number of bytes in upcoming messages to be sent (depends on drive pvt buffer size)
     /* ethercat interface data */
     struct mastermonitor masterifc; //EtherCAT master interface
-    struct sharedmonitor klippyifc; //klippy interface
     /* internal protocol data */
-    uint64_t send_seq;
-    uint64_t receive_seq;
     struct list_head notify_queue;
     struct list_head request_queue; //list of high level thread requests
     struct list_head response_queue; //list of low level thread responses
+    struct command_parser **cp_table; //external list of protocol commands
 };
 
 
@@ -188,7 +176,7 @@ void ethercatqueue_slave_config(struct ethercatqueue *sq,
                                 double sync0_st,
                                 double sync1_st,
                                 uint8_t rx_size,
-                                uint8_t slave_min_window);
+                                uint8_t interpolation_window);
 
 /** configure an ethercat sync manager */
 void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,

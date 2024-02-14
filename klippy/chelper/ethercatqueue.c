@@ -79,9 +79,9 @@ static void kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd);
 /** 
  * Process a single request from the high level thread, execute the associated
  * callback and append the result to the response queue so that the high level
- * thread can read and further process it. The process is always synchronous
- * and only one command at a time can be processed since there is a single
- * instance of sharedmonitor in the ethercatqueue.
+ * thread can read and further process it. Thois function is is executed also
+ * in real time context, therefore find a proper time positioning, i.e. after
+ * an input event and before the next command event.
  */
 static void process_request(struct ethercatqueue *sq, double eventtime);
 
@@ -161,7 +161,6 @@ process_request(struct ethercatqueue *sq, double eventtime)
     if (!list_empty(&sq->request_queue))
     {
         /* data */
-        struct sharedmonitor *ifc = &sq->klippyifc; //shared interface
         struct queue_message *request = list_first_entry(&sq->request_queue, struct queue_message, node); //request messgae
         struct queue_message *response = message_alloc(); //response message (TODO: populate sent and receive time)
         uint8_t msglen; //message length in byte
@@ -178,13 +177,18 @@ process_request(struct ethercatqueue *sq, double eventtime)
         msglen = request->msg[MESSAGE_POS_LEN];
 #endif
 
-        /* get boundaries */
-        uint8_t *in = &request->msg[MESSAGE_HEADER_SIZE];
-        uint8_t *inend = &request->msg[msglen-MESSAGE_TRAILER_SIZE];
-        uint8_t *out = response->msg;
-        uint8_t *outend = &response->msg[MESSAGE_MAX-MESSAGE_TRAILER_SIZE];
+        /* get message boundaries */
+        uint8_t *in = &request->msg[MESSAGE_HEADER_SIZE]; //request data start address
+        uint8_t *inend = &request->msg[msglen-MESSAGE_TRAILER_SIZE]; //request end address
+        uint8_t *out = response->msg; //response start address
+        uint8_t *outend = &response->msg[MESSAGE_MAX-MESSAGE_TRAILER_SIZE]; //response end address
 
-        /* loop over request bytes (allow multiple commands per message) */
+        /**
+         * Loop over request bytes, isolate and execute single commands.
+         * NOTE: for the moment each request message buffer contains a
+         *       single command for simplicity but these logic allows
+         *       to handle multiple commands per request.
+         */
         while (in < inend)
         {
             /* get command id and move forward to arguments */
@@ -194,11 +198,12 @@ process_request(struct ethercatqueue *sq, double eventtime)
             if (cmdid < ETH_MAX_CP)
             {
                 /* get command parser */
-                cp = ifc->cp_table[cmdid];
+                cp = sq->cp_table[cmdid];
             }
             else
             {
                 /* unknown command */
+                errorf("Unknown protocol command: cmdid = %u", cmdid);
                 break;
             }
             
@@ -214,7 +219,7 @@ process_request(struct ethercatqueue *sq, double eventtime)
             /* check callback */
             if (func)
             {
-                /* check if command response fits msg buffer */
+                /* check if response data fits msg buffer */
                 if (out >= outend)
                 {
                     /* save old message reference */
@@ -223,7 +228,7 @@ process_request(struct ethercatqueue *sq, double eventtime)
                     /* append previous response to response queue */
                     list_add_tail(&response->node, &sq->response_queue);
                     
-                    /* create response message and update indexes */
+                    /* create additional response message and update indexes */
                     response = malloc(sizeof(*response));
                     response->notify_id = old_response->notify_id;
                     response->sent_time = old_response->sent_time;
@@ -233,13 +238,15 @@ process_request(struct ethercatqueue *sq, double eventtime)
                 }
 
                 /**
-                 * Execute command specific handler. NOTE: out is updated by func
-                 * according to response size, also in case of out of bounds so
-                 * that a new response message can be created automatically.
+                 * Execute command specific handler.
+                 * NOTE: out is updated directly in the callback according to the
+                 *       response size. In case of out of bounds a new response
+                 *       message is created automatically.
                  */
                 int ret = func(sq, out, args);
                 if (ret)
                 {
+                    /* error (release response) */
                     message_free(response);
                     return;
                 }
@@ -253,10 +260,10 @@ process_request(struct ethercatqueue *sq, double eventtime)
         response->len = response->msg[MESSAGE_POS_LEN];
         response->receive_time = eventtime;
 
+        /* check for message notification request */
         if (request->notify_id)
         {
             /* message requires notification (add to notify list) */
-            request->req_clock = sq->send_seq;
             list_add_tail(&request->node, &sq->notify_queue);
         }
         else
@@ -265,35 +272,29 @@ process_request(struct ethercatqueue *sq, double eventtime)
             message_free(request);
         }
 
-        /* 
-         * Add response to response queue, in case of error it will
-         * notify the high level thread which will take action.
-         */
+        /* check response data */
         if (response->len > 0)
         {
+            /* add response to response queue */
             list_add_tail(&response->node, &sq->response_queue);
         }
         else
         {
+            /* nothing to be sent (release respons) */
             message_free(response);
         }
     }
 
-    //uint32_t rseq_delta = ((response->msg[MESSAGE_POS_SEQ] - sq->receive_seq) & MESSAGE_SEQ_MASK);
-    //uint64_t rseq = sq->receive_seq + rseq_delta;
+    /* process notification queue */
     while (!list_empty(&sq->notify_queue))
     {
+        /* get message */
         struct queue_message *qm = list_first_entry(&sq->notify_queue, struct queue_message, node);
-        // uint64_t wake_seq = rseq - 1 - (len > MESSAGE_MIN ? 1 : 0);
-        // uint64_t notify_msg_sent_seq = qm->req_clock;
-        // if (notify_msg_sent_seq > wake_seq)
-        // {
-        //     break;
-        // }
         list_del(&qm->node);
-        qm->len = 0;
-        qm->sent_time = 0; //sq->last_receive_sent_time;
-        qm->receive_time = eventtime; //eventtime;
+        qm->len = 0; //signal high level thread of request end
+        qm->sent_time = 0; //unused (keep zero)
+        qm->receive_time = eventtime; //current event time
+        /* add to response queue */
         list_add_tail(&qm->node, &sq->response_queue);
     }
 
@@ -328,21 +329,32 @@ input_event(struct ethercatqueue *sq, double eventtime)
 
     /**
      * Read associated slaves window status (as soon as possible).
-     * NOTE: the slave_window objects (one for each drive) are all
-     *       registered in the first common domain.
      */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave */
         struct slavemonitor *slave = &master->monitor[i];
 
-        /* read current slave receive window */
-        //slave->slave_window = EC_READ_U16(slave->off_slave_window);
+        /* update slave window */
+        if (slave->off_slave_window)
+        {
+            slave->slave_window = EC_READ_U16(slave->off_slave_window);
+        }
+        /* update actual position */
+        if (slave->off_position_actual)
+        {
+            slave->position_actual = EC_READ_S32(slave->off_position_actual);
+        }
+        /* update actual velocity */
+        if (slave->off_velocity_actual)
+        {
+            slave->velocity_actual = EC_READ_S32(slave->off_velocity_actual);
+        }
         
         /** NOTE: following lines only for test purpose, remove it!!!! */
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-        if ((slave->slave_window > slave->slave_min_window) && cw->enable_operation)
+        if ((slave->slave_window > slave->interpolation_window) && cw->enable_operation)
         {
             slave->slave_window--;
         }
@@ -447,7 +459,7 @@ build_and_send_command(struct ethercatqueue *sq)
         if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size))    
         {
             /* populate domain data (directly mapped to kernel) */
-            memcpy(slave->pvtdata[slave->master_window], qm->msg, qm->len);
+            memcpy(slave->movedata[slave->master_window], qm->msg, qm->len);
             
             /* increase master tx index */
             slave->master_window++;
@@ -666,7 +678,7 @@ preprocess_frame(struct ethercatqueue *sq)
             struct slavemonitor *slave = &master->monitor[j];
 
             /* get slave segment buffer data */
-            struct pvtmove *move = (struct pvtmove *)slave->pvtdata[i];
+            struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[i];
 
             /**
              * Reset segment slot in doamin. This allows to schedule command
@@ -697,7 +709,7 @@ preprocess_frame(struct ethercatqueue *sq)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                if (slave->slave_window < slave->slave_min_window)
+                if (slave->slave_window < slave->interpolation_window)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->enable_operation = 0;
@@ -863,7 +875,7 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
                            double sync0_st,
                            double sync1_st,
                            uint8_t rx_size,
-                           uint8_t slave_min_window)
+                           uint8_t interpolation_window)
 {
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
@@ -882,7 +894,7 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
     slave->oid = index;
     slave->n_pdo_entries = 0;
     slave->n_pdos = 0;
-    slave->slave_min_window = slave_min_window;
+    slave->interpolation_window = interpolation_window;
 }
 
 /** configure an ethercat sync manager */
@@ -1091,7 +1103,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
             /* setup interpolation move segment */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MOVE_SEGMENT;
             offset = dm->offsets[offset_idx];
-            slave->pvtdata[i] = (uint8_t *)(dm->domain_pd + offset);
+            slave->movedata[i] = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup buffer free slot count */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_BUFFER_FREE_COUNT;
@@ -1181,7 +1193,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
     list_init(&sq->notify_queue);    //notify queue for protocol messages
 
     /* associate external ethercat callback table */
-    sq->klippyifc.cp_table = command_parser_table;
+    sq->cp_table = command_parser_table;
 
     /* initialize ethercatqueue mutex used to protect its data fields */
     ret = pthread_mutex_init(&sq->lock, NULL);

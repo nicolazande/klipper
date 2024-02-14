@@ -1,8 +1,8 @@
 /**
  * \file command.c
  *
- * \brief .
- *
+ * \brief Internal protocol for communication between high and low
+ *        level ethercat threads.
  */
 
 /****************************************************************
@@ -231,7 +231,7 @@ command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
     return p - buf + MESSAGE_TRAILER_SIZE;
 
 error:
-    shutdown("Message encode error");
+    errorf("Message encode error");
     return 0;
 }
 
@@ -456,7 +456,7 @@ static struct command_parser cp_default =
     .num_args = 0,
     .flags = 0,
     .num_params = 0,
-    .param_types = &cp_p_default,
+    .param_types = (const uint8_t *)&cp_p_default,
     .func = &cp_f_default,
 };
 
@@ -467,7 +467,10 @@ static int cp_f_command_reset_step_clock(struct ethercatqueue *sq, void *out, ui
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint32_t waketime = args[1];
-    /** TODO: add logic for next step time */
+    /** TODO: add logic for next step time, it should use adapted
+     *        copley firmware and send a segment representing the
+     *        absolute time of the following step.
+     */
     return 0;
 }
 static int cp_p_reset_step_clock[2] = {PT_byte, PT_uint32}; //oid, clock
@@ -477,7 +480,7 @@ static struct command_parser cp_reset_step_clock =
     .num_args = 2,
     .flags = 0,
     .num_params = 2,
-    .param_types = &cp_p_reset_step_clock,
+    .param_types = (const uint8_t *)&cp_p_reset_step_clock,
     .func = &cp_f_command_reset_step_clock,
 };
 
@@ -487,12 +490,19 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-    /* get position from slave moinitor */
-    int32_t position = 88; //sq->masterifc.monitor[oid].position; /** TODO: add int32_t specific field */
-    /* get response command parser */
-    struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
-    /* create response  */
-    uint8_t msglen = command_encode_and_frame(buf, ce, oid, position);
+
+    /* check oid */
+    if (oid < ETHERCAT_DRIVES)
+    {
+        /* get slave */
+        struct slavemonitor *slave = &sq->masterifc.monitor[oid];
+        /* get actual position */
+        int32_t position = slave->position_actual;
+        /* get response command parser */
+        struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
+        /* create response  */
+        uint8_t msglen = command_encode_and_frame(buf, ce, oid, position);
+    }    
     return 0;
 }
 static int cp_p_stepper_get_position[1] = {PT_byte}; //oid
@@ -502,7 +512,7 @@ static struct command_parser cp_stepper_get_position =
     .num_args = 1,
     .flags = 0,
     .num_params = 1,
-    .param_types = &cp_p_stepper_get_position,
+    .param_types = (const uint8_t *)&cp_p_stepper_get_position,
     .func = &cp_f_stepper_get_position,
 };
 
@@ -541,7 +551,7 @@ static struct command_parser cp_endstop_home =
     .num_args = 1,
     .flags = 0,
     .num_params = 1,
-    .param_types = &cp_p_endstop_home,
+    .param_types = (const uint8_t *)&cp_p_endstop_home,
     .func = &cp_f_endstop_home,
 };
 
@@ -572,7 +582,6 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
-            errorf("ENDSTOP OID = %u, STATUS = %u", oid, finished);
             /* check if homing finished */
             if (finished)
             {
@@ -590,7 +599,7 @@ static struct command_parser cp_endstop_query_state =
     .num_args = 1,
     .flags = 0,
     .num_params = 1,
-    .param_types = &cp_p_endstop_query_state,
+    .param_types = (const uint8_t *)&cp_p_endstop_query_state,
     .func = &cp_f_endstop_query_state,
 };
 
@@ -624,7 +633,7 @@ static struct command_parser cp_stepper_stop_on_trigger =
     .num_args = 1,
     .flags = 0,
     .num_params = 1,
-    .param_types = &cp_p_stepper_stop_on_trigger,
+    .param_types = (const uint8_t *)&cp_p_stepper_stop_on_trigger,
     .func = &cp_f_stepper_stop_on_trigger,
 };
 
@@ -639,7 +648,7 @@ static struct command_encoder ce_default =
     .msg_id = ETH_DEFAULT_CE + ETH_MAX_CP,
     .max_size = 0,
     .num_params = 0,
-    .param_types = &ce_p_default,
+    .param_types = (const uint8_t *)&ce_p_default,
 };
 
 /* stepper position command encoder */
@@ -649,7 +658,7 @@ static struct command_encoder ce_stepper_position =
     .msg_id = ETH_STEPPER_POSITION_CE + ETH_MAX_CP,
     .max_size = MESSAGE_MAX-MESSAGE_TRAILER_SIZE,
     .num_params = 2,
-    .param_types = &ce_p_stepper_position,
+    .param_types = (const uint8_t *)&ce_p_stepper_position,
 };
 
 /* endstop state command encoder */
@@ -659,7 +668,7 @@ static struct command_encoder ce_endstop_state =
     .msg_id = ETH_ENDSTOP_STATE_CE + ETH_MAX_CP,
     .max_size = MESSAGE_MAX-MESSAGE_TRAILER_SIZE,
     .num_params = 4,
-    .param_types = &ce_p_endstop_state,
+    .param_types = (const uint8_t *)&ce_p_endstop_state,
 };
 
 

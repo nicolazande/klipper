@@ -151,7 +151,7 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
      * This can be done only because the queue message msg field is guaranteed to be 8
      * bytes aligned.
      */
-    struct pvtmove *move = (struct pvtmove *)qm->msg;
+    struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
     move->header.type = COPLEY_MODE_BUFFER;
     move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
     move->header.format = 0; //0 = buffer mode, 1 = command mode
