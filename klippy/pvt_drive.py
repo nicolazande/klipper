@@ -82,6 +82,7 @@ class PVT_endstop:
         while 1:
             # query drive endstop state
             params = self._query_cmd.send([self._oid])
+            logging.info("homing status = %s" % params)
             if params["finished"]:
                 # endstop triggered
                 break

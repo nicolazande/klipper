@@ -352,13 +352,20 @@ input_event(struct ethercatqueue *sq, double eventtime)
         }
         
         /** NOTE: following lines only for test purpose, remove it!!!! */
-        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-        struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-        if ((slave->slave_window > slave->interpolation_window) && cw->enable_operation)
         {
-            slave->slave_window--;
+            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+            struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
+            if ((slave->slave_window > slave->interpolation_window) && cw->enable_operation)
+            {
+                slave->slave_window--;
+            }
+            static uint16_t i = 0;
+            if (i > 5000)
+            {
+                sw->homing_attained = 1;
+            }
+            i = (i + 1) % 10000;
         }
-        sw->homing_attained = 1;
     }
 
     /* update last clock for protocol */
