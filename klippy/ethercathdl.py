@@ -155,7 +155,7 @@ class EthercatReader:
         else:
             logging.info("Hardware not suppoerted")
         # load ethercat configuration
-        self._load_ethercat_config('./commands/coe.json')
+        self._load_ethercat_config('./canopen/config.json')
         # initialize and start low level thread
         self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
         # create and start high level thread
@@ -167,7 +167,7 @@ class EthercatReader:
         # obtain and load drive specific data dictionary
         identify_data = None
         try:
-            with open('./commands/drive_commands.json', 'r') as command_file:
+            with open('./canopen/commands.json', 'r') as command_file:
                 identify_data = command_file.read()
         except:
             logging.info("%sError in reading ethercat command file.", self.warn_prefix)

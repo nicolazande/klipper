@@ -60,12 +60,22 @@ extern struct command_parser *command_parser_table[ETH_MAX_CP];
 /****************************************************************
  * Private function prototypes
  ****************************************************************/
+/* callback timer to send data to the ethercat port */
+static double command_event(struct ethercatqueue *sq, double eventtime);
+
 /**
- * Wake up the ethercat high level thread if it is waiting. It needs
- * to further process the messages in the receive queue.
+ * Read EtherCAT frame coming back from the drives and update internal structures.
  */
-static void
-check_wake_receive(struct ethercatqueue *sq);
+static double input_event(struct ethercatqueue *sq, double eventtime);
+
+/**
+ * Callback for input activity on the pipe. This function is continuosly
+ * run by the poll reactor and, as soon as data (dummy bytes) is found
+ * on the rx side of the internal pipe, it updates the command timer (to
+ * zero), indirectly forcing an execution of command_event(). This is
+ * the low level thread counterpart of kick_bg_thread.
+ */
+static void kick_event(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Write to the ethercatqueue internal pipe to force the execution 
@@ -76,6 +86,12 @@ check_wake_receive(struct ethercatqueue *sq);
  */
 static void kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd);
 
+/**
+ * Wake up the ethercat high level thread if it is waiting. It needs
+ * to further process the messages in the receive queue.
+ */
+static void check_wake_receive(struct ethercatqueue *sq);
+
 /** 
  * Process a single request from the high level thread, execute the associated
  * callback and append the result to the response queue so that the high level
@@ -85,48 +101,23 @@ static void kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd);
  */
 static void process_request(struct ethercatqueue *sq, double eventtime);
 
-/**
- * Read EtherCAT frame coming back from the drives and update internal structures.
- */
-static double
-input_event(struct ethercatqueue *sq, double eventtime);
-
-
-/**
- * Callback for input activity on the pipe. This function is continuosly
- * run by the poll reactor and, as soon as data (dummy bytes) is found
- * on the rx side of the internal pipe, it updates the command timer (to
- * zero), indirectly forcing an execution of command_event(). This is
- * the low level thread counterpart of kick_bg_thread.
- */
-static void
-kick_event(struct ethercatqueue *sq, double eventtime);
+/** pre process ethercat frame (reset and configuration check) */
+static void preprocess_frame(struct ethercatqueue *sq);
 
 /** 
  * Populate ethercat domain for the current cycle, all mapped objects
  * are transmitted in the current cycle frame.
  */
-static int
-build_and_send_command(struct ethercatqueue *sq);
+static int build_and_send_command(struct ethercatqueue *sq);
 
 /**
  * Determine schedule time of next command event and move messages
  * from pending queue to ready queue for each drive.
  */
-static double
-check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
-
-/* callback timer to send data to the ethercat port */
-static double
-command_event(struct ethercatqueue *sq, double eventtime);
-
-/** pre process ethercat frame (reset and configuration check) */
-static void
-preprocess_frame(struct ethercatqueue *sq);
+static double check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
 
 /** main background thread for reading/writing to ethercat port */
-static void *
-background_thread(void *data);
+static void *background_thread(void *data);
 
 
 /****************************************************************
@@ -355,16 +346,7 @@ input_event(struct ethercatqueue *sq, double eventtime)
         {
             struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-            if ((slave->slave_window > slave->interpolation_window) && cw->enable_operation)
-            {
-                slave->slave_window--;
-            }
-            static uint16_t i = 0;
-            if (i > 5000)
-            {
-                sw->homing_attained = 1;
-            }
-            i = (i + 1) % 10000;
+            sw->homing_attained = 1;
         }
     }
 
@@ -515,6 +497,8 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     /* 
      * Check for free buffer slots on slave side only. There is no need to check tx side
      * since when this function is called it is guaranteed to have all pdo slots free.
+     * Stop as soon as one drive receive buffer is full, even if the others are not, this
+     * allows to keep better drive synchronization (common steps in the same frame).
      */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
@@ -544,7 +528,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
             /* get first message in queue */
             struct pvtmsg *qm = list_first_entry(&cq->upcoming_queue, struct pvtmsg, node);
 
-            /* 
+            /**
              * Select only the pending messages that can be sent before the current estimated drive
              * reception clock. In this case qm->min_clock represents the earliest time when the
              * message can be sent, if it is greater than the estimated frame reception time
@@ -593,9 +577,9 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     }
 
     /* 
-     * Check if the current cycle pvt domains data is ready, a drive 
-     * specific check is performed in build_and_send_command(), but
-     * this avoids to have an undefinitely growing ready queue.
+     * Early stop check (step space in domain is full). A drive specific
+     * check is performed in build_and_send_command(), but this avoids
+     * having an undefinitely growing ready queue.
      */
     if (sq->ready_bytes >= master->frame_pvt_size)
     {
@@ -622,7 +606,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         return PR_NEVER;
     }
 
-    /* 
+    /**
      * Calculate the amount of time in advance a command has to be sent to the
      * drive before being executed: higher it is, safer the operation is,
      * but fuller the drive buffer will be (potentially completely full).
@@ -741,16 +725,18 @@ command_event(struct ethercatqueue *sq, double eventtime)
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
     int buflen = 0; //length (in bytes) of data to be transmitted
     double waketime; //wake time of next command event
+    uint64_t sync_clock = TIMES2NS(eventtime); //distributed clock value
 
-    /** set master application time (TODO: check delayed read operation) */
-    ecrt_master_application_time(master->master, TIMES2NS(eventtime));
+    /** set master application time */
+    ecrt_master_application_time(master->master, sync_clock);
 
     /**
      * Synchronize the reference clock (first DC capable slave) with the
-     * master internal time. TODO: this operation doesn't need to be
-     * performed every cycle, therefore add a counter enable logic.
+     * master internal time (use eventtime for stability).
+     * TODO: this operation doesn't need to be performed every cycle,
+     *       therefore add a counter enable logic.
      */
-    ecrt_master_sync_reference_clock_to(master->master, TIMES2NS(eventtime));
+    ecrt_master_sync_reference_clock_to(master->master, sync_clock);
 
     /** 
      * Queue the DC clock drift compensation datagram, all slaves are
