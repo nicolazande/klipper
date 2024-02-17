@@ -113,12 +113,9 @@ class Move:
         NOTE: the acceleration, cruise and deceleration times are calculated
               with 1ms resolution, so that the trapezoidal queue items can
               be directly processed by the drive.
-              The last move in the whole print will be rounded to the nearest
-              millisecond multiple, causing a small positioning error in the
-              range on hundredth of millimeter.
         '''
         # time resolution (decimal position)
-        TIME_RESOLUTION = 3 #milliseconds
+        TIME_DECIMALS = 3 #milliseconds
         # determine accel, cruise, and decel portions of the move distance
         half_inv_accel = .5 / self.accel
         accel_d = (cruise_v2 - start_v2) * half_inv_accel
@@ -128,13 +125,19 @@ class Move:
         self.start_v = start_v = math.sqrt(start_v2)
         self.cruise_v = cruise_v = math.sqrt(cruise_v2)
         self.end_v = end_v = math.sqrt(end_v2)
-        '''
-        Determine time spent in each portion of move (time is the distance
-        divided by average velocity).
-        '''
-        self.accel_t = round(accel_d / ((start_v + cruise_v) * 0.5), TIME_RESOLUTION)
-        self.cruise_t = round(cruise_d / cruise_v, TIME_RESOLUTION)
-        self.decel_t = round(decel_d / ((end_v + cruise_v) * 0.5), TIME_RESOLUTION)
+        # determine time spent in each portion of move
+        self.accel_t = round(accel_d / ((start_v + cruise_v) * 0.5), TIME_DECIMALS)
+        self.cruise_t = round(cruise_d / cruise_v, TIME_DECIMALS)
+        self.decel_t = round(decel_d / ((end_v + cruise_v) * 0.5), TIME_DECIMALS)        
+        # recalculate distance covered after time approximation.
+        accel_d = (start_v + cruise_v) * 0.5 * self.accel_t
+        cruise_d = cruise_v * self.cruise_t
+        decel_d = (end_v + cruise_v) * 0.5 * self.decel_t
+        move_d = accel_d + cruise_d + decel_d
+        # correct cruise speed (total distance covered has to be the same)
+        move_t = self.accel_t + 2*self.cruise_t + self.decel_t
+        if move_t > 0:
+            self.cruise_v -= 2*(move_d - self.move_d)/move_t
 
 
 LOOKAHEAD_FLUSH_TIME = 0.250
