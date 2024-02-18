@@ -667,6 +667,9 @@ process_frame(struct ethercatqueue *sq)
             /* get slave */
             struct slavemonitor *slave = &master->monitor[j];
 
+            /* get control word */
+            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
             /* get slave segment buffer data */
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[i];
 
@@ -688,11 +691,8 @@ process_frame(struct ethercatqueue *sq)
              * NOTE: if using multiple domains register the control word object only
              *       once so that for the other ones off_control_word is NULL.
              */
-            if ((slave->operation_mode == COLPEY_OPERATION_MODE_INTERPOLATION) && slave->off_control_word)
+            if ((slave->operation_mode == COLPEY_OPERATION_MODE_INTERPOLATION) && cw)
             {
-                /* get control word */
-                struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-
                 /**
                  * Check receive buffer status and perform automatic transition
                  * of enable operation command, i.e. automatic start when there
@@ -1038,9 +1038,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
                              master->monitor[i].assign_activate, //dc channel used
-                             TIMES2NS(master->sync0_ct), //sync0 cycle time
+                             TIMES2NS(master->sync0_ct),  //sync0 cycle time
                              TIMES2NS(master->sync0_st),  //sync0 shift time
-                             TIMES2NS(master->sync1_ct), //sync1 cycle time
+                             TIMES2NS(master->sync1_ct),  //sync1 cycle time
                              TIMES2NS(master->sync1_st)); //sync1 shift time
     }
 
@@ -1061,9 +1061,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
     ret = ecrt_master_activate(master->master);
 
     /**
-     * Get domain data addresses. NOTE: perform this operation only
-     * after master activation since the process data image map
-     * from kernel to userspace has to be already valid.
+     * Get domain data addresses.
+     * NOTE: perform this operation only after master activation since the process
+     *       data image map from kernel to userspace has to be already valid.
      */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
     {
@@ -1106,6 +1106,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_CONTROL_WORD;
             offset = dm->offsets[offset_idx];
             slave->off_control_word = (uint8_t *)(dm->domain_pd + offset);
+            struct coe_control_word *cw = slave->off_control_word;
+            if (cw)
+            {
+                /* ensure that enable operation is disabled at startup */
+                cw->enable_operation = 0;
+            }
 
             /* setup slave status word */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_STATUS_WORD;
@@ -1175,8 +1181,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
      * is no activity on the pipe, return immediately and don't wait
      * in blocking mode. 
      */
-    ret = fd_set_non_blocking(sq->pipe_sched[0]);
-    ret = fd_set_non_blocking(sq->pipe_sched[1]);
+    fd_set_non_blocking(sq->pipe_sched[0]);
+    fd_set_non_blocking(sq->pipe_sched[1]);
 
     /* queues */
     list_init(&sq->pending_queues);  //messages waiting to be sent
@@ -1249,10 +1255,13 @@ ethercatqueue_exit(struct ethercatqueue *sq)
 {
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
+
     /* process last eventual request */
     process_request(sq, PR_NOW);
+
     /* join and stop current thread */
     int ret = pthread_join(sq->tid, NULL);
+
     if (ret)
     {
         report_errno("pthread_join", ret);
@@ -1271,11 +1280,13 @@ ethercatqueue_free(struct ethercatqueue *sq)
     {
         ethercatqueue_exit(sq);
     }
+
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
     message_queue_free(&sq->request_queue);
     message_queue_free(&sq->response_queue);
     message_queue_free(&sq->notify_queue);
+
     /* free all pending queues */
     while (!list_empty(&sq->pending_queues))
     {
@@ -1294,10 +1305,13 @@ ethercatqueue_free(struct ethercatqueue *sq)
             free(qm);
         }
     }
+
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);
+
     /* free associated poll reactor */
     pollreactor_free(sq->pr);
+
     /* delete ethercatqueue */
     free(sq);
 }
@@ -1322,12 +1336,14 @@ ethercatqueue_free_commandqueue(struct command_queue *cq)
     {
         return;
     }
+
     /* ready_queue and upcoming_queue need to be already deallocated */
     if (!list_empty(&cq->ready_queue) || !list_empty(&cq->upcoming_queue))
     {
         errorf("Memory leak! Can't free non-empty commandqueue");
         return;
     }
+
     free(cq);
 }
 

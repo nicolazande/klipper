@@ -544,7 +544,7 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
 
         /* set homing mode */
-        if (slave->off_operation_mode)
+        if (slave->off_operation_mode && cw)
         {
             /* operation mode in frame */
             *slave->off_operation_mode = COLPEY_OPERATION_MODE_HOMING;
