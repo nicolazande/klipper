@@ -40,7 +40,6 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time and memory limits */
-#define WR_TIME_OFFSET    0.002     //offset between write and next read operation (without frame_time)
 #define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* helpers */
@@ -53,14 +52,14 @@
 /****************************************************************
  * Data
  ****************************************************************/
-/* external command parser table */
+/** external command parser table */
 extern struct command_parser *command_parser_table[ETH_MAX_CP];
 
 
 /****************************************************************
  * Private function prototypes
  ****************************************************************/
-/* callback timer to send data to the ethercat port */
+/** callback timer to send data to the ethercat port */
 static double command_event(struct ethercatqueue *sq, double eventtime);
 
 /**
@@ -101,8 +100,8 @@ static void check_wake_receive(struct ethercatqueue *sq);
  */
 static void process_request(struct ethercatqueue *sq, double eventtime);
 
-/** pre process ethercat frame (reset and configuration check) */
-static void preprocess_frame(struct ethercatqueue *sq);
+/** process ethercat frame (reset and configuration check) */
+static void process_frame(struct ethercatqueue *sq);
 
 /** 
  * Populate ethercat domain for the current cycle, all mapped objects
@@ -354,7 +353,7 @@ input_event(struct ethercatqueue *sq, double eventtime)
     sq->last_clock = clock_from_time(&sq->ce, eventtime);
 
     /* prepare frame for next cycle */
-    preprocess_frame(sq);
+    process_frame(sq);
 
     /* process a high level thread request */
     process_request(sq, eventtime);
@@ -513,7 +512,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     }
 
     /* time parameters */
-    double idletime = eventtime + master->frame_time; //current transmission estimated drive reception time (frame is back to master).
+    double idletime = eventtime + master->sync0_st; //current transmission estimated drive reception time (frame is back to master).
     uint64_t ack_clock = clock_from_time(&sq->ce, idletime); //current transmission estimated drive reception clock
     uint64_t min_stalled_clock = MAX_CLOCK; //min clock among stalled messages (for next cycle)
     uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
@@ -652,9 +651,9 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
 }
 
-/** pre process ethercat frame (reset and configuration check) */
+/** process ethercat frame (reset and configuration check) */
 static void
-preprocess_frame(struct ethercatqueue *sq)
+process_frame(struct ethercatqueue *sq)
 {
     /* get master */
     struct mastermonitor *master = &sq->masterifc;
@@ -671,8 +670,8 @@ preprocess_frame(struct ethercatqueue *sq)
             /* get slave segment buffer data */
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[i];
 
-            /**
-             * Reset segment slot in doamin. This allows to schedule command
+            /*
+             * Reset segment slot in doamin allowing to schedule the command
              * events at regular intervals, even without active segments.
              */
             if (move)
@@ -806,11 +805,11 @@ command_event(struct ethercatqueue *sq, double eventtime)
         buflen += build_and_send_command(sq);
     }
 
-    /* update idle time (take into account current transmission) */
-    double idletime = eventtime + master->frame_time + master->wr_offset;
+    /* compute time of next input (read) event */
+    double inputtime = eventtime + master->sync0_st + master->frame_time;
 
     /* set input event timer (when the frame is expected to be received back) */
-    pollreactor_update_timer(sq->pr, EQPT_INPUT, idletime);
+    pollreactor_update_timer(sq->pr, EQPT_INPUT, inputtime);
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
@@ -865,8 +864,6 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
                            uint32_t vendor_id,
                            uint32_t product_code,
                            uint16_t assign_activate,
-                           double sync0_st,
-                           double sync1_st,
                            uint8_t rx_size,
                            uint8_t interpolation_window)
 {
@@ -880,8 +877,6 @@ ethercatqueue_slave_config(struct ethercatqueue *sq,
     slave->vendor_id = vendor_id;
     slave->product_code = product_code;
     slave->assign_activate = assign_activate;
-    slave->sync0_st = sync0_st;
-    slave->sync1_st = sync1_st;
     slave->rx_size = rx_size;
     slave->tx_size = ETHERCAT_DOMAINS;
     slave->oid = index;
@@ -944,18 +939,22 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
 void __visible 
 ethercatqueue_master_config(struct ethercatqueue *sq,
                             double sync0_ct,
-                            double sync1_ct)
+                            double sync0_st,
+                            double sync1_ct,
+                            double sync1_st,
+                            double frame_time)
 {
     /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
 
     /* reset and initialize master */
     master->sync0_ct = sync0_ct;
+    master->sync0_st = sync0_st;
     master->sync1_ct = sync1_ct;
-    master->wr_offset = sync0_ct / 2; /** TODO: add to config file if needed */
+    master->sync1_st = sync1_st;
     master->frame_size = 0;
     master->frame_pvt_size = 0;
-    master->frame_time = 0.; /** TODO: add proper value */
+    master->frame_time = frame_time;
     master->full_counter = 0;
 
     /* reset domain register counter (incremental) */
@@ -1040,9 +1039,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
         ecrt_slave_config_dc(sc,
                              master->monitor[i].assign_activate, //dc channel used
                              TIMES2NS(master->sync0_ct), //sync0 cycle time
-                             TIMES2NS(slave->sync0_st),  //sync0 shift time
-                             TIMES2NS(master->sync1_ct), //sync0 cycle time
-                             TIMES2NS(slave->sync1_st)); //sync0 shift time
+                             TIMES2NS(master->sync0_st),  //sync0 shift time
+                             TIMES2NS(master->sync1_ct), //sync1 cycle time
+                             TIMES2NS(master->sync1_st)); //sync1 shift time
     }
 
     /* configure master domains */
@@ -1332,7 +1331,7 @@ ethercatqueue_free_commandqueue(struct command_queue *cq)
     free(cq);
 }
 
-/** send a single synchronous command from high to low level thread */
+/** send a single command from high to low level thread */
 void __visible
 ethercatqueue_send_command(struct ethercatqueue *sq,
                            uint8_t *msg,
@@ -1362,10 +1361,7 @@ ethercatqueue_send_command(struct ethercatqueue *sq,
     /* acquire mutex (this operation has to be as fast as possible) */
     pthread_mutex_lock(&sq->lock);
 
-    /**
-     * Merge message queue with upcoming queue.
-     * NOTE: lock for the min amountof time possible.
-     */
+    /* add message to request queue */
     list_add_tail(&qm->node, &sq->request_queue);
 
     /* release mutex */
@@ -1499,14 +1495,19 @@ ethercatqueue_set_clock_est(struct ethercatqueue *sq,
     pthread_mutex_unlock(&sq->lock);
 }
 
-/* return a string buffer containing statistics for the ethercat port */
+/** 
+ * Return a string buffer containing statistics for the ethercat queue.
+ * NOTE: this function does not lock the ethercat queue while copying
+ *       data, therefore it can happen that stats is corrupted.
+ *       It is not worth to add potential delay in the background
+ *       thread for these statistics.
+ */
 void __visible
 ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len)
 {
     struct ethercatqueue stats;
-    //pthread_mutex_lock(&sq->lock);
+    /* get data */
     memcpy(&stats, sq, sizeof(stats));
-    //pthread_mutex_unlock(&sq->lock);
     /* print to bufffer */
     snprintf(buf, len, " ready_bytes=%u upcoming_bytes=%u",
              stats.ready_bytes, stats.upcoming_bytes);

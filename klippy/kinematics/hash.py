@@ -7,7 +7,10 @@
 import logging, stepper, pvt_drive
 from . import idex_modes
 
-class HashKinematics:   
+class HashKinematics:
+    '''
+    Hash kinematics.
+    '''
     def __init__(self, toolhead, config):
         # get printer
         self.printer = config.get_printer()

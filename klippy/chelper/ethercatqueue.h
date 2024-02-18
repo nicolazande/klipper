@@ -96,8 +96,6 @@ struct slavemonitor
     uint32_t vendor_id;            //slave vendor_id
     uint32_t product_code;         //slave product_code
     uint16_t assign_activate;      //bitmask for dc clock channel used for synchronization
-    double sync0_st;               //ethercat sync0 shify time (in seconds)
-    double sync1_st;               //ethercat sync1 shify time (in seconds)
     uint16_t oid;                  //compressor object id (position in mastermonitor->monitor)
     /* pdo data */
     uint8_t n_pdo_entries;         //number of slave pdo entries
@@ -119,8 +117,9 @@ struct mastermonitor
     uint8_t full_counter;                           //counter for signaling number of slaves for which pdo slots are full
     /* configuration */
     double sync0_ct;                                //ethercat sync0 cycle time (in seconds)
+    double sync0_st;                                //ethercat sync0 shify time (in seconds)
     double sync1_ct;                                //ethercat sync1 cycle time (in seconds)
-    double wr_offset;                               //time offset between next write and read operation
+    double sync1_st;                                //ethercat sync1 shify time (in seconds)
     double frame_time;                              //time needed for a frame to be received back by the master (frame_time << min(sync0_ct, sync1_ct))
     /* data buffers */
     uint8_t n_domains;                              //number of ethercat domains in use
@@ -173,8 +172,6 @@ void ethercatqueue_slave_config(struct ethercatqueue *sq,
                                 uint32_t vendor_id,
                                 uint32_t product_code,
                                 uint16_t assign_activate,
-                                double sync0_st,
-                                double sync1_st,
                                 uint8_t rx_size,
                                 uint8_t interpolation_window);
 
@@ -191,7 +188,10 @@ void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
 /** configure ethercat master */
 void ethercatqueue_master_config(struct ethercatqueue *sq,
                                  double sync0_ct,
-                                 double sync1_ct);
+                                 double sync0_st,
+                                 double sync1_ct,
+                                 double sync1_st,
+                                 double frame_time);
 
 /** configure ethercat master domain registers */
 void ethercatqueue_master_config_registers(struct ethercatqueue *sq,

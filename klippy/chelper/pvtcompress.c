@@ -9,16 +9,16 @@
 /****************************************************************
  * Includes
  ****************************************************************/
-#include <math.h> // sqrt
-#include <stddef.h> // offsetof
-#include <stdint.h> // uint32_t
-#include <stdio.h> // fprintf
-#include <stdlib.h> // malloc
-#include <string.h> // memset
-#include "compiler.h" // DIV_ROUND_UP
-#include "pyhelper.h" // errorf
-#include "ethercatqueue.h" // struct pvtmsg
-#include "pvtcompress.h" // pvtcompress_alloc
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "compiler.h"
+#include "pyhelper.h"
+#include "ethercatqueue.h"
+#include "pvtcompress.h"
 
 
 /****************************************************************
@@ -44,8 +44,8 @@ struct pvtcompress
     uint64_t last_step_clock; //drive clock value of the last scheduled move
     uint32_t oid; //object id associated with the pvt step compressor (unique for each drive)
     uint32_t seq_num; //sequence number of last scheduled step
-    double position_scaling;
-    double velocity_scaling;
+    double position_scaling; //position scaling (from mm to ticks)
+    double velocity_scaling; //position scaling (from mm/s to ticks/s)
     double last_position; //last known position of the drive
     struct list_head msg_queue; //linked list of commands (moves) to be executed on the drive
     struct list_head history_list; //linked list of historical drive information
@@ -80,9 +80,36 @@ struct drivesync
 
 
 /****************************************************************
- * Private functions
+ * Private function prototypes
  ****************************************************************/
 /** free items from the history list up to end_clock */
+static void free_history(struct pvtcompress *sc, uint64_t end_clock);
+
+/** determine the print time of the last scheduled step */
+static void calc_last_step_print_time(struct pvtcompress *sc);
+
+/** 
+ * Set the conversion rate from host print time to mcu clock.
+ * This function is indirectly called by the mcu module in
+ * check_active() and adjust the time offset and frequency
+ * with respect to the main mcu. Nothe that this time is not
+ * criticat since is used only for ordering the steps.
+ */
+static void pvtcompress_set_time(struct pvtcompress *sc, double time_offset, double mcu_freq);
+
+/** append a move step command */
+void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time);
+
+/** 
+ * Implement a binary heap algorithm to track when the next available
+ * pvt move the will be available.
+ */
+static void heap_replace(struct drivesync *ss, uint64_t req_clock);
+
+
+/****************************************************************
+ * Private functions
+ ****************************************************************/
 static void
 free_history(struct pvtcompress *sc, uint64_t end_clock)
 {
@@ -98,7 +125,6 @@ free_history(struct pvtcompress *sc, uint64_t end_clock)
     }
 }
 
-/** determine the print time of the last scheduled step */
 static void
 calc_last_step_print_time(struct pvtcompress *sc)
 {
@@ -115,13 +141,6 @@ calc_last_step_print_time(struct pvtcompress *sc)
     }
 }
 
-/** 
- * Set the conversion rate from host print time to mcu clock.
- * This function is indirectly called by the mcu module in
- * check_active() and adjust the time offset and frequency
- * with respect to the main mcu. Nothe that this time is not
- * criticat since is used only for ordering the steps.
- */
 static void
 pvtcompress_set_time(struct pvtcompress *sc, double time_offset, double mcu_freq)
 {
@@ -130,7 +149,6 @@ pvtcompress_set_time(struct pvtcompress *sc, double time_offset, double mcu_freq
     calc_last_step_print_time(sc);
 }
 
-/** append a move step command */
 void
 pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
 {
@@ -155,8 +173,8 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     move->header.type = COPLEY_MODE_BUFFER;
     move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
     move->header.format = 0; //0 = buffer mode, 1 = command mode
-    move->position = (int32_t)(pose->position * sc->position_scaling) & 0xFFFFFF; //move absolute start position [ticks].
-    move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling) & 0xFFFFFF; //move constant velocity [ticks/s].
+    move->position = (int32_t)(pose->position * sc->position_scaling); //move absolute start position [ticks].
+    move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
     move->time = (uint8_t)(move_time * 1000.);  //move time duration [ms] (up to next pose)
 
     /*
@@ -205,17 +223,10 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     hs->velocity = pose->velocity;
     list_add_head(&hs->node, &sc->history_list);
 
-    /* 
-     * Open loop update of step print time, the correction update based on
-     * the mcu time offset is done periodically through the serial module.
-     */
+    /* open loop update of step print time */
     calc_last_step_print_time(sc);
 }
 
-/** 
- * Implement a binary heap algorithm to track when the next available
- * pvt move the will be available.
- */
 static void
 heap_replace(struct drivesync *ss, uint64_t req_clock)
 {
@@ -300,7 +311,7 @@ pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock)
 
 /** set last_position in the pvtcompress object */
 int __visible
-pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double last_position)
+pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, uint32_t last_position)
 {
     /* update last position */
     sc->last_position = last_position;
@@ -309,7 +320,7 @@ pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double las
     struct pvthistory *hs = malloc(sizeof(*hs));
     memset(hs, 0, sizeof(*hs));
     hs->first_clock = hs->last_clock = clock;
-    hs->start_position = last_position;
+    hs->start_position = (double)last_position / sc->position_scaling;
     list_add_head(&hs->node, &sc->history_list);
     return 0;
 }
@@ -531,7 +542,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
 
     if (!list_empty(&msgs))
     {
-        /* transmit atch of steps */
+        /* transmit steps */
         ethercatqueue_send_batch(ss->sq, ss->cq, &msgs);
     }
     

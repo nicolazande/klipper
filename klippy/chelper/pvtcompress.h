@@ -56,7 +56,7 @@ void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_t
 int pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock);
 
 /** set last position in the compressor */
-int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double last_position);
+int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, uint32_t last_position);
 
 /** search history of moves to find a past position at a given clock */
 double pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock);

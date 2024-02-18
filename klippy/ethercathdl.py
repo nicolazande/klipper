@@ -94,15 +94,17 @@ class EthercatReader:
         master = identify_data["master"]
         slaves = identify_data["slaves"]
         # initilaize master configuration
-        self.ffi_lib.ethercatqueue_master_config(self.ethercatqueue, master["sync0_ct"], master["sync1_ct"])
+        self.ffi_lib.ethercatqueue_master_config(self.ethercatqueue,
+                                                 master["sync0_ct"], master["sync0_st"],
+                                                 master["sync1_ct"], master["sync1_st"],
+                                                 master["frame_time"])
         # process slaves
         for slave_idx, slave in enumerate(slaves):
             # configure slave
             self.ffi_lib.ethercatqueue_slave_config(self.ethercatqueue, slave_idx,
                                                     slave["alias"], slave["position"],
                                                     slave["vendor_id"], slave["product_code"],
-                                                    slave["assign_activate"], slave["sync0_st"],
-                                                    slave["sync1_st"], slave["rx_size"],
+                                                    slave["assign_activate"], slave["rx_size"],
                                                     slave["interpolation_window"])
             # get slave syncs and process them
             syncs = slave["syncs"]
