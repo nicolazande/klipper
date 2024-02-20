@@ -111,6 +111,7 @@ struct mastermonitor
 {
     /* etherlab master */
     ec_master_t *master;                            //ethercat master
+    ec_master_state_t state;                        //master state
     /* monitoring */
     uint16_t frame_size;                            //total size in bytes of data (all domains)
     uint16_t frame_pvt_size;                        //total size in bytes of data (pvt domains only)

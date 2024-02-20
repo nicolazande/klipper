@@ -46,7 +46,8 @@
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
 /* switches */
-#define MESSAGE_CHECK_FORMAT (0U)
+#define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
+#define CHECK_MASTER_STATE (0U)    //check ethercat master state
 
 
 /****************************************************************
@@ -102,6 +103,12 @@ static void process_request(struct ethercatqueue *sq, double eventtime);
 
 /** process ethercat frame (reset and configuration check) */
 static void process_frame(struct ethercatqueue *sq);
+
+/** run canopen DS402 state machine */
+static inline void coe_state_machine(struct slavemonitor *slave);
+
+/** check ethercat master state */
+static void check_master_state(struct ethercatqueue *sq);
 
 /** 
  * Populate ethercat domain for the current cycle, all mapped objects
@@ -340,14 +347,35 @@ input_event(struct ethercatqueue *sq, double eventtime)
         {
             slave->velocity_actual = EC_READ_S32(slave->off_velocity_actual);
         }
+        /* update status word */
+        if (slave->off_status_word)
+        {
+            slave->status_word = EC_READ_U16(slave->off_status_word);
+        }
         
         /** NOTE: following lines only for test purpose, remove it!!!! */
         {
             struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
             sw->homing_attained = 1;
+            if (!sw->operation_enabled)
+            {
+                if (!sw->switch_on)
+                {
+                    sw->switch_on = 1;
+                }
+                else
+                {
+                    sw->operation_enabled = 1;
+                }
+            }
         }
     }
+
+#if CHECK_MASTER_STATE
+    /* check master state */
+    check_master_state(sq);
+#endif
 
     /* update last clock for protocol */
     sq->last_clock = clock_from_time(&sq->ce, eventtime);
@@ -454,6 +482,12 @@ build_and_send_command(struct ethercatqueue *sq)
 
             /* increase slave rx index in advance */
             slave->slave_window++;
+
+            {
+                /** NOTE: MERDA */
+                struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
+                errorf("--> oid = %u, req_clock = %lu, position = %d, velocity = %d, time = %u", qm->oid, qm->req_clock, move->position, move->velocity, move->time);
+            }
         }
         else
         {
@@ -651,6 +685,84 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
 }
 
+static inline void
+coe_state_machine(struct slavemonitor *slave)
+{
+    /* get slave satus and control word */
+    struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
+    struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
+    /* check objects */
+    if (cw && sw)
+    {
+        /* check operation emable */
+        if (!sw->operation_enabled)
+        {
+            /* check switch on */
+            if (!sw->switch_on)
+            {
+                /* check switch ready */
+                if (!sw->switch_ready)
+                {
+                    /* check fault */
+                    if (sw->fault)
+                    {
+                        /* reset fault */
+                        *cw = (struct coe_control_word)
+                        {
+                            .reset_fault = 1
+                        };
+                    }
+                    else
+                    {
+                        /* setup switch */
+                        *cw = (struct coe_control_word)
+                        {
+                            .voltage_switch = 1,
+                            .quick_stop = 1
+                        };
+                    }
+                }
+                else
+                {
+                    /* switch on */
+                    *cw = (struct coe_control_word)
+                    {
+                        .power_switch = 1,
+                        .voltage_switch = 1,
+                        .quick_stop = 1
+                    };
+                }
+            }
+            else
+            {
+                /* enable operation */
+                *cw = (struct coe_control_word)
+                {
+                    .power_switch = 1,
+                    .voltage_switch = 1,
+                    .quick_stop = 1,
+                    .enable_operation = 1
+                };
+            }
+        }
+        else
+        {
+            /* maintain enable operation */
+            *cw = (struct coe_control_word)
+            {
+                .power_switch = 1,
+                .voltage_switch = 1,
+                .quick_stop = 1,
+                .enable_operation = 1
+            };
+        }
+
+        /* update local copy of control word */
+        slave->control_word = *(uint16_t *)cw;
+    }
+}
+
 /** process ethercat frame (reset and configuration check) */
 static void
 process_frame(struct ethercatqueue *sq)
@@ -667,15 +779,18 @@ process_frame(struct ethercatqueue *sq)
             /* get slave */
             struct slavemonitor *slave = &master->monitor[j];
 
-            /* get control word */
-            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-
             /* get slave segment buffer data */
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[i];
 
-            /*
+            /** run DS402 state machine */
+            coe_state_machine(slave);
+
+            /**
              * Reset segment slot in doamin allowing to schedule the command
              * events at regular intervals, even without active segments.
+             * TODO: from documentation it is not clear, but maybe sending a segment
+             *       with the same sequence number of the previous has no effect,
+             *       therefore this reset may be uncecessary.
              */
             if (move)
             {
@@ -686,32 +801,37 @@ process_frame(struct ethercatqueue *sq)
                 move->velocity = 0;
             }
 
-            /** 
-             * Configure slave specific control word.
-             * NOTE: if using multiple domains register the control word object only
-             *       once so that for the other ones off_control_word is NULL.
-             */
-            if ((slave->operation_mode == COLPEY_OPERATION_MODE_INTERPOLATION) && cw)
+            /* stop before buffer underflow */
+            if (slave->operation_mode == COLPEY_OPERATION_MODE_INTERPOLATION)
             {
+                /* get control word */
+                struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
                 /**
                  * Check receive buffer status and perform automatic transition
                  * of enable operation command, i.e. automatic start when there
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                if (slave->slave_window < slave->interpolation_window)
+                if (cw && (slave->slave_window < slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->enable_operation = 0;
                 }
-                else
-                {
-                    /* enable operation (interpolation can be performed) */
-                    cw->enable_operation = 1;
-                }
             }
         }
     }
+}
+
+static void check_master_state(struct ethercatqueue *sq)
+{
+    /* get master */
+    struct mastermonitor *master = &sq->masterifc; //ethercat master interface
+
+    /* read ethercat master state */
+    ecrt_master_state(master->master, &master->state);
+
+    /** TODO: add proper error handling */
 }
 
 static double
@@ -719,6 +839,14 @@ command_event(struct ethercatqueue *sq, double eventtime)
 {
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
+
+    {
+        /** NOTE: MERDA */
+        static double old_eventtime;
+        errorf("--> command event delta = %lf", eventtime-old_eventtime);
+        errorf(".");
+        old_eventtime = eventtime;
+    }
 
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
@@ -1106,12 +1234,6 @@ ethercatqueue_init(struct ethercatqueue *sq)
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_CONTROL_WORD;
             offset = dm->offsets[offset_idx];
             slave->off_control_word = (uint8_t *)(dm->domain_pd + offset);
-            struct coe_control_word *cw = slave->off_control_word;
-            if (cw)
-            {
-                /* ensure that enable operation is disabled at startup */
-                cw->enable_operation = 0;
-            }
 
             /* setup slave status word */
             offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_STATUS_WORD;
@@ -1233,7 +1355,10 @@ ethercatqueue_init(struct ethercatqueue *sq)
     ret = pthread_setaffinity_np(sq->tid, sizeof(cpu_set_t), &cpuset);
     HANDLE_ERROR(ret, fail)
 
-    /* start cyclic ethercat frame transmission */
+    /* force first asynchronous input event */
+    pollreactor_update_timer(sq->pr, EQPT_INPUT, PR_NOW);
+
+    /* start of cyclic frame transmission */
     pollreactor_update_timer(sq->pr, EQPT_COMMAND, PR_NOW);
 
 fail:

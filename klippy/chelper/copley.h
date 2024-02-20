@@ -70,7 +70,7 @@ struct coe_control_word
     uint8_t reset_fault:1;
     uint8_t halt:1;
     uint8_t padding:7;
-} __attribute((aligned(1), packed));
+} __attribute((packed));
 
 /* status word */
 struct coe_status_word
@@ -91,7 +91,7 @@ struct coe_status_word
     uint8_t generic_error:1;
     uint8_t moving:1;
     uint8_t homed:1;
-} __attribute((aligned(1), packed));
+} __attribute((packed));
 
 /* interpolation move commandon*/
 struct coe_ip_move
@@ -116,6 +116,6 @@ struct coe_ip_move
     uint8_t time; //time in ms
     int32_t position:24; //current position
     int32_t velocity:24; //current speed
-} __attribute((aligned(1), packed));
+} __attribute((packed));
 
 #endif // copley.h

@@ -542,16 +542,20 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         struct slavemonitor *slave = &sq->masterifc.monitor[oid];
         /* control word */
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        /* status word */
+        struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
 
         /* set homing mode */
-        if (slave->off_operation_mode && cw)
+        if (slave->off_operation_mode)
         {
             /* operation mode in frame */
             *slave->off_operation_mode = COLPEY_OPERATION_MODE_HOMING;
+            
             /* local copy of operation mode */
             slave->operation_mode = COLPEY_OPERATION_MODE_HOMING;
-            /* start homing */
-            cw->enable_operation = 1;
+
+            /* disable operation (allow next trigger) */
+            cw->enable_operation = 0;
         }
     }
     return 0;
@@ -595,18 +599,15 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
             /* check if homing finished */
-            if (finished)
+            if (slave->off_operation_mode && finished)
             {
                 /* reset operation mode in frame */
-                if (slave->off_operation_mode)
-                {
-                    *slave->off_operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
-                }
+                *slave->off_operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
 
                 /* reset local copy of interpolation mode */
                 slave->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
 
-                /* disable operation (wait for activation) */
+                /* disable operation (allow next trigger) */
                 cw->enable_operation = 0;
             }
         }
@@ -638,7 +639,9 @@ static int cp_f_stepper_stop_on_trigger(struct ethercatqueue *sq, void *out, uin
         struct slavemonitor *slave = &sq->masterifc.monitor[oid];
         /* control word */
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-        /** hard stop (NOTE: maybe sustitute with soft one) */
+        /* status word */
+        struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
+        /** hard stop */
         if (cw)
         {
             cw->enable_operation = 0;
