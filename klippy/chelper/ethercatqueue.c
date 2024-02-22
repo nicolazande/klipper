@@ -33,16 +33,17 @@
 #define EQPF_PIPE   0               //index of rx-cmd pipe (pipe where application stores cmd to be sent)
 #define EQPF_NUM    1               //number of file descriptors used by a ethercatqueue
 /* timers */
-#define EQPT_COMMAND    0           //position of command timer in ethercatqueue timer list
-#define EQPT_INPUT      1           //position of input timer in ethercatqueue timer list
-#define EQPT_PROTOCOL   2           //position of command timer in ethercatqueue timer list
-#define EQPT_NUM        3           //number of timer used by a ethercatqueue
+#define EQPT_CYCLIC     0           //position of input timer in ethercatqueue timer list
+#define EQPT_PROTOCOL   1           //position of command timer in ethercatqueue timer list
+#define EQPT_NUM        1           //number of timer used by a ethercatqueue
 /* transport layer */
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
-/* time and memory limits */
+/* time limits */
 #define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
+/* memory limits */
+#define MAX_CYCLE_SEGMENTS ETHERCAT_DOMAINS
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
@@ -61,13 +62,8 @@ extern struct command_parser *command_parser_table[ETH_MAX_CP];
 /****************************************************************
  * Private function prototypes
  ****************************************************************/
-/** callback timer to send data to the ethercat port */
-static double command_event(struct ethercatqueue *sq, double eventtime);
-
-/**
- * Read EtherCAT frame coming back from the drives and update internal structures.
- */
-static double input_event(struct ethercatqueue *sq, double eventtime);
+/** timer callback for cyclic event */
+static double cyclic_event(struct ethercatqueue *sq, double eventtime);
 
 /** timer callback for protocol event */
 static double protocol_event(struct ethercatqueue *sq, double eventtime);
@@ -76,7 +72,7 @@ static double protocol_event(struct ethercatqueue *sq, double eventtime);
  * Callback for input activity on the pipe. This function is continuosly
  * run by the poll reactor and, as soon as data (dummy bytes) is found
  * on the rx side of the internal pipe, it updates the command timer (to
- * zero), indirectly forcing an execution of command_event(). This is
+ * zero), indirectly forcing an execution of cyclic_event(). This is
  * the low level thread counterpart of kick_bg_thread.
  */
 static void kick_event(struct ethercatqueue *sq, double eventtime);
@@ -103,28 +99,28 @@ static void check_wake_receive(struct ethercatqueue *sq);
  * in real time context, therefore find a proper time positioning, i.e. after
  * an input event and before the next command event.
  */
-static void process_request(struct ethercatqueue *sq, double eventtime);
+static inline void process_request(struct ethercatqueue *sq, double eventtime);
 
 /** process ethercat frame (reset and configuration check) */
-static void process_frame(struct ethercatqueue *sq);
+static inline void process_frame(struct ethercatqueue *sq);
 
 /** run canopen DS402 state machine */
 static inline void coe_state_machine(struct slavemonitor *slave);
 
 /** check ethercat master state */
-static void check_master_state(struct ethercatqueue *sq);
+static inline void check_master_state(struct ethercatqueue *sq);
 
 /** 
  * Populate ethercat domain for the current cycle, all mapped objects
  * are transmitted in the current cycle frame.
  */
-static int build_and_send_command(struct ethercatqueue *sq);
+static inline int build_and_send_command(struct ethercatqueue *sq);
 
 /**
  * Determine schedule time of next command event and move messages
  * from pending queue to ready queue for each drive.
  */
-static double check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
+static inline double check_send_command(struct ethercatqueue *sq, int pending, double eventtime);
 
 /** main background thread for reading/writing to ethercat port */
 static void *background_thread(void *data);
@@ -155,7 +151,7 @@ kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd)
     }
 }
 
-static void 
+static inline void
 process_request(struct ethercatqueue *sq, double eventtime)
 {
     /* check request from high level thread */
@@ -307,106 +303,6 @@ process_request(struct ethercatqueue *sq, double eventtime)
 };
 
 static double
-input_event(struct ethercatqueue *sq, double eventtime)
-{
-    /* acquire mutex */
-    pthread_mutex_lock(&sq->lock);
-
-    /* get master interface */
-    struct mastermonitor *master = &sq->masterifc;
-    
-    /* receive process data */
-    ecrt_master_receive(master->master);
-
-    /* loop over domains */
-    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
-    {
-        /* get domain */
-        struct domainmonitor *dm = &master->domains[i];
-
-        /* process received data (from datagram to domain) */
-        ecrt_domain_process(dm->domain);
-
-        /** update domain state (TODO: add error handling) */
-        ecrt_domain_state(dm->domain, &dm->domain_state);
-    }
-
-    /**
-     * Read associated slaves window status (as soon as possible).
-     */
-    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    {
-        /* get slave */
-        struct slavemonitor *slave = &master->monitor[i];
-
-        /* update slave window */
-        if (slave->off_slave_window)
-        {
-            slave->slave_window = EC_READ_U16(slave->off_slave_window);
-        }
-        /* update actual position */
-        if (slave->off_position_actual)
-        {
-            slave->position_actual = EC_READ_S32(slave->off_position_actual);
-        }
-        /* update actual velocity */
-        if (slave->off_velocity_actual)
-        {
-            slave->velocity_actual = EC_READ_S32(slave->off_velocity_actual);
-        }
-        /* update status word */
-        if (slave->off_status_word)
-        {
-            slave->status_word = EC_READ_U16(slave->off_status_word);
-        }
-        
-        /** NOTE: following lines only for test purpose, remove it!!!! */
-        {
-            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-            struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-            sw->homing_attained = 1;
-            if (!sw->operation_enabled)
-            {
-                if (!sw->switch_on)
-                {
-                    sw->switch_on = 1;
-                }
-                else
-                {
-                    sw->operation_enabled = 1;
-                }
-            }
-        }
-    }
-
-#if CHECK_MASTER_STATE
-    /* check master state */
-    check_master_state(sq);
-#endif
-
-    /* update last clock for protocol */
-    sq->last_clock = clock_from_time(&sq->ce, eventtime);
-
-    /* prepare frame for next cycle */
-    process_frame(sq);
-
-    /* process a high level thread request */
-    //process_request(sq, eventtime);
-
-    /* release mutex */
-    pthread_mutex_unlock(&sq->lock);
-
-    /* set protocol event timer */
-    if (!list_empty(&sq->request_queue))
-    {
-        pollreactor_update_timer(sq->pr, EQPT_PROTOCOL, PR_NOW);
-    }
-
-    /* reset input event timer (command_event will reschedule it when needed)  */
-    return PR_NEVER;
-}
-
-static double
 protocol_event(struct ethercatqueue *sq, double eventtime)
 {
     /* acquire mutex */
@@ -448,7 +344,7 @@ kick_event(struct ethercatqueue *sq, double eventtime)
     }
 }
 
-static int
+static inline int
 build_and_send_command(struct ethercatqueue *sq)
 {
     /* data */
@@ -518,7 +414,8 @@ build_and_send_command(struct ethercatqueue *sq)
             {
                 /** NOTE: MERDA */
                 struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
-                errorf("--> oid = %u, req_clock = %lu, position = %d, velocity = %d, time = %u", qm->oid, qm->req_clock, move->position, move->velocity, move->time);
+                errorf("--> oid = %u, req_clock = %lu, position = %d, velocity = %d, time = %u",
+                        qm->oid, qm->req_clock, move->position, move->velocity, move->time);
             }
         }
         else
@@ -552,7 +449,7 @@ build_and_send_command(struct ethercatqueue *sq)
     return len;
 }
 
-static double
+static inline double
 check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 {
     /* data */
@@ -588,7 +485,8 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     list_for_each_entry(cq, &sq->pending_queues, node)
     {
         /* move messages from the upcoming queue to the ready queue */
-        while (!list_empty(&cq->upcoming_queue))
+        int moved_segments = 0;
+        while (!list_empty(&cq->upcoming_queue) && (moved_segments < MAX_CYCLE_SEGMENTS))
         {
             /* get first message in queue */
             struct pvtmsg *qm = list_first_entry(&cq->upcoming_queue, struct pvtmsg, node);
@@ -624,6 +522,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
             /* update stats */
             sq->upcoming_bytes -= qm->len;
             sq->ready_bytes += qm->len;
+            moved_segments++;
         }
 
         /* check updated ready queue */
@@ -676,7 +575,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
      * drive before being executed: higher it is, safer the operation is,
      * but fuller the drive buffer will be (potentially completely full).
      * By taking into account also the synch cycle time we ensure that the
-     * next command_event() is at least MIN_REQTIME_DELTA in advance with
+     * next cyclic_event() is at least MIN_REQTIME_DELTA in advance with
      * respect to the earliest schedulable step.
      */
     uint64_t reqclock_delta = (master->sync0_ct + MIN_REQTIME_DELTA) * sq->ce.est_freq;
@@ -711,7 +610,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     }
 
     /* 
-     * Ideal walue of next command_event(), unused since the ethercat
+     * Ideal walue of next cyclic_event(), unused since the ethercat
      * synch cycle time has to be constant.
      */
     return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
@@ -796,7 +695,7 @@ coe_state_machine(struct slavemonitor *slave)
 }
 
 /** process ethercat frame (reset and configuration check) */
-static void
+static inline void
 process_frame(struct ethercatqueue *sq)
 {
     /* get master */
@@ -855,7 +754,7 @@ process_frame(struct ethercatqueue *sq)
     }
 }
 
-static void check_master_state(struct ethercatqueue *sq)
+static inline void check_master_state(struct ethercatqueue *sq)
 {
     /* get master */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
@@ -867,24 +766,90 @@ static void check_master_state(struct ethercatqueue *sq)
 }
 
 static double
-command_event(struct ethercatqueue *sq, double eventtime)
+cyclic_event(struct ethercatqueue *sq, double eventtime)
 {
+    double t_start = get_monotonic();
+    
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
-
-    {
-        /** NOTE: MERDA */
-        static double old_eventtime;
-        errorf("--> command event delta = %lf", eventtime-old_eventtime);
-        errorf(".");
-        old_eventtime = eventtime;
-    }
 
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
     int buflen = 0; //length (in bytes) of data to be transmitted
     double waketime; //wake time of next command event
     uint64_t sync_clock = TIMES2NS(eventtime); //distributed clock value
+
+    /* prepare frame */
+    process_frame(sq);
+    
+    /* receive process data */
+    ecrt_master_receive(master->master);
+
+    /* loop over domains */
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
+    {
+        /* get domain */
+        struct domainmonitor *dm = &master->domains[i];
+
+        /* process received data (from datagram to domain) */
+        ecrt_domain_process(dm->domain);
+
+        /** update domain state (TODO: add error handling) */
+        ecrt_domain_state(dm->domain, &dm->domain_state);
+    }
+
+    /**
+     * Read associated slaves window status (as soon as possible).
+     */
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        /* get slave */
+        struct slavemonitor *slave = &master->monitor[i];
+
+        /* update slave window */
+        if (slave->off_slave_window)
+        {
+            slave->slave_window = EC_READ_U16(slave->off_slave_window);
+        }
+        /* update actual position */
+        if (slave->off_position_actual)
+        {
+            slave->position_actual = EC_READ_S32(slave->off_position_actual);
+        }
+        /* update actual velocity */
+        if (slave->off_velocity_actual)
+        {
+            slave->velocity_actual = EC_READ_S32(slave->off_velocity_actual);
+        }
+        /* update status word */
+        if (slave->off_status_word)
+        {
+            slave->status_word = EC_READ_U16(slave->off_status_word);
+        }
+        
+        /** NOTE: following lines only for test purpose, remove it!!!! */
+        {
+            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+            struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
+            sw->homing_attained = 1;
+            if (!sw->operation_enabled)
+            {
+                if (!sw->switch_on)
+                {
+                    sw->switch_on = 1;
+                }
+                else
+                {
+                    sw->operation_enabled = 1;
+                }
+            }
+        }
+    }
+
+#if CHECK_MASTER_STATE
+    /* check master state */
+    check_master_state(sq);
+#endif
 
     /** set master application time */
     ecrt_master_application_time(master->master, sync_clock);
@@ -965,14 +930,28 @@ command_event(struct ethercatqueue *sq, double eventtime)
         buflen += build_and_send_command(sq);
     }
 
-    /* compute time of next input (read) event */
-    double inputtime = eventtime + master->sync0_st + master->frame_time;
+    /* set protocol event timer */
+    if (!list_empty(&sq->request_queue))
+    {
+        //pollreactor_update_timer(sq->pr, EQPT_PROTOCOL, PR_NOW);
 
-    /* set input event timer (when the frame is expected to be received back) */
-    pollreactor_update_timer(sq->pr, EQPT_INPUT, inputtime);
+        /* update last clock for protocol */
+        sq->last_clock = clock_from_time(&sq->ce, eventtime);
+
+        /* process a high level thread request */
+        process_request(sq, eventtime);
+    }
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
+
+    double t_end = get_monotonic();
+    double t_delta = t_end - t_start;
+
+    if (t_delta > master->sync0_ct/10)
+    {
+        errorf(">> cyclic time = %lf", t_delta);
+    }
 
     /* update next timer event (in pollreactor_check_timers) */
     return eventtime + master->sync0_ct;
@@ -1303,32 +1282,29 @@ ethercatqueue_init(struct ethercatqueue *sq)
      *  - pipe_sched[0]: RX side of scheduling pipe used for triggering the low level
      *                   reactor. Once input activity on the pipe is detected, the
      *                   associated "kick_event" callback is run and it forces a new
-     *                   execution of command_event().
+     *                   execution of cyclic_event().
      *  - pipe_sched[1]: TX side of the scheduling pipe, used by the low level ethercat
      *                   thread to schedule unexpected command events (command events 
      *                   that send additional frames in the same sync cycle).
      *                   NOTE: pipe_sched will be removed in the future since the ethercat
      *                         communication model avoids pipes for real time requirements.
      *  - timers: there is only one associated timer:
-     *            1) EQPT_COMMAND: used to trigger the command_event callback,
-     *                             forcing the transmission of data to the drives.
-     *                             It is fundamental for the synchronization between
-     *                             host and drives, i.e. the command event is run at
-     *                             a precise time so that the drives receive data
-     *                             in real time exactly when they need it. It needs
-     *                             to match the drives sync cycle time (or a multiple
-     *                             if the drive support different sync and frame
-     *                             cycle time).
-     *            2) EQPT_INPUT: used to trigger input_event, its value is defined
-     *                           directly by command_event after a fixed amount of
-     *                           time when the frame is guaranteed to be received
-     *                           back by the master.
+     *            1) EQPT_CYCLIC: used to trigger the cyclic_event callback,
+     *                            forcing the transmission of data to the drives.
+     *                            It is fundamental for the synchronization between
+     *                            host and drives, i.e. the command event is run at
+     *                            a precise time so that the drives receive data
+     *                            in real time exactly when they need it. It needs
+     *                            to match the drives sync cycle time (or a multiple
+     *                            if the drive support different sync and frame
+     *                            cycle time).
+     *            2) EQPT_PROTOCOL: used to trigger protocol_event for communication between
+     *                              low and high leval thread.
      */
     sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10., PR_OFFSET);
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
-    pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
-    pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
-    pollreactor_add_timer(sq->pr, EQPT_PROTOCOL, protocol_event); //protocol timer
+    pollreactor_add_timer(sq->pr, EQPT_CYCLIC, cyclic_event); //command timer (tx operation)
+    //pollreactor_add_timer(sq->pr, EQPT_PROTOCOL, protocol_event); //input timer (rx operation)
 
     /* 
      * Set pipe for low level thread scheduling in non blocking mode.
@@ -1388,11 +1364,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
     ret = pthread_setaffinity_np(sq->tid, sizeof(cpu_set_t), &cpuset);
     HANDLE_ERROR(ret, fail)
 
-    /* force first asynchronous input event */
-    pollreactor_update_timer(sq->pr, EQPT_INPUT, PR_NOW);
-
     /* start of cyclic frame transmission */
-    pollreactor_update_timer(sq->pr, EQPT_COMMAND, PR_NOW);
+    pollreactor_update_timer(sq->pr, EQPT_CYCLIC, PR_NOW);
 
 fail:
     /* error handling */
