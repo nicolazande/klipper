@@ -196,11 +196,11 @@
     ],
 	"master" :
 	{
-		"sync0_ct" : 0.005,
-		"sync0_st" : 0.001,
+		"sync0_ct" : 0.01,
+		"sync0_st" : 0.005,
 		"sync1_ct" : 0,
 		"sync1_st" : 0,
-		"frame_time" : 0.0005,
+		"frame_time" : 0.0001,
 		"domains" : [
 			{
 				"type" : "base",

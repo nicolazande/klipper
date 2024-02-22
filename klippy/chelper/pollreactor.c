@@ -232,6 +232,8 @@ pollreactor_run(struct pollreactor *pr)
             report_errno("poll", ret);
             pr->must_exit = 1;
         }
+
+        //sched_yield();
     }
 }
 

@@ -410,13 +410,6 @@ build_and_send_command(struct ethercatqueue *sq)
 
             /* increase slave rx index in advance */
             slave->slave_window++;
-
-            {
-                /** NOTE: MERDA */
-                struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
-                errorf("--> oid = %u, req_clock = %lu, position = %d, velocity = %d, time = %u",
-                        qm->oid, qm->req_clock, move->position, move->velocity, move->time);
-            }
         }
         else
         {
@@ -768,7 +761,13 @@ static inline void check_master_state(struct ethercatqueue *sq)
 static double
 cyclic_event(struct ethercatqueue *sq, double eventtime)
 {
-    double t_start = get_monotonic();
+    {
+        /** NOTE: MERDA */
+        static double old_eventtime;
+        double delta_eventtime = eventtime-old_eventtime;
+        errorf("--> deta event = %lf", delta_eventtime);
+        old_eventtime = eventtime;
+    }
     
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
@@ -944,14 +943,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
-
-    double t_end = get_monotonic();
-    double t_delta = t_end - t_start;
-
-    if (t_delta > master->sync0_ct/10)
-    {
-        errorf(">> cyclic time = %lf", t_delta);
-    }
 
     /* update next timer event (in pollreactor_check_timers) */
     return eventtime + master->sync0_ct;
