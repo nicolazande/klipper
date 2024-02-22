@@ -33,9 +33,10 @@
 #define EQPF_PIPE   0               //index of rx-cmd pipe (pipe where application stores cmd to be sent)
 #define EQPF_NUM    1               //number of file descriptors used by a ethercatqueue
 /* timers */
-#define EQPT_INPUT      0           //position of input timer in ethercatqueue timer list
-#define EQPT_COMMAND    1           //position of command timer in ethercatqueue timer list
-#define EQPT_NUM        2           //number of timer used by a ethercatqueue
+#define EQPT_COMMAND    0           //position of command timer in ethercatqueue timer list
+#define EQPT_INPUT      1           //position of input timer in ethercatqueue timer list
+#define EQPT_PROTOCOL   2           //position of command timer in ethercatqueue timer list
+#define EQPT_NUM        3           //number of timer used by a ethercatqueue
 /* transport layer */
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
@@ -67,6 +68,9 @@ static double command_event(struct ethercatqueue *sq, double eventtime);
  * Read EtherCAT frame coming back from the drives and update internal structures.
  */
 static double input_event(struct ethercatqueue *sq, double eventtime);
+
+/** timer callback for protocol event */
+static double protocol_event(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Callback for input activity on the pipe. This function is continuosly
@@ -295,8 +299,11 @@ process_request(struct ethercatqueue *sq, double eventtime)
         list_add_tail(&qm->node, &sq->response_queue);
     }
 
-    /* wake up high level thread */
-    check_wake_receive(sq);
+    if (!list_empty(&sq->response_queue))
+    {
+        /* wake up high level thread */
+        check_wake_receive(sq);
+    }
 };
 
 static double
@@ -384,12 +391,37 @@ input_event(struct ethercatqueue *sq, double eventtime)
     process_frame(sq);
 
     /* process a high level thread request */
+    //process_request(sq, eventtime);
+
+    /* release mutex */
+    pthread_mutex_unlock(&sq->lock);
+
+    /* set protocol event timer */
+    if (!list_empty(&sq->request_queue))
+    {
+        pollreactor_update_timer(sq->pr, EQPT_PROTOCOL, PR_NOW);
+    }
+
+    /* reset input event timer (command_event will reschedule it when needed)  */
+    return PR_NEVER;
+}
+
+static double
+protocol_event(struct ethercatqueue *sq, double eventtime)
+{
+    /* acquire mutex */
+    pthread_mutex_lock(&sq->lock);
+
+    /* update last clock for protocol */
+    sq->last_clock = clock_from_time(&sq->ce, eventtime);
+
+    /* process a high level thread request */
     process_request(sq, eventtime);
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);
 
-    /* reset input event timer (command_event will reschedule it when needed)  */
+    /* disable timer */
     return PR_NEVER;
 }
 
@@ -1296,6 +1328,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
     pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_INPUT, input_event); //input timer (rx operation)
     pollreactor_add_timer(sq->pr, EQPT_COMMAND, command_event); //command timer (tx operation)
+    pollreactor_add_timer(sq->pr, EQPT_PROTOCOL, protocol_event); //protocol timer
 
     /* 
      * Set pipe for low level thread scheduling in non blocking mode.
