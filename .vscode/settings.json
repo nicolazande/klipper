@@ -9,6 +9,7 @@
         "ranges": "c",
         "trapq.h": "c",
         "command.h": "c",
-        "pvtsolve.h": "c"
+        "pvtsolve.h": "c",
+        "math.h": "c"
     }
 }

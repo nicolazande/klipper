@@ -34,7 +34,6 @@
 #define EQPF_NUM    1               //number of file descriptors used by a ethercatqueue
 /* timers */
 #define EQPT_CYCLIC     0           //position of input timer in ethercatqueue timer list
-#define EQPT_PROTOCOL   1           //position of command timer in ethercatqueue timer list
 #define EQPT_NUM        1           //number of timer used by a ethercatqueue
 /* transport layer */
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
@@ -64,27 +63,6 @@ extern struct command_parser *command_parser_table[ETH_MAX_CP];
  ****************************************************************/
 /** timer callback for cyclic event */
 static double cyclic_event(struct ethercatqueue *sq, double eventtime);
-
-/** timer callback for protocol event */
-static double protocol_event(struct ethercatqueue *sq, double eventtime);
-
-/**
- * Callback for input activity on the pipe. This function is continuosly
- * run by the poll reactor and, as soon as data (dummy bytes) is found
- * on the rx side of the internal pipe, it updates the command timer (to
- * zero), indirectly forcing an execution of cyclic_event(). This is
- * the low level thread counterpart of kick_bg_thread.
- */
-static void kick_event(struct ethercatqueue *sq, double eventtime);
-
-/**
- * Write to the ethercatqueue internal pipe to force the execution 
- * of the background low level ethercat immediately (don't wait
- * for associated timer). This function is called asynchronously
- * by the high level thread since it cannot update directly the
- * command event timer.
- */
-static void kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd);
 
 /**
  * Wake up the ethercat high level thread if it is waiting. It needs
@@ -137,17 +115,6 @@ check_wake_receive(struct ethercatqueue *sq)
         /* signal condition to ethercatqueue_pull */
         sq->receive_waiting = 0;
         pthread_cond_signal(&sq->cond);
-    }
-}
-
-static void
-kick_bg_thread(struct ethercatqueue *sq, uint8_t cmd)
-{
-    /* write a dummy value just to wake up the poll reactor */
-    int ret = write(sq->pipe_sched[1], &cmd, 1);
-    if (ret < 0)
-    {
-        report_errno("pipe write", ret);
     }
 }
 
@@ -301,48 +268,6 @@ process_request(struct ethercatqueue *sq, double eventtime)
         check_wake_receive(sq);
     }
 };
-
-static double
-protocol_event(struct ethercatqueue *sq, double eventtime)
-{
-    /* acquire mutex */
-    pthread_mutex_lock(&sq->lock);
-
-    /* update last clock for protocol */
-    sq->last_clock = clock_from_time(&sq->ce, eventtime);
-
-    /* process a high level thread request */
-    process_request(sq, eventtime);
-
-    /* release mutex */
-    pthread_mutex_unlock(&sq->lock);
-
-    /* disable timer */
-    return PR_NEVER;
-}
-
-static void
-kick_event(struct ethercatqueue *sq, double eventtime)
-{
-    /* protocol command */
-    uint8_t timer;
-
-    /* read rx-command pipe */
-    int ret = read(sq->pipe_sched[0], &timer, sizeof(timer));
-
-    /* check data */
-    if (ret < 0)
-    {
-        report_errno("pipe read error", ret);
-    }
-    
-    /* check timer index */
-    if (timer < EQPT_NUM)
-    {
-        /* update command timer */
-        pollreactor_update_timer(sq->pr, timer, PR_NOW);
-    }
-}
 
 static inline int
 build_and_send_command(struct ethercatqueue *sq)
@@ -538,7 +463,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
      * check is performed in build_and_send_command(), but this avoids
      * having an undefinitely growing ready queue.
      */
-    if (sq->ready_bytes >= master->frame_pvt_size)
+    if (sq->ready_bytes >= master->frame_segment_size)
     {
         /* 
          * Cannot add more bytes, data has to be transmitted in the current cycle.
@@ -760,15 +685,7 @@ static inline void check_master_state(struct ethercatqueue *sq)
 
 static double
 cyclic_event(struct ethercatqueue *sq, double eventtime)
-{
-    {
-        /** NOTE: MERDA */
-        static double old_eventtime;
-        double delta_eventtime = eventtime-old_eventtime;
-        errorf("--> deta event = %lf", delta_eventtime);
-        old_eventtime = eventtime;
-    }
-    
+{    
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
@@ -828,7 +745,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         
         /** NOTE: following lines only for test purpose, remove it!!!! */
         {
-            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+            //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
             sw->homing_attained = 1;
             if (!sw->operation_enabled)
@@ -1062,7 +979,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     }
 
     /* reset stop flag (last sync) */
-    slave->syncs[sync_size] = (ec_sync_info_t){EC_END, 0, 0, 0, 0};
+    slave->syncs[sync_size] = (ec_sync_info_t){0xFF, 0, 0, 0, 0};
 }
 
 /** configure ethercat master */
@@ -1083,7 +1000,7 @@ ethercatqueue_master_config(struct ethercatqueue *sq,
     master->sync1_ct = sync1_ct;
     master->sync1_st = sync1_st;
     master->frame_size = 0;
-    master->frame_pvt_size = 0;
+    master->frame_segment_size = 0;
     master->frame_time = frame_time;
     master->full_counter = 0;
 
@@ -1217,7 +1134,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
             uint32_t offset;
 
             /* update expected pvt frame size */
-            master->frame_pvt_size += ETHERCAT_PVT_SIZE;
+            master->frame_segment_size += ETHERCAT_PVT_SIZE;
 
             /* get slave monitor */
             struct slavemonitor *slave = &master->monitor[j];
@@ -1259,26 +1176,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
         }
     }
 
-    /** 
-     * Crete pipe for internal event scheduling. NOTE: this can be
-     * removed in the future since command and input event run at
-     * with a constant interval (ethercat sync cycle time).
-     */
-    ret = pipe(sq->pipe_sched);
-    HANDLE_ERROR(ret, fail)
-
     /**
      * Ethercat low level thread reactor setup. It handles low level
      * ethercet communication where:
-     *  - pipe_sched[0]: RX side of scheduling pipe used for triggering the low level
-     *                   reactor. Once input activity on the pipe is detected, the
-     *                   associated "kick_event" callback is run and it forces a new
-     *                   execution of cyclic_event().
-     *  - pipe_sched[1]: TX side of the scheduling pipe, used by the low level ethercat
-     *                   thread to schedule unexpected command events (command events 
-     *                   that send additional frames in the same sync cycle).
-     *                   NOTE: pipe_sched will be removed in the future since the ethercat
-     *                         communication model avoids pipes for real time requirements.
      *  - timers: there is only one associated timer:
      *            1) EQPT_CYCLIC: used to trigger the cyclic_event callback,
      *                            forcing the transmission of data to the drives.
@@ -1289,22 +1189,9 @@ ethercatqueue_init(struct ethercatqueue *sq)
      *                            to match the drives sync cycle time (or a multiple
      *                            if the drive support different sync and frame
      *                            cycle time).
-     *            2) EQPT_PROTOCOL: used to trigger protocol_event for communication between
-     *                              low and high leval thread.
      */
     sq->pr = pollreactor_alloc(EQPF_NUM, EQPT_NUM, sq, 0., 10., PR_OFFSET);
-    pollreactor_add_fd(sq->pr, EQPF_PIPE, sq->pipe_sched[0], kick_event, 0); //build and send frame
     pollreactor_add_timer(sq->pr, EQPT_CYCLIC, cyclic_event); //command timer (tx operation)
-    //pollreactor_add_timer(sq->pr, EQPT_PROTOCOL, protocol_event); //input timer (rx operation)
-
-    /* 
-     * Set pipe for low level thread scheduling in non blocking mode.
-     * This is fundamental in order to be reactive to events, if there
-     * is no activity on the pipe, return immediately and don't wait
-     * in blocking mode. 
-     */
-    fd_set_non_blocking(sq->pipe_sched[0]);
-    fd_set_non_blocking(sq->pipe_sched[1]);
 
     /* queues */
     list_init(&sq->pending_queues);  //messages waiting to be sent

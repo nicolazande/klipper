@@ -114,7 +114,7 @@ struct mastermonitor
     ec_master_state_t state;                        //master state
     /* monitoring */
     uint16_t frame_size;                            //total size in bytes of data (all domains)
-    uint16_t frame_pvt_size;                        //total size in bytes of data (pvt domains only)
+    uint16_t frame_segment_size;                    //total size in bytes of data (pvt domains only)
     uint8_t full_counter;                           //counter for signaling number of slaves for which pdo slots are full
     /* configuration */
     double sync0_ct;                                //ethercat sync0 cycle time (in seconds)
@@ -133,7 +133,6 @@ struct ethercatqueue
 {
     /* reactor and scheduling */
     struct pollreactor *pr; //ethercat low level reactor
-    int pipe_sched[2]; //pipe_sched[0] = rx-command pipe, pipe_sched[1] = tx-command-pipe
     /* threading */
     int cpu; //ethercat low level thread dedicated cpu
     pthread_t tid; //ethercat low level thread id
@@ -152,7 +151,7 @@ struct ethercatqueue
     /* ethercat interface data */
     struct mastermonitor masterifc; //EtherCAT master interface
     /* internal protocol data */
-    struct list_head notify_queue;
+    struct list_head notify_queue;  //list of message completitions
     struct list_head request_queue; //list of high level thread requests
     struct list_head response_queue; //list of low level thread responses
     struct command_parser **cp_table; //external list of protocol commands

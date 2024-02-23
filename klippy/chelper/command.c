@@ -475,7 +475,6 @@ static struct command_parser cp_default =
 /* reset step clock command parser */
 static int cp_f_command_reset_step_clock(struct ethercatqueue *sq, void *out, uint32_t *args)
 {
-    struct stepper *s = NULL;
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint32_t waketime = args[1];

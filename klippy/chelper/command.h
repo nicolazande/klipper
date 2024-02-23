@@ -76,6 +76,7 @@ struct command_encoder
 };
 
 /* command parser */
+struct ethercatqueue;
 struct command_parser
 {
     uint8_t msg_id; //command id
