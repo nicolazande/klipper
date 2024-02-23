@@ -685,7 +685,7 @@ static inline void check_master_state(struct ethercatqueue *sq)
 
 static double
 cyclic_event(struct ethercatqueue *sq, double eventtime)
-{    
+{
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
@@ -695,8 +695,8 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     double waketime; //wake time of next command event
     uint64_t sync_clock = TIMES2NS(eventtime); //distributed clock value
 
-    /* prepare frame */
-    process_frame(sq);
+    /** set master application time */
+    ecrt_master_application_time(master->master, sync_clock);
     
     /* receive process data */
     ecrt_master_receive(master->master);
@@ -710,8 +710,10 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         /* process received data (from datagram to domain) */
         ecrt_domain_process(dm->domain);
 
+#if CHECK_MASTER_STATE
         /** update domain state (TODO: add error handling) */
         ecrt_domain_state(dm->domain, &dm->domain_state);
+#endif
     }
 
     /**
@@ -743,7 +745,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
             slave->status_word = EC_READ_U16(slave->off_status_word);
         }
         
-        /** NOTE: following lines only for test purpose, remove it!!!! */
+        /** NOTE: following scope is only for test purpose, remove it!!!! */
         {
             //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
@@ -762,27 +764,13 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         }
     }
 
+    /* prepare frame for transmission (cleanup and state machine) */
+    process_frame(sq);
+
 #if CHECK_MASTER_STATE
     /* check master state */
     check_master_state(sq);
 #endif
-
-    /** set master application time */
-    ecrt_master_application_time(master->master, sync_clock);
-
-    /**
-     * Synchronize the reference clock (first DC capable slave) with the
-     * master internal time (use eventtime for stability).
-     * TODO: this operation doesn't need to be performed every cycle,
-     *       therefore add a counter enable logic.
-     */
-    ecrt_master_sync_reference_clock_to(master->master, sync_clock);
-
-    /** 
-     * Queue the DC clock drift compensation datagram, all slaves are
-     * synchronized with the reference clock (first DC capable slave).
-     */
-    ecrt_master_sync_slave_clocks(master->master);
 
     /* prepare data for frame transmission */
     for (;;)
@@ -811,6 +799,23 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
          */
         if ((waketime != PR_NOW) || (master->full_counter))
         {
+            /* update sync clock (compensate for previous functions jitter) */
+            sync_clock = TIMES2NS(get_monotonic());
+
+            /**
+             * Synchronize the reference clock (first DC capable slave) with the
+             * master internal time (use eventtime for stability).
+             * TODO: this operation doesn't need to be performed every cycle,
+             *       therefore add a counter enable logic.
+             */
+            ecrt_master_sync_reference_clock_to(master->master, sync_clock);
+
+            /** 
+             * Queue the DC clock drift compensation datagram, all slaves are
+             * synchronized with the reference clock (first DC capable slave).
+             */
+            ecrt_master_sync_slave_clocks(master->master);
+
             /* loop over domains */
             for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
             {
@@ -846,17 +851,11 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         buflen += build_and_send_command(sq);
     }
 
-    /* set protocol event timer */
-    if (!list_empty(&sq->request_queue))
-    {
-        //pollreactor_update_timer(sq->pr, EQPT_PROTOCOL, PR_NOW);
+    /* update last clock for protocol */
+    sq->last_clock = clock_from_time(&sq->ce, eventtime);
 
-        /* update last clock for protocol */
-        sq->last_clock = clock_from_time(&sq->ce, eventtime);
-
-        /* process a high level thread request */
-        process_request(sq, eventtime);
-    }
+    /* process a high level thread request */
+    process_request(sq, eventtime);
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
