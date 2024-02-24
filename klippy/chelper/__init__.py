@@ -21,7 +21,7 @@ COMPILE_ARGS = ("-Wall -g -O2 -shared -fPIC"
                 f" -o %s %s {ADDITIONAL_LIB_PATHS} {ADDITIONAL_LIBS}")
 SSE_FLAGS = "-mfpmath=sse -msse2"
 SOURCE_FILES = [
-    'command.c', 'ethercatqueue.c', 'kin_hash.c', 'pvtcompress.c', 'pvtsolve.c',
+    'command.c', 'ethercatqueue.c', 'kin_hash.c', 'pvtcompress.c', 'pvtsolve.c', 'ethercatmsg.c',
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c', 'trapq.c',
     'pollreactor.c', 'msgblock.c', 'trdispatch.c',
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
@@ -135,8 +135,6 @@ defs_ethercatqueue = """
     int ethercatqueue_init(struct ethercatqueue *sq);
     void ethercatqueue_exit(struct ethercatqueue *sq);
     void ethercatqueue_free(struct ethercatqueue *sq);
-    struct command_queue *ethercatqueue_alloc_commandqueue(void);
-    void ethercatqueue_free_commandqueue(struct command_queue *cq);
     void ethercatqueue_send_command(struct ethercatqueue *sq,
                                     uint8_t *msg,
                                     int len,
@@ -144,7 +142,6 @@ defs_ethercatqueue = """
                                     uint64_t req_clock,
                                     uint64_t notify_id);
     void ethercatqueue_send_batch(struct ethercatqueue *sq,
-                                  struct command_queue *cq,
                                   struct list_head *msgs);
     void ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm);
     void ethercatqueue_set_clock_est(struct ethercatqueue *sq,

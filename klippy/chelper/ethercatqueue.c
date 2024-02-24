@@ -23,7 +23,7 @@
 #include "compiler.h" //__visible
 #include "pollreactor.h" //pollreactor_alloc
 #include "pyhelper.h" //get_monotonic
-#include "ethercatqueue.h" //struct pvtmsg
+#include "ethercatqueue.h"
 
 
 /****************************************************************
@@ -39,10 +39,10 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time limits */
-#define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
+#define MIN_REQTIME_DELTA 0.100     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
-#define MAX_CYCLE_SEGMENTS ETHERCAT_DOMAINS
+#define MAX_CYCLE_SEGMENTS (2*ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
@@ -53,7 +53,7 @@
 
 /****************************************************************
  * Data
- ****************************************************************/
+ *******************s*********************************************/
 /** external command parser table */
 extern struct command_parser *command_parser_table[ETH_MAX_CP];
 
@@ -282,35 +282,10 @@ build_and_send_command(struct ethercatqueue *sq)
      * the ready queue of all command queues (normally just one).
      * Send only if there is free space in the drive pvt buffers.
      */
-    while (sq->ready_bytes > 0)
+    while (!list_empty(&sq->ready_queue) && sq->ready_bytes > 0)
     {
-        /* data */
-        uint64_t min_clock = MAX_CLOCK; //min clock
-        struct command_queue *q; //iterator for ethercatqueue associated command queues
-        struct command_queue *cq = NULL; //command queue
-        struct pvtmsg *qm = NULL; //step queue message
-
-        /* 
-         * Find highest priority message, the one with the lowest req_clock among all
-         * command queues. The single ready queues are already ordered therefore it
-         * is sufficient to check the first message of each drive queue.
-         */
-        list_for_each_entry(q, &sq->pending_queues, node)
-        {
-            /* check list */
-            if (!list_empty(&q->ready_queue))
-            {
-                /* get first message in ordered ready queue */
-                struct pvtmsg *m = list_first_entry(&q->ready_queue, struct pvtmsg, node);
-                /* check for priority */
-                if (m->req_clock < min_clock)
-                {
-                    min_clock = m->req_clock;
-                    cq = q;
-                    qm = m;
-                }
-            }
-        }
+        /* get first message in ordered ready queue */
+        struct move_segment_msg *qm = list_first_entry(&sq->ready_queue, struct move_segment_msg, node);
 
         /* get target slave */
         if (qm->oid < ETHERCAT_DRIVES)
@@ -328,8 +303,9 @@ build_and_send_command(struct ethercatqueue *sq)
         if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size))    
         {
             /* populate domain data (directly mapped to kernel) */
-            memcpy(slave->movedata[slave->master_window], qm->msg, qm->len);
-            
+            struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
+            *move = *((struct coe_ip_move *)qm->msg);
+
             /* increase master tx index */
             slave->master_window++;
 
@@ -348,19 +324,12 @@ build_and_send_command(struct ethercatqueue *sq)
         /* remove message from ready queue */
         list_del(&qm->node);
 
-        /* delete ready queue and upcoming queue if both empty */
-        if (list_empty(&cq->ready_queue) && list_empty(&cq->upcoming_queue))
-        {
-            /* remove message from command_queue */
-            list_del(&cq->node);
-        }
-
         /* update stats (messages with wrong old are discarded) */
         len += qm->len;
         sq->ready_bytes -= qm->len;
 
         /* delete message (message content copied) */
-        free(qm);
+        emsg_free(&sq->msgpool[qm->oid], qm);
     }
 
     /* total bytes sent */
@@ -398,66 +367,61 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     uint64_t min_stalled_clock = MAX_CLOCK; //min clock among stalled messages (for next cycle)
     uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
 
-    /* check for upcoming messages now ready (loop over pending queues) */
-    struct command_queue *cq; //single command queue (normally just one)
-    list_for_each_entry(cq, &sq->pending_queues, node)
+    /* move messages from the upcoming queue to the ready queue */
+    int moved_segments = 0;
+    while (!list_empty(&sq->upcoming_queue) && (moved_segments < MAX_CYCLE_SEGMENTS))
     {
-        /* move messages from the upcoming queue to the ready queue */
-        int moved_segments = 0;
-        while (!list_empty(&cq->upcoming_queue) && (moved_segments < MAX_CYCLE_SEGMENTS))
-        {
-            /* get first message in queue */
-            struct pvtmsg *qm = list_first_entry(&cq->upcoming_queue, struct pvtmsg, node);
+        /* get first message in queue */
+        struct move_segment_msg *qm = list_first_entry(&sq->upcoming_queue, struct move_segment_msg, node);
 
-            /**
-             * Select only the pending messages that can be sent before the current estimated drive
-             * reception clock. In this case qm->min_clock represents the earliest time when the
-             * message can be sent, if it is greater than the estimated frame reception time
-             * (ack_clock) stop immediately.
-             */
-            if (ack_clock < qm->min_clock)
+        /**
+         * Select only the pending messages that can be sent before the current estimated drive
+         * reception clock. In this case qm->min_clock represents the earliest time when the
+         * message can be sent, if it is greater than the estimated frame reception time
+         * (ack_clock) stop immediately.
+         */
+        if (ack_clock < qm->min_clock)
+        {
+            if (qm->min_clock < min_stalled_clock)
             {
-                if (qm->min_clock < min_stalled_clock)
-                {
-                    /* 
-                     * The current message is not added to the ready queue, however the
-                     * min_stalled_clock is updated for the next function call (start
-                     * with the min possible value of min_stalled_clock).
-                     */
-                    min_stalled_clock = qm->min_clock;
-                }
-                /*
-                 * The ack clock (estimated drive reception clock) is greater than the pending queue
-                 * min clock, i.e. the first message in the ordered upcoming queue is still too far
-                 * in the future, skip the entire queue and move to next command queue.
+                /* 
+                 * The current message is not added to the ready queue, however the
+                 * min_stalled_clock is updated for the next function call (start
+                 * with the min possible value of min_stalled_clock).
                  */
-                break;
+                min_stalled_clock = qm->min_clock;
             }
-            /* remove message from upcoming queue */
-            list_del(&qm->node);
-            /* add message from ready queue */
-            list_add_tail(&qm->node, &cq->ready_queue);
-            /* update stats */
-            sq->upcoming_bytes -= qm->len;
-            sq->ready_bytes += qm->len;
-            moved_segments++;
+            /*
+             * The ack clock (estimated drive reception clock) is greater than the pending queue
+             * min clock, i.e. the first message in the ordered upcoming queue is still too far
+             * in the future, skip the entire queue and move to next command queue.
+             */
+            break;
         }
-
-        /* check updated ready queue */
-        if (!list_empty(&cq->ready_queue))
-        {
-            /* get first message in ordered ready queue */
-            struct pvtmsg *qm = list_first_entry(&cq->ready_queue, struct pvtmsg, node);
-            /* clock at which time the first queue message has to be executed on drive side */
-            uint64_t req_clock = qm->req_clock;
-            /* get min ready clock among command queues */
-            if (req_clock < min_ready_clock)
-            {
-                min_ready_clock = req_clock;
-            }
-        }
+        /* remove message from upcoming queue */
+        list_del(&qm->node);
+        /* add message from ready queue */
+        list_add_tail(&qm->node, &sq->ready_queue);
+        /* update stats */
+        sq->upcoming_bytes -= qm->len;
+        sq->ready_bytes += qm->len;
+        moved_segments++;
     }
 
+    /* check updated ready queue */
+    if (!list_empty(&sq->ready_queue))
+    {
+        /* get first message in ordered ready queue */
+        struct move_segment_msg *qm = list_first_entry(&sq->ready_queue, struct move_segment_msg, node);
+        /* clock at which time the first queue message has to be executed on drive side */
+        uint64_t req_clock = qm->req_clock;
+        /* get min ready clock among command queues */
+        if (req_clock < min_ready_clock)
+        {
+            min_ready_clock = req_clock;
+        }
+    }
+    
     /* 
      * Early stop check (step space in domain is full). A drive specific
      * check is performed in build_and_send_command(), but this avoids
@@ -607,6 +571,9 @@ coe_state_machine(struct slavemonitor *slave)
             };
         }
 
+        /* update local copy of status word */
+        slave->status_word = *(uint16_t *)sw;
+
         /* update local copy of control word */
         slave->control_word = *(uint16_t *)cw;
     }
@@ -686,6 +653,8 @@ static inline void check_master_state(struct ethercatqueue *sq)
 static double
 cyclic_event(struct ethercatqueue *sq, double eventtime)
 {
+    double t_start = get_monotonic();
+
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
@@ -694,6 +663,16 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     int buflen = 0; //length (in bytes) of data to be transmitted
     double waketime; //wake time of next command event
     uint64_t sync_clock = TIMES2NS(eventtime); //distributed clock value
+
+    {
+        static double old_eventtime;
+        double t_delta = eventtime - old_eventtime;
+        if (t_delta > master->sync0_ct*1.2)
+        {
+            //errorf(">> long cycle = %lf", t_delta);
+        }
+        old_eventtime = eventtime;
+    }
 
     /** set master application time */
     ecrt_master_application_time(master->master, sync_clock);
@@ -739,11 +718,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         {
             slave->velocity_actual = EC_READ_S32(slave->off_velocity_actual);
         }
-        /* update status word */
-        if (slave->off_status_word)
-        {
-            slave->status_word = EC_READ_U16(slave->off_status_word);
-        }
         
         /** NOTE: following scope is only for test purpose, remove it!!!! */
         {
@@ -764,7 +738,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         }
     }
 
-    /* prepare frame for transmission (cleanup and state machine) */
+    /* process frame (cleanup and state machine) */
     process_frame(sq);
 
 #if CHECK_MASTER_STATE
@@ -791,22 +765,22 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
          *  - if waketime == 0: ready queue commands have to be added to the ethercat
          *                      frame and transmitted in the current cycle, pending
          *                      queue commands can still be added to ready queue.
-         *  - if there are too many messages in the transmission buffer (pdo instances)
-         *    of the domain and ethercat frame, a transmission needs to be performed.
-         *    This is an extreme case where more than one frame per synch cycle needs
-         *    to be sent --> find a proper way to handle this (i.e. synch datagram
-         *    doesn't need to be added to the frame).
+         *  - if master->full_counter: all segment slots are full, the frame needs to
+         *                             be transmitted immediately. The other steps will
+         *                             be transmitted in the next cycles. It is user
+         *                             responsability not to generate more segments than
+         *                             the onece that can be transmitted (trajectory
+         *                             sampling time >= sync cycle time).
          */
         if ((waketime != PR_NOW) || (master->full_counter))
         {
-            /* update sync clock (compensate for previous functions jitter) */
+            /* update sync clock (compensate for read and process jitter) */
             sync_clock = TIMES2NS(get_monotonic());
 
             /**
              * Synchronize the reference clock (first DC capable slave) with the
-             * master internal time (use eventtime for stability).
-             * TODO: this operation doesn't need to be performed every cycle,
-             *       therefore add a counter enable logic.
+             * master internal time.
+             * NOTE: this operation doesn't need to be performed every cycle.
              */
             ecrt_master_sync_reference_clock_to(master->master, sync_clock);
 
@@ -822,7 +796,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
                 /* get domain */
                 struct domainmonitor *dm = &master->domains[i];
 
-                /* update domain */
+                /* update domain (domain to datagram) */
                 ecrt_domain_queue(dm->domain);
             }
 
@@ -859,6 +833,13 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
+
+    double t_end = get_monotonic();
+    double t_delta = t_end - t_start;
+    if (t_delta > master->sync0_ct/10)
+    {
+        errorf(">> high load = %lf", t_delta);
+    }
 
     /* update next timer event (in pollreactor_check_timers) */
     return eventtime + master->sync0_ct;
@@ -1193,10 +1174,17 @@ ethercatqueue_init(struct ethercatqueue *sq)
     pollreactor_add_timer(sq->pr, EQPT_CYCLIC, cyclic_event); //command timer (tx operation)
 
     /* queues */
-    list_init(&sq->pending_queues);  //messages waiting to be sent
+    list_init(&sq->upcoming_queue);  //messages waiting to be sent
+    list_init(&sq->ready_queue);  //messages waiting to be sent
     list_init(&sq->request_queue);   //request messages form high to low level thread
     list_init(&sq->response_queue);  //response messages form low to high level thread
     list_init(&sq->notify_queue);    //notify queue for protocol messages
+
+    /* initialize move message pool */
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        init_msg_pool(&sq->msgpool[i]);
+    }
 
     /* associate external ethercat callback table */
     sq->cp_table = command_parser_table;
@@ -1295,24 +1283,22 @@ ethercatqueue_free(struct ethercatqueue *sq)
     message_queue_free(&sq->response_queue);
     message_queue_free(&sq->notify_queue);
 
-    /* free all pending queues */
-    while (!list_empty(&sq->pending_queues))
+    /* free ready queue */
+    while (!list_empty(&sq->ready_queue))
     {
-        struct command_queue *cq = list_first_entry(&sq->pending_queues, struct command_queue, node);
-        list_del(&cq->node);
-        while (!list_empty(&cq->ready_queue))
-        {
-            struct pvtmsg *qm = list_first_entry(&cq->ready_queue, struct pvtmsg, node);
-            list_del(&qm->node);
-            free(qm);
-        }
-        while (!list_empty(&cq->upcoming_queue))
-        {
-            struct pvtmsg *qm = list_first_entry(&cq->upcoming_queue, struct pvtmsg, node);
-            list_del(&qm->node);
-            free(qm);
-        }
+        struct move_segment_msg *qm = list_first_entry(&sq->ready_queue, struct move_segment_msg, node);
+        list_del(&qm->node);
+        //free(qm);
     }
+    /* free upcoming queue */
+    while (!list_empty(&sq->upcoming_queue))
+    {
+        struct move_segment_msg *qm = list_first_entry(&sq->upcoming_queue, struct move_segment_msg, node);
+        list_del(&qm->node);
+        //free(qm);
+    }
+
+    memset(sq->msgpool, 0, sizeof(sq->msgpool));
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);
@@ -1322,37 +1308,6 @@ ethercatqueue_free(struct ethercatqueue *sq)
 
     /* delete ethercatqueue */
     free(sq);
-}
-
-/** allocate a command_queue */
-struct command_queue * __visible
-ethercatqueue_alloc_commandqueue(void)
-{
-    struct command_queue *cq = malloc(sizeof(*cq));
-    memset(cq, 0, sizeof(*cq));
-    list_init(&cq->ready_queue);
-    list_init(&cq->upcoming_queue);
-    return cq;
-}
-
-/** free a command_queue */
-void __visible
-ethercatqueue_free_commandqueue(struct command_queue *cq)
-{
-    /* check command queue */
-    if (!cq)
-    {
-        return;
-    }
-
-    /* ready_queue and upcoming_queue need to be already deallocated */
-    if (!list_empty(&cq->ready_queue) || !list_empty(&cq->upcoming_queue))
-    {
-        errorf("Memory leak! Can't free non-empty commandqueue");
-        return;
-    }
-
-    free(cq);
 }
 
 /** send a single command from high to low level thread */
@@ -1394,11 +1349,11 @@ ethercatqueue_send_command(struct ethercatqueue *sq,
 
 /** add a batch of messages (pvt only) to the upcoming command queue */
 void
-ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, struct list_head *msgs)
+ethercatqueue_send_batch(struct ethercatqueue *sq, struct list_head *msgs)
 {
     /* data */
     int len = 0;
-    struct pvtmsg *qm;
+    struct move_segment_msg *qm;
 
     /* pre-process messages */
     list_for_each_entry(qm, msgs, node)
@@ -1422,7 +1377,7 @@ ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, str
     }
 
     /* get first message */
-    qm = list_first_entry(msgs, struct pvtmsg, node);
+    qm = list_first_entry(msgs, struct move_segment_msg, node);
 
     /* 
      * Acquire mutex, this operation has to be as fast as possible
@@ -1430,15 +1385,8 @@ ethercatqueue_send_batch(struct ethercatqueue *sq, struct command_queue *cq, str
      */
     pthread_mutex_lock(&sq->lock);
 
-    /* check ready queue and upcoming queue */
-    if (list_empty(&cq->ready_queue) && list_empty(&cq->upcoming_queue))
-    {
-        /* new command queue, add it to pending queues */
-        list_add_tail(&cq->node, &sq->pending_queues);
-    }
-
     /* merge message queue with upcoming queue */
-    list_join_tail(msgs, &cq->upcoming_queue);
+    list_join_tail(msgs, &sq->upcoming_queue);
     sq->upcoming_bytes += len;
 
     /* release mutex */

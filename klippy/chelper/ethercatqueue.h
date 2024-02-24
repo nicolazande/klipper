@@ -14,10 +14,10 @@
 #include "list.h" 
 #include <pthread.h>
 #include "msgblock.h"
-#include "ethercatmsg.h"
 #include "command.h"
 #include "ecrt.h"
 #include "pvtsolve.h"
+#include "ethercatmsg.h"
 
 
 /****************************************************************
@@ -32,6 +32,7 @@
 #define ETHERCAT_MAX_REGISTERS 20 //max number of master registers
 #define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
 #define ETHERCAT_MAX_PDO_ENTRIES 20 //max number of pdo enries per slave
+#define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
 
 
 /****************************************************************
@@ -45,14 +46,6 @@ struct pull_queue_message
     double sent_time;
     double receive_time;
     uint64_t notify_id;
-};
-
-/* command queue */
-struct command_queue
-{
-    struct list_head upcoming_queue; //messages that need to be processed before send
-    struct list_head ready_queue;    //messages ready to be sent
-    struct list_node node;
 };
 
 /* ethercat domain wrapper */
@@ -145,7 +138,8 @@ struct ethercatqueue
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
     uint32_t last_clock; //last input event (read operation) clock time
     /* message queues */
-    struct list_head pending_queues; //drive queues of pending messages waiting to be sent
+    struct list_head ready_queue; //list of messages ready to be sent
+    struct list_head upcoming_queue; //list of upcoming messages
     int ready_bytes; //number of bytes ready to be sent (depends on drive pvt buffer size)
     int upcoming_bytes; //number of bytes in upcoming messages to be sent (depends on drive pvt buffer size)
     /* ethercat interface data */
@@ -155,6 +149,8 @@ struct ethercatqueue
     struct list_head request_queue; //list of high level thread requests
     struct list_head response_queue; //list of low level thread responses
     struct command_parser **cp_table; //external list of protocol commands
+    /* allocation */
+    struct move_msgpool msgpool[ETHERCAT_DRIVES];
 };
 
 
@@ -211,12 +207,6 @@ void ethercatqueue_exit(struct ethercatqueue *sq);
 /** free all resources associated with a ethercatqueue */
 void ethercatqueue_free(struct ethercatqueue *sq);
 
-/** allocate a command_queue */
-struct command_queue *ethercatqueue_alloc_commandqueue(void);
-
-/** free a command_queue */
-void ethercatqueue_free_commandqueue(struct command_queue *cq);
-
 /** send a single synchronous command from high to low level thread (blocking) */
 void
 ethercatqueue_send_command(struct ethercatqueue *sq,
@@ -227,12 +217,10 @@ ethercatqueue_send_command(struct ethercatqueue *sq,
                            uint64_t notify_id);
 
 /** 
- * Add a batch of messages to the given command_queue. This function is called
+ * Add a batch of messages to the upcoming queue. This function is called
  * from the flush_moves in the mcu module.
  */
-void ethercatqueue_send_batch(struct ethercatqueue *sq,
-                              struct command_queue *cq,
-                              struct list_head *msgs);
+void ethercatqueue_send_batch(struct ethercatqueue *sq, struct list_head *msgs);
 
 /**
  * Return a message read from the ethercat port (or wait for one if none

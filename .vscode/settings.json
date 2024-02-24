@@ -10,6 +10,9 @@
         "trapq.h": "c",
         "command.h": "c",
         "pvtsolve.h": "c",
-        "math.h": "c"
+        "math.h": "c",
+        "pyhelper.h": "c",
+        "pthread.h": "c",
+        "ethercatmsg.h": "c"
     }
 }

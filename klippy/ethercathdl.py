@@ -310,13 +310,6 @@ class EthercatReader:
         src = EthercatRetryCommand(self, response)
         return src.get_response([cmd], None)
     
-    def alloc_command_queue(self):
-        '''
-        Allocate command queue.
-        '''
-        return self.ffi_main.gc(self.ffi_lib.ethercatqueue_alloc_commandqueue(),
-                                self.ffi_lib.ethercatqueue_free_commandqueue)
-    
     def _handle_unknown_init(self, params):
         logging.debug("%sUnknown message %d (len %d) while identifying", self.warn_prefix, params['#msgid'], len(params['#msg']))
         

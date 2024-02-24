@@ -49,6 +49,7 @@ struct pvtcompress
     double last_position; //last known position of the drive
     struct list_head msg_queue; //linked list of commands (moves) to be executed on the drive
     struct list_head history_list; //linked list of historical drive information
+    struct move_msgpool *msgpool; //pointer to compressor private message pool
 };
 
 /* step history */
@@ -71,7 +72,6 @@ struct pvthistory
 struct drivesync
 {
     struct ethercatqueue *sq; //ethercat queue
-    struct command_queue *cq; //private command queue (isolate from unrelated commands)
     struct pvtcompress **sc_list; //storage for associated pvtcompress objects (one for each drive)
     int sc_num; //number of associated drives
     uint64_t *move_clocks; //list of pending move clocks
@@ -160,9 +160,8 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     uint64_t first_clock = sc->last_step_clock;
     uint64_t last_clock = first_clock + (uint64_t)(last_offset * sc->mcu_freq);
 
-    /* create a queue message */
-    struct pvtmsg *qm = malloc(sizeof(*qm));
-    memset(qm, 0, sizeof(*qm));
+    /* get move segment */
+    struct move_segment_msg *qm = emsg_alloc(sc->msgpool);
 
     /**
      * Cast the queue message buffer to a pvt move and fill it (avoid redundant copies).
@@ -285,7 +284,7 @@ pvtcompress_free(struct pvtcompress *sc)
     }
     while (!list_empty(&sc->msg_queue))
     {
-        struct pvtmsg *qm = list_first_entry(&sc->msg_queue, struct pvtmsg, node);
+        struct move_segment_msg *qm = list_first_entry(&sc->msg_queue, struct move_segment_msg, node);
         list_del(&qm->node);
         free(qm);
     }
@@ -410,7 +409,13 @@ drivesync_alloc(struct ethercatqueue *sq, struct pvtcompress **sc_list, int sc_n
     struct drivesync *ss = malloc(sizeof(*ss));
     memset(ss, 0, sizeof(*ss));
     ss->sq = sq; //assign ethercatqueue
-    ss->cq = ethercatqueue_alloc_commandqueue(); //initialize command queue
+
+    /* loop over step compressors */
+    for (uint8_t i = 0; i < sc_num; i++)
+    {
+        /* initialize private message pool */
+        sc_list[i]->msgpool = &sq->msgpool[i];
+    }
 
     /* setup compressor list (one for each drive) */
     ss->sc_list = malloc(sizeof(*sc_list)*sc_num); 
@@ -435,7 +440,6 @@ drivesync_free(struct drivesync *ss)
     }
     free(ss->sc_list);
     free(ss->move_clocks);
-    ethercatqueue_free_commandqueue(ss->cq);
     free(ss);
 }
 
@@ -471,7 +475,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
     {
         /* find message with lowest req_clock */
         uint64_t req_clock = MAX_CLOCK;
-        struct pvtmsg *qm = NULL;
+        struct move_segment_msg *qm = NULL;
 
         /* 
          * Loop over drive compressor queues and get the min time among each drive compressor
@@ -484,7 +488,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
             if (!list_empty(&sc->msg_queue))
             {
                 /* get requested clock of first step for the selected drive */
-                struct pvtmsg *m = list_first_entry(&sc->msg_queue, struct pvtmsg, node);
+                struct move_segment_msg *m = list_first_entry(&sc->msg_queue, struct move_segment_msg, node);
 
                 /* compare it with the current min (from previous drives) */
                 if (m->req_clock < req_clock)
@@ -543,7 +547,7 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
     if (!list_empty(&msgs))
     {
         /* transmit steps */
-        ethercatqueue_send_batch(ss->sq, ss->cq, &msgs);
+        ethercatqueue_send_batch(ss->sq, &msgs);
     }
     
     return 0;
