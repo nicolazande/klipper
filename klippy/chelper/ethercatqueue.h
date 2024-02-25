@@ -195,8 +195,8 @@ void ethercatqueue_master_config_registers(struct ethercatqueue *sq,
                                            uint8_t n_registers,
                                            ec_pdo_entry_reg_t *registers);
 
-/** create an empty ethercatqueue object */
-struct ethercatqueue *ethercatqueue_alloc(void);
+/** get ethercatqueue data */
+struct ethercatqueue *ethercatqueue_get(void);
 
 /** initialize ethercatqueue */
 int ethercatqueue_init(struct ethercatqueue *sq);

@@ -56,6 +56,8 @@
  *******************s*********************************************/
 /** external command parser table */
 extern struct command_parser *command_parser_table[ETH_MAX_CP];
+/** ethercatqueue static object */
+static struct ethercatqueue ethercatdata;
 
 
 /****************************************************************
@@ -1010,14 +1012,11 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
     dm->registers[dm->n_registers] = (ec_pdo_entry_reg_t){};
 }
 
-/** create an empty ethercatqueue object */
+/** get ethercatqueue data */
 struct ethercatqueue * __visible
-ethercatqueue_alloc(void)
+ethercatqueue_get(void)
 {
-    /* allocate serialqueue */
-    struct ethercatqueue *sq = malloc(sizeof(*sq));
-    memset(sq, 0, sizeof(*sq));
-    return sq;
+    return &ethercatdata;
 }
 
 /** initialize ethercatqueue */

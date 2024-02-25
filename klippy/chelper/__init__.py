@@ -131,7 +131,7 @@ defs_ethercatqueue = """
                                                uint8_t index,
                                                uint8_t n_registers,
                                                ec_pdo_entry_reg_t *registers);
-    struct ethercatqueue *ethercatqueue_alloc(void);
+    struct ethercatqueue *ethercatqueue_get(void);
     int ethercatqueue_init(struct ethercatqueue *sq);
     void ethercatqueue_exit(struct ethercatqueue *sq);
     void ethercatqueue_free(struct ethercatqueue *sq);
