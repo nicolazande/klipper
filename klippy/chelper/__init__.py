@@ -61,7 +61,7 @@ defs_pvtcompress = """
                                       int move_num);
     void drivesync_free(struct drivesync *ss);
     void drivesync_set_time(struct drivesync *ss, double time_offset, double mcu_freq);
-    int drivesync_flush(struct drivesync *ss, uint64_t move_clock);
+    int drivesync_flush(struct drivesync *ss, uint64_t move_clock, uint64_t clear_history_clock);
 """
 
 defs_pvtsolve = """

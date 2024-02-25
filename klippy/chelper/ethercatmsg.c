@@ -52,7 +52,6 @@ struct move_segment_msg *emsg_alloc(struct move_msgpool* pool)
          */
         move = malloc(sizeof(*move));
         memset(move, 0, sizeof(*move));
-        errorf("Out of bounds message allocated");
     }
     else
     {
@@ -93,7 +92,6 @@ void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg)
              *       times are not deterministic.
              */
             free(msg);
-            errorf("Out of bounds message deallocated");
         }
     }
     else

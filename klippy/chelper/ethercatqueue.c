@@ -664,16 +664,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     double waketime; //wake time of next command event
     uint64_t sync_clock = TIMES2NS(eventtime); //distributed clock value
 
-    {
-        static double old_eventtime;
-        double t_delta = eventtime - old_eventtime;
-        if (t_delta > master->sync0_ct*1.2)
-        {
-            //errorf(">> long cycle = %lf", t_delta);
-        }
-        old_eventtime = eventtime;
-    }
-
     /** set master application time */
     ecrt_master_application_time(master->master, sync_clock);
     
@@ -836,7 +826,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     double t_end = get_monotonic();
     double t_delta = t_end - t_start;
-    if (t_delta > master->sync0_ct/10)
+    if (t_delta > master->sync0_ct/5)
     {
         errorf(">> high load = %lf", t_delta);
     }

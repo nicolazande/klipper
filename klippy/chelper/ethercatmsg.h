@@ -18,7 +18,7 @@
  * Defines
  ****************************************************************/
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
-#define MAX_MOVE_SEGMENTS 4096U //drive move segment buffer size
+#define MAX_MOVE_SEGMENTS 1024U //drive move segment buffer size
 
 
 /****************************************************************

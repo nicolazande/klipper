@@ -82,11 +82,14 @@ struct drivesync
 /****************************************************************
  * Private function prototypes
  ****************************************************************/
+/* expire the stepcompress history before the given clock time */
+static inline void drivesync_history_expire(struct drivesync *ss, uint64_t end_clock);
+
 /** free items from the history list up to end_clock */
-static void free_history(struct pvtcompress *sc, uint64_t end_clock);
+static inline void free_history(struct pvtcompress *sc, uint64_t end_clock);
 
 /** determine the print time of the last scheduled step */
-static void calc_last_step_print_time(struct pvtcompress *sc);
+static inline void calc_last_step_print_time(struct pvtcompress *sc);
 
 /** 
  * Set the conversion rate from host print time to mcu clock.
@@ -110,7 +113,17 @@ static void heap_replace(struct drivesync *ss, uint64_t req_clock);
 /****************************************************************
  * Private functions
  ****************************************************************/
-static void
+static inline void
+drivesync_history_expire(struct drivesync *ss, uint64_t end_clock)
+{
+    for (int i = 0; i < ss->sc_num; i++)
+    {
+        struct pvtcompress *sc = ss->sc_list[i];
+        free_history(sc, end_clock);
+    }
+}
+
+static inline void
 free_history(struct pvtcompress *sc, uint64_t end_clock)
 {
     while (!list_empty(&sc->history_list))
@@ -125,20 +138,14 @@ free_history(struct pvtcompress *sc, uint64_t end_clock)
     }
 }
 
-static void
+static inline void
 calc_last_step_print_time(struct pvtcompress *sc)
-{
+{    
     /* last drive step clock */
     double lsc = sc->last_step_clock;
 
     /* convert it to host print time */
     sc->last_step_print_time = sc->mcu_time_offset + (lsc - .5) / sc->mcu_freq;
-
-    /* clear old part of history queue */
-    if (unlikely(lsc > sc->mcu_freq * HISTORY_EXPIRE))
-    {
-        free_history(sc, lsc - sc->mcu_freq * HISTORY_EXPIRE);
-    }
 }
 
 static void
@@ -464,7 +471,7 @@ drivesync_set_time(struct drivesync *ss, double time_offset, double mcu_freq)
  * the steps of all associated drives (in the command queue).
  */
 int __visible
-drivesync_flush(struct drivesync *ss, uint64_t move_clock)
+drivesync_flush(struct drivesync *ss, uint64_t move_clock, uint64_t clear_history_clock)
 {
     /* create common message list */
     struct list_head msgs;
@@ -549,6 +556,9 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock)
         /* transmit steps */
         ethercatqueue_send_batch(ss->sq, &msgs);
     }
+
+    /* clear history */
+    drivesync_history_expire(ss, clear_history_clock);
     
     return 0;
 }

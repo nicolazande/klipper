@@ -85,6 +85,6 @@ void drivesync_set_time(struct drivesync *ss, double time_offset, double mcu_fre
  * the drivesync common object, i.e. reorder and merge into a single queue
  * the steps of all associated drives (in the command queue).
  */
-int drivesync_flush(struct drivesync *ss, uint64_t move_clock);
+int drivesync_flush(struct drivesync *ss, uint64_t move_clock, uint64_t clear_history_clock);
 
 #endif // pvtcompress.h

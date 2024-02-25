@@ -1167,14 +1167,14 @@ class MCU:
             cb(print_time, clock)
 	    # clear history
         clear_history_clock = max(0, self.print_time_to_clock(clear_history_time))
+        # flush ethercat moves
+        ret = self._ffi_lib.drivesync_flush(self._drivesync, clock, clear_history_clock)
+        if ret:
+            raise error("Internal error in MCU '%s' pvtcompress" % (self._name,))
 	    # flush serial moves
         ret = self._ffi_lib.steppersync_flush(self._steppersync, clock, clear_history_clock)
         if ret:
             raise error("Internal error in MCU '%s' stepcompress" % (self._name,))
-        # flush ethercat moves
-        ret = self._ffi_lib.drivesync_flush(self._drivesync, clock)
-        if ret:
-            raise error("Internal error in MCU '%s' pvtcompress" % (self._name,))
             
     def check_active(self, print_time, eventtime):
         '''

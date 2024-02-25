@@ -349,7 +349,7 @@ class ToolHead:
         free_time = sg_flush_time - self.kin_flush_delay
         self.trapq_finalize_moves(self.trapq, free_time, clear_history_time)
         self.extruder.update_move_time(free_time, clear_history_time)
-        # Flush stepcompress and mcu steppersync
+        # flush stepcompress and mcu steppersync
         for m in self.all_mcus:
             m.flush_moves(flush_time, clear_history_time)
         self.last_flush_time = flush_time
