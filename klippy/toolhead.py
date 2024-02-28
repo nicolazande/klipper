@@ -140,6 +140,7 @@ class Move:
             self.cruise_v -= 2*(move_d - self.move_d)/move_t
 
 
+#NOTE: reduced to have smaller queues (needs to match ethercatqueue.c:MIN_REQTIME_DELTA)
 LOOKAHEAD_FLUSH_TIME = 0.250
 class LookAheadQueue:
     '''
@@ -230,8 +231,8 @@ class LookAheadQueue:
             self.flush(lazy=True)
 
 
-BUFFER_TIME_LOW = 1.0
-BUFFER_TIME_HIGH = 2.0
+BUFFER_TIME_LOW = 0.500 #1.0
+BUFFER_TIME_HIGH = 1.000 #2.0
 BUFFER_TIME_START = 0.250
 BGFLUSH_LOW_TIME = 0.200
 BGFLUSH_BATCH_TIME = 0.200
@@ -240,7 +241,7 @@ MIN_KIN_TIME = 0.100
 MOVE_BATCH_TIME = 0.500
 STEPCOMPRESS_FLUSH_TIME = 0.050
 SDS_CHECK_TIME = 0.001 # step+dir+step filter in stepcompress.c
-MOVE_HISTORY_EXPIRE = 30.
+MOVE_HISTORY_EXPIRE = 20.
 DRIP_SEGMENT_TIME = 0.050
 DRIP_TIME = 0.100
 
@@ -399,8 +400,7 @@ class ToolHead:
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[3]:
                 self.extruder.move(next_move_time, move)
-            next_move_time = (next_move_time + move.accel_t
-                              + move.cruise_t + move.decel_t)
+            next_move_time = (next_move_time + move.accel_t + move.cruise_t + move.decel_t)
             for cb in move.timing_callbacks:
                 cb(next_move_time)
         # Generate steps for moves

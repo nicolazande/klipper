@@ -150,7 +150,7 @@ struct ethercatqueue
     struct list_head response_queue; //list of low level thread responses
     struct command_parser **cp_table; //external list of protocol commands
     /* allocation */
-    struct move_msgpool msgpool[ETHERCAT_DRIVES];
+    struct move_msgpool msgpool;
 };
 
 

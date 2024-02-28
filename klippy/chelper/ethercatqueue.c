@@ -42,7 +42,7 @@
 #define MIN_REQTIME_DELTA 0.100     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
-#define MAX_CYCLE_SEGMENTS (2*ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
+#define MAX_CYCLE_SEGMENTS (1*ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
@@ -331,7 +331,7 @@ build_and_send_command(struct ethercatqueue *sq)
         sq->ready_bytes -= qm->len;
 
         /* delete message (message content copied) */
-        emsg_free(&sq->msgpool[qm->oid], qm);
+        emsg_free(&sq->msgpool, qm, qm->oid);
     }
 
     /* total bytes sent */
@@ -828,9 +828,9 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     double t_end = get_monotonic();
     double t_delta = t_end - t_start;
-    if (t_delta > master->sync0_ct/5)
+    if (t_delta > 0.001)
     {
-        errorf(">> high load = %lf", t_delta);
+        errorf(">> eventtime = %lf, high load = %lf", eventtime, t_delta);
     }
 
     /* update next timer event (in pollreactor_check_timers) */
@@ -1170,11 +1170,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
     list_init(&sq->notify_queue);    //notify queue for protocol messages
 
     /* initialize move message pool */
-    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    {
-        init_msg_pool(&sq->msgpool[i]);
-    }
-
+    init_msg_pool(&sq->msgpool, ETHERCAT_DRIVES);
+    
     /* associate external ethercat callback table */
     sq->cp_table = command_parser_table;
 
@@ -1277,17 +1274,16 @@ ethercatqueue_free(struct ethercatqueue *sq)
     {
         struct move_segment_msg *qm = list_first_entry(&sq->ready_queue, struct move_segment_msg, node);
         list_del(&qm->node);
-        //free(qm);
     }
     /* free upcoming queue */
     while (!list_empty(&sq->upcoming_queue))
     {
         struct move_segment_msg *qm = list_first_entry(&sq->upcoming_queue, struct move_segment_msg, node);
         list_del(&qm->node);
-        //free(qm);
     }
 
-    memset(sq->msgpool, 0, sizeof(sq->msgpool));
+    /* reset message pool */
+    memset(&sq->msgpool, 0, sizeof(sq->msgpool));
 
     /* release mutex */
     pthread_mutex_unlock(&sq->lock);

@@ -100,9 +100,6 @@ static inline void calc_last_step_print_time(struct pvtcompress *sc);
  */
 static void pvtcompress_set_time(struct pvtcompress *sc, double time_offset, double mcu_freq);
 
-/** append a move step command */
-void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time);
-
 /** 
  * Implement a binary heap algorithm to track when the next available
  * pvt move the will be available.
@@ -153,83 +150,6 @@ pvtcompress_set_time(struct pvtcompress *sc, double time_offset, double mcu_freq
 {
     sc->mcu_time_offset = time_offset;
     sc->mcu_freq = mcu_freq;
-    calc_last_step_print_time(sc);
-}
-
-void
-pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
-{
-    /* update next move clock (wrt main mcu clock) */
-    double first_offset = pose->time - sc->last_step_print_time;
-    double last_offset = first_offset + move_time;
-
-    /* get time interval for the move */
-    uint64_t first_clock = sc->last_step_clock;
-    uint64_t last_clock = first_clock + (uint64_t)(last_offset * sc->mcu_freq);
-
-    /* get move segment */
-    struct move_segment_msg *qm = emsg_alloc(sc->msgpool);
-
-    /**
-     * Cast the queue message buffer to a pvt move and fill it (avoid redundant copies).
-     * This can be done only because the queue message msg field is guaranteed to be 8
-     * bytes aligned.
-     */
-    struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
-    move->header.type = COPLEY_MODE_BUFFER;
-    move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
-    move->header.format = 0; //0 = buffer mode, 1 = command mode
-    move->position = (int32_t)(pose->position * sc->position_scaling); //move absolute start position [ticks].
-    move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
-    move->time = (uint8_t)(move_time * 1000.);  //move time duration [ms] (up to next pose)
-
-    /*
-     * Queue messages from different pvtcompress objects are merged in a single
-     * command queue, but in the ethercat frame each drive pdo has a specific
-     * position, therefore we need to store the source stepcompress object id
-     * (drive) in each pvt queue mesage.
-     */
-    qm->oid = sc->oid;
-    qm->len = sizeof(*move); //message data size
-
-    /* assign min clock and required clock (same during initialization) */
-    qm->min_clock = sc->last_step_clock;
-    qm->req_clock = sc->last_step_clock;
-
-    /* take into account high delay between steps */
-    uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
-    if (first_clock_offset > CLOCK_DIFF_MAX)
-    {
-        /* 
-         * The delta time between current and last step is too high to
-         * be ignored, therefore move forward the required clock and
-         * accept a delay between steps (this happens for both X and Y
-         * axis --> no positioning error).
-         */
-        qm->req_clock = first_clock + first_clock_offset;
-    }
-
-    /* add message to queue */
-    list_add_tail(&qm->node, &sc->msg_queue);
-
-    /* update stepcompress time (start of next move) */
-    sc->last_step_clock = last_clock;
-
-    /* update stepcompress position (start of next move) */
-    sc->last_position = pose->position + pose->velocity * move_time;
-
-    /* update step sequence number (avoid overflow) */
-    sc->seq_num = (sc->seq_num + 1) & SEQ_NUM_MASK;
-
-    /* create and store move in history tracking */
-    struct pvthistory *hs = malloc(sizeof(*hs));
-    hs->first_clock = first_clock;
-    hs->last_clock = last_clock;
-    hs->start_position = pose->position;
-    hs->velocity = pose->velocity;
-    list_add_head(&hs->node, &sc->history_list);
-
-    /* open loop update of step print time */
     calc_last_step_print_time(sc);
 }
 
@@ -420,8 +340,8 @@ drivesync_alloc(struct ethercatqueue *sq, struct pvtcompress **sc_list, int sc_n
     /* loop over step compressors */
     for (uint8_t i = 0; i < sc_num; i++)
     {
-        /* initialize private message pool */
-        sc_list[i]->msgpool = &sq->msgpool[i];
+        /* give access to message pool */
+        sc_list[i]->msgpool = &sq->msgpool;
     }
 
     /* setup compressor list (one for each drive) */
@@ -561,4 +481,82 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock, uint64_t clear_histor
     drivesync_history_expire(ss, clear_history_clock);
     
     return 0;
+}
+
+/** append step to compessor */
+void
+pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
+{
+    /* update next move clock (wrt main mcu clock) */
+    double first_offset = pose->time - sc->last_step_print_time;
+    double last_offset = first_offset + move_time;
+
+    /* get time interval for the move */
+    uint64_t first_clock = sc->last_step_clock;
+    uint64_t last_clock = first_clock + (uint64_t)(last_offset * sc->mcu_freq);
+
+    /* get move segment */
+    struct move_segment_msg *qm = emsg_alloc(sc->msgpool, sc->oid);
+
+    /**
+     * Cast the queue message buffer to a pvt move and fill it (avoid redundant copies).
+     * This can be done only because the queue message msg field is guaranteed to be 8
+     * bytes aligned.
+     */
+    struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
+    move->header.type = COPLEY_MODE_BUFFER;
+    move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
+    move->header.format = 0; //0 = buffer mode, 1 = command mode
+    move->position = (int32_t)(pose->position * sc->position_scaling); //move absolute start position [ticks].
+    move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
+    move->time = (uint8_t)(move_time * 1000.);  //move time duration [ms] (up to next pose)
+
+    /*
+     * Queue messages from different pvtcompress objects are merged in a single
+     * command queue, but in the ethercat frame each drive pdo has a specific
+     * position, therefore we need to store the source stepcompress object id
+     * (drive) in each pvt queue mesage.
+     */
+    qm->oid = sc->oid;
+    qm->len = sizeof(*move); //message data size
+
+    /* assign min clock and required clock (same during initialization) */
+    qm->min_clock = sc->last_step_clock;
+    qm->req_clock = sc->last_step_clock;
+
+    /* take into account high delay between steps */
+    uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
+    if (first_clock_offset > CLOCK_DIFF_MAX)
+    {
+        /* 
+         * The delta time between current and last step is too high to
+         * be ignored, therefore move forward the required clock and
+         * accept a delay between steps (this happens for both X and Y
+         * axis --> no positioning error).
+         */
+        qm->req_clock = first_clock + first_clock_offset;
+    }
+
+    /* add message to queue */
+    list_add_tail(&qm->node, &sc->msg_queue);
+
+    /* update stepcompress time (start of next move) */
+    sc->last_step_clock = last_clock;
+
+    /* update stepcompress position (start of next move) */
+    sc->last_position = pose->position + pose->velocity * move_time;
+
+    /* update step sequence number (avoid overflow) */
+    sc->seq_num = (sc->seq_num + 1) & SEQ_NUM_MASK;
+
+    /* create and store move in history tracking */
+    struct pvthistory *hs = malloc(sizeof(*hs));
+    hs->first_clock = first_clock;
+    hs->last_clock = last_clock;
+    hs->start_position = pose->position;
+    hs->velocity = pose->velocity;
+    list_add_head(&hs->node, &sc->history_list);
+
+    /* open loop update of step print time */
+    calc_last_step_print_time(sc);
 }

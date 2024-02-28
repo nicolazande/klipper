@@ -17,11 +17,16 @@
  * Public functions
  ****************************************************************/
 /* initialize message pool */
-void init_msg_pool(struct move_msgpool* pool)
+void init_msg_pool(struct move_msgpool* pool, uint8_t n_slots)
 {
-    /* initialize indexes */
-    pool->alloc_idx = 0;
-    pool->free_idx = 0;
+    /* initialize data */
+    pool->n_slots = n_slots;
+    for (uint8_t i = 0; i < n_slots; i++)
+    {
+        /* each consumer is shifted by one slot */
+        pool->alloc_idx[i] = i;
+        pool->free_idx[i] = i;
+    }
     /**
      * Initialize message pool mutex.
      * NOTE: with the current implementation there is no need to block
@@ -32,16 +37,18 @@ void init_msg_pool(struct move_msgpool* pool)
 }
 
 /* allocate a message from the pool */
-struct move_segment_msg *emsg_alloc(struct move_msgpool* pool)
+struct move_segment_msg *emsg_alloc(struct move_msgpool* pool, uint8_t slot)
 {
     /* lock mutex */
     //pthread_mutex_lock(&pool->lock);
 
-    /* segment move */
+    /* data */
     struct move_segment_msg *move;
+    int alloc_idx = pool->alloc_idx[slot];
+    int free_idx = pool->free_idx[slot];
 
     /* check if the pool is full */
-    if ((pool->alloc_idx + 1) % MAX_MOVE_SEGMENTS == pool->free_idx)
+    if ((alloc_idx + pool->n_slots) % MAX_MOVE_SEGMENTS == free_idx)
     {
         /**
          * Direct memory allocation, in case the allocated buffer is
@@ -52,15 +59,16 @@ struct move_segment_msg *emsg_alloc(struct move_msgpool* pool)
          */
         move = malloc(sizeof(*move));
         memset(move, 0, sizeof(*move));
+        errorf("error: dynamic alloc = %d", pool->alloc_idx[slot]);
     }
     else
     {
         /* get move from message pool */
-        move = &(pool->messages[pool->alloc_idx]);
+        move = &pool->messages[alloc_idx];
         memset(move, 0, sizeof(*move));
 
         /* update message pool allocation index */
-        pool->alloc_idx = (pool->alloc_idx + 1) % MAX_MOVE_SEGMENTS;
+        pool->alloc_idx[slot] = (alloc_idx + pool->n_slots) % MAX_MOVE_SEGMENTS;
     }
 
     /* release mutex */
@@ -70,12 +78,14 @@ struct move_segment_msg *emsg_alloc(struct move_msgpool* pool)
 }
 
 /* deallocate a message and make it available for reuse */
-void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg)
+void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg, uint8_t slot)
 {
     /* lock mutex */
     //pthread_mutex_lock(&pool->lock);
 
-    /* calculate the index of the message */
+    /* data */
+    int alloc_idx = pool->alloc_idx[slot];
+    int free_idx = pool->free_idx[slot];
     int index = msg - pool->messages;
 
     /* ceck if the message is within the valid range */
@@ -92,14 +102,19 @@ void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg)
              *       times are not deterministic.
              */
             free(msg);
+            errorf("error: dynamic free = %d", pool->free_idx[slot]);
         }
     }
     else
     {
         /* update message pool deallocation index */
-        if (pool->free_idx == index)
+        if (free_idx == index)
         {
-            pool->free_idx = (pool->free_idx + 1) % MAX_MOVE_SEGMENTS;
+            pool->free_idx[slot] = (free_idx + pool->n_slots) % MAX_MOVE_SEGMENTS;
+        }
+        else
+        {
+            errorf("error: out of order free");
         }
     }
 

@@ -19,6 +19,7 @@
  ****************************************************************/
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
 #define MAX_MOVE_SEGMENTS 1024U //drive move segment buffer size
+#define MAX_MSGPOOL_SLOTS 2U
 
 
 /****************************************************************
@@ -47,14 +48,15 @@ struct move_segment_msg
     };
     uint64_t notify_id; //notify id for high level thread
     struct list_node node;
-};
+} __attribute__((aligned(64)));
 
 /* move message pool */
 struct move_msgpool
 {
     pthread_mutex_t lock; //mutex
-    int alloc_idx; //allocation index
-    int free_idx; //deallocation index
+    uint8_t n_slots;
+    int alloc_idx[MAX_MSGPOOL_SLOTS]; //allocation index
+    int free_idx[MAX_MSGPOOL_SLOTS]; //deallocation index
     struct move_segment_msg messages[MAX_MOVE_SEGMENTS]; //message buffer
 };
 
@@ -63,12 +65,12 @@ struct move_msgpool
  * Public functions
  ****************************************************************/
 /* initialize message pool */
-void init_msg_pool(struct move_msgpool* pool);
+void init_msg_pool(struct move_msgpool* pool, uint8_t n_slots);
 
 /* allocate a message from the pool */
-struct move_segment_msg *emsg_alloc(struct move_msgpool* pool);
+struct move_segment_msg *emsg_alloc(struct move_msgpool* pool, uint8_t slot);
 
 /* deallocate a message and make it available for reuse */
-void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg);
+void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg, uint8_t slot);
 
 #endif // ethercatmsg.h
