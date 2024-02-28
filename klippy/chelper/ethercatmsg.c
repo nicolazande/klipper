@@ -8,9 +8,9 @@
  * Includes
  ****************************************************************/
 #include <pthread.h>
-#include "ethercatmsg.h" // message_alloc
 #include "pyhelper.h" // errorf
 #include "compiler.h"
+#include "ethercatmsg.h" // message_alloc
 
 
 /****************************************************************
@@ -52,6 +52,7 @@ struct move_segment_msg *emsg_alloc(struct move_msgpool* pool)
          */
         move = malloc(sizeof(*move));
         memset(move, 0, sizeof(*move));
+        errorf("error: allocate message memory");
     }
     else
     {
@@ -92,6 +93,7 @@ void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg)
              *       times are not deterministic.
              */
             free(msg);
+            errorf("error: free message memory");
         }
     }
     else
