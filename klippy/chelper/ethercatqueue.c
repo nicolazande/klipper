@@ -1029,14 +1029,20 @@ ethercatqueue_init(struct ethercatqueue *sq)
     /* get ethercat master interface */
     struct mastermonitor *master = &sq->masterifc;
 
+    report_errno("pre ecrt_request_master", ret);
+
     /* create ethercat master */
     master->master = ecrt_request_master(0);
+
+    report_errno("ecrt_request_master", ret);
 
     /* initialize ethercat slaves */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave monitor */
         struct slavemonitor *slave = &master->monitor[i];
+
+        report_errno("ecrt_master_slave_config", ret);
 
         /* create slave configuration */
         ec_slave_config_t *sc = ecrt_master_slave_config(master->master,
