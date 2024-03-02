@@ -149,6 +149,7 @@ class EthercatReader:
         Start new session, there is no direct contact with the mcu during the setup.
         '''
         # allocate ehtercatqueue
+        logging.info("POLENTARUTTI")
         self.ethercatqueue = self.ffi_lib.ethercatqueue_get()
         # set low lever ethercat thread dedicated cpu
         n_cpus = os.cpu_count()

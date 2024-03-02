@@ -23,10 +23,14 @@ void init_msg_pool(struct move_msgpool* pool, uint8_t n_slots)
     pool->n_slots = n_slots;
     for (uint8_t i = 0; i < n_slots; i++)
     {
-        /* each consumer is shifted by one slot */
+        /* shift consumer by one slot */
         pool->alloc_idx[i] = i;
         pool->free_idx[i] = i;
     }
+
+    /* clear message buffer */
+    memset(pool->messages, 0, MAX_MOVE_SEGMENTS);
+
     /**
      * Initialize message pool mutex.
      * NOTE: with the current implementation there is no need to block
@@ -114,7 +118,7 @@ void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg, uint8_t 
         }
         else
         {
-            errorf("error: out of order free");
+            errorf("error: out of order (free_idx = %d, index = %d)", pool->free_idx[slot], index);
         }
     }
 

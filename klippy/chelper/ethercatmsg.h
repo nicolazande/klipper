@@ -19,7 +19,8 @@
  ****************************************************************/
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
 #define MAX_MOVE_SEGMENTS 1024U //drive move segment buffer size
-#define MAX_MSGPOOL_SLOTS 2U
+#define MAX_MSGPOOL_SLOTS 2U //number of messagepool consumers
+#define ETHERCAT_CACHE_ALIGNMENT 64U //data alignment to limit cach miss
 
 
 /****************************************************************
@@ -48,17 +49,17 @@ struct move_segment_msg
     };
     uint64_t notify_id; //notify id for high level thread
     struct list_node node;
-} __attribute__((aligned(64)));
+} __attribute__((aligned(ETHERCAT_CACHE_ALIGNMENT)));
 
 /* move message pool */
 struct move_msgpool
 {
+    struct move_segment_msg messages[MAX_MOVE_SEGMENTS]; //message buffer
     pthread_mutex_t lock; //mutex
-    uint8_t n_slots;
+    uint8_t n_slots; //number of messagepool consumers
     int alloc_idx[MAX_MSGPOOL_SLOTS]; //allocation index
     int free_idx[MAX_MSGPOOL_SLOTS]; //deallocation index
-    struct move_segment_msg messages[MAX_MOVE_SEGMENTS]; //message buffer
-};
+} __attribute__((aligned(ETHERCAT_CACHE_ALIGNMENT)));
 
 
 /****************************************************************
