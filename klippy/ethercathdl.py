@@ -160,12 +160,9 @@ class EthercatReader:
         self._load_ethercat_config('./canopen/config.json')
         # initialize and start low level thread
         self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
-        logging.info("ethercatqueue_init")
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
-        logging.info("background_thread create")
         self.background_thread.start() #start high level background thread
-        logging.info("background_thread start")
         # create ethercat private message parser
         msgparser = msgproto.MessageParser(warn_prefix=self.warn_prefix)
         self.msgparser = msgparser
@@ -183,7 +180,6 @@ class EthercatReader:
             logging.info("%sLoading EtherCAT data dictionary ...", self.warn_prefix)
             msgparser.process_identify(identify_data, decompress=False)
 
-        logging.info("process_identify")
         # unknown response handler (default)
         self.register_response(self.handle_unknown, '#unknown')
         return True
