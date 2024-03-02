@@ -149,21 +149,26 @@ class EthercatReader:
         Start new session, there is no direct contact with the mcu during the setup.
         '''
         # allocate ehtercatqueue
-        logging.info("POLENTARUTTI")
         self.ethercatqueue = self.ffi_lib.ethercatqueue_get()
+        logging.info("ethercatqueue_get")
         # set low lever ethercat thread dedicated cpu
         n_cpus = os.cpu_count()
         if n_cpus is not None and n_cpus > 1:
             self.ffi_lib.ethercatqueue_config_cpu(self.ethercatqueue, 1)
         else:
             logging.info("Hardware not suppoerted")
+        logging.info("ethercatqueue_config_cpu")
         # load ethercat configuration
         self._load_ethercat_config('./canopen/config.json')
+        logging.info("_load_ethercat_config")
         # initialize and start low level thread
         self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
+        logging.info("ethercatqueue_init")
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
+        logging.info("background_thread create")
         self.background_thread.start() #start high level background thread
+        logging.info("background_thread start")
         # create ethercat private message parser
         msgparser = msgproto.MessageParser(warn_prefix=self.warn_prefix)
         self.msgparser = msgparser
@@ -180,6 +185,8 @@ class EthercatReader:
         if identify_data is not None:
             logging.info("%sLoading EtherCAT data dictionary ...", self.warn_prefix)
             msgparser.process_identify(identify_data, decompress=False)
+
+        logging.info("process_identify")
         # unknown response handler (default)
         self.register_response(self.handle_unknown, '#unknown')
         return True
