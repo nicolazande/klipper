@@ -150,17 +150,14 @@ class EthercatReader:
         '''
         # allocate ehtercatqueue
         self.ethercatqueue = self.ffi_lib.ethercatqueue_get()
-        logging.info("ethercatqueue_get")
         # set low lever ethercat thread dedicated cpu
         n_cpus = os.cpu_count()
         if n_cpus is not None and n_cpus > 1:
             self.ffi_lib.ethercatqueue_config_cpu(self.ethercatqueue, 1)
         else:
             logging.info("Hardware not suppoerted")
-        logging.info("ethercatqueue_config_cpu")
         # load ethercat configuration
         self._load_ethercat_config('./canopen/config.json')
-        logging.info("_load_ethercat_config")
         # initialize and start low level thread
         self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
         logging.info("ethercatqueue_init")

@@ -1051,6 +1051,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
 
+        report_errno("ecrt_slave_config_pdos", ret);
+
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
                              master->monitor[i].assign_activate, //dc channel used
@@ -1058,6 +1060,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
                              TIMES2NS(master->sync0_st),  //sync0 shift time
                              TIMES2NS(master->sync1_ct),  //sync1 cycle time
                              TIMES2NS(master->sync1_st)); //sync1 shift time
+
+        report_errno("ecrt_slave_config_dc", ret);
     }
 
     /* configure master domains */
@@ -1069,12 +1073,18 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* create domain */
         dm->domain = ecrt_master_create_domain(master->master);
 
+        report_errno("ecrt_master_create_domain", ret);
+
         /* register mapped pdo entries to domain */
         ret = ecrt_domain_reg_pdo_entry_list(dm->domain, dm->registers);
+
+        report_errno("ecrt_domain_reg_pdo_entry_list", ret);
     }
 
     /* activate master */
     ret = ecrt_master_activate(master->master);
+
+    report_errno("ecrt_master_activate", ret);
 
     /**
      * Get domain data addresses.
