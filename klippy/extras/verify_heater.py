@@ -40,6 +40,7 @@ class HeaterCheck:
         logging.info("Starting heater checks for %s", self.heater_name)
         reactor = self.printer.get_reactor()
         self.check_timer = reactor.register_timer(self.check_event, reactor.NOW)
+        logging.info("POLENTARUTTI")
     def handle_shutdown(self):
         if self.check_timer is not None:
             reactor = self.printer.get_reactor()
