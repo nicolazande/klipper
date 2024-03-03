@@ -828,7 +828,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     double t_end = get_monotonic();
     double t_delta = t_end - t_start;
-    if (t_delta > 0.00025)
+    if (t_delta > 0.000)
     {
         errorf(">> eventtime = %lf, high load = %lf", eventtime, t_delta);
     }
