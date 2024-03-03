@@ -478,6 +478,9 @@ static int cp_f_command_reset_step_clock(struct ethercatqueue *sq, void *out, ui
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint32_t waketime = args[1];
+
+    errorf(".");
+    errorf(">> cp_f_command_reset_step_clock: oid = %u", oid);
     /** TODO: add logic for next step time, it should use adapted
      *        copley firmware and send a segment representing the
      *        absolute time of the following step.
@@ -501,6 +504,9 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
+
+    errorf(".");
+    errorf(">> cp_f_stepper_get_position: oid = %u", oid);
 
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
@@ -533,6 +539,9 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
+
+    errorf(".");
+    errorf(">> cp_f_endstop_home: oid = %u", oid);
     
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
@@ -576,6 +585,9 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
+
+    errorf(".");
+    errorf(">> cp_f_endstop_query_state: oid = %u", oid);
     
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
@@ -608,6 +620,8 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
 
                 /* disable operation (allow next trigger) */
                 cw->enable_operation = 0;
+
+                errorf(">> cp_f_endstop_query_state finished: oid = %u", oid);
             }
         }
     }
@@ -645,6 +659,9 @@ static int cp_f_stepper_stop_on_trigger(struct ethercatqueue *sq, void *out, uin
         {
             cw->enable_operation = 0;
         }
+
+        errorf(".");
+        errorf(">> cp_f_stepper_stop_on_trigger: oid = %u", oid);
     }
 
     return 0;
