@@ -585,9 +585,6 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-
-    errorf(".");
-    errorf(">> cp_f_endstop_query_state: oid = %u", oid);
     
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
@@ -602,13 +599,17 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         if (cw && sw)
         {
             /* get data */
-            int8_t homing = (cw->operation_mode == COLPEY_OPERATION_MODE_HOMING);
-            int8_t finished = sw->homing_attained; //homed
+            uint8_t homing = (cw->operation_mode == COLPEY_OPERATION_MODE_HOMING);
+            uint8_t finished = sw->homing_attained; //homed
             uint32_t next_clock = sq->last_clock; //current input event clock
             /* get command encoder */
             struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
+
+            errorf(".");
+            errorf(">> cp_f_endstop_query_state: oid = %u, finished = %d", oid, finished);
+
             /* check if homing finished */
             if (slave->off_operation_mode && finished)
             {
