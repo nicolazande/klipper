@@ -715,18 +715,18 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         {
             //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-            sw->homing_attained = 1;
-            if (!sw->operation_enabled)
-            {
-                if (!sw->switch_on)
-                {
-                    sw->switch_on = 1;
-                }
-                else
-                {
-                    sw->operation_enabled = 1;
-                }
-            }
+            // sw->homing_attained = 1;
+            // if (!sw->operation_enabled)
+            // {
+            //     if (!sw->switch_on)
+            //     {
+            //         sw->switch_on = 1;
+            //     }
+            //     else
+            //     {
+            //         sw->operation_enabled = 1;
+            //     }
+            // }
         }
     }
 
