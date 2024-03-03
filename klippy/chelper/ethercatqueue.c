@@ -594,6 +594,8 @@ coe_state_machine(struct slavemonitor *slave)
             errorf("sw->switch_on = %u", sw->switch_on);
         }
 
+        counter++;
+
         /* update local copy of status word */
         slave->status_word = *(uint16_t *)sw;
 
