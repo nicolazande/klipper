@@ -371,7 +371,6 @@ class WebHooks:
         self.printer.invoke_shutdown("Shutdown due to webhooks request")
 
     def _handle_rpc_registration(self, web_request):
-        logging.info("LUCA LUCA")
         template = web_request.get_dict('response_template')
         method = web_request.get_str('remote_method')
         new_conn = web_request.get_client_connection()
