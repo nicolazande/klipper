@@ -507,6 +507,10 @@ coe_state_machine(struct slavemonitor *slave)
     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
     struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
 
+    static int counter;
+
+    counter = (counter + 1) % 100;
+
     /* check objects */
     if (cw && sw)
     {
@@ -571,6 +575,23 @@ coe_state_machine(struct slavemonitor *slave)
                 .quick_stop = 1,
                 .enable_operation = 1
             };
+        }
+
+        if (!counter)
+        {
+            errorf("========================");
+            errorf("sw->aborted = %u", sw->aborted);
+            errorf("sw->fault = %u", sw->fault);
+            errorf("sw->generic_error = %u", sw->generic_error);
+            errorf("sw->homed = %u", sw->homed);
+            errorf("sw->homing_attained = %u", sw->homing_attained);
+            errorf("sw->limit_active = %u", sw->limit_active);
+            errorf("sw->moving = %u", sw->moving);
+            errorf("sw->operation_enabled = %u", sw->operation_enabled);
+            errorf("sw->quick_stop = %u", sw->quick_stop);
+            errorf("sw->remote = %u", sw->remote);
+            errorf("sw->switch_diabled = %u", sw->switch_diabled);
+            errorf("sw->switch_on = %u", sw->switch_on);
         }
 
         /* update local copy of status word */
@@ -715,18 +736,18 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         {
             //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-            // sw->homing_attained = 1;
-            // if (!sw->operation_enabled)
-            // {
-            //     if (!sw->switch_on)
-            //     {
-            //         sw->switch_on = 1;
-            //     }
-            //     else
-            //     {
-            //         sw->operation_enabled = 1;
-            //     }
-            // }
+            sw->homing_attained = 1;
+            if (!sw->operation_enabled)
+            {
+                if (!sw->switch_on)
+                {
+                    sw->switch_on = 1;
+                }
+                else
+                {
+                    sw->operation_enabled = 1;
+                }
+            }
         }
     }
 
