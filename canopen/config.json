@@ -12,7 +12,7 @@
 			"syncs" : [
 				{
 					"index" : 0,
-					"direction" : 2,
+					"direction" : 1,
 					"pdos" : [
 						{
 							"index": 5632,
@@ -48,7 +48,7 @@
             	},
 				{
 					"index" : 1,
-					"direction" : 1,
+					"direction" : 2,
 					"pdos" : [
 						{
 							"index": 6656,
@@ -109,7 +109,7 @@
 			"syncs" : [
 				{
 					"index" : 0,
-					"direction" : 2,
+					"direction" : 1,
 					"pdos" : [
 						{
 							"index": 5696,
@@ -145,7 +145,7 @@
             	},
 				{
 					"index" : 1,
-					"direction" : 1,
+					"direction" : 2,
 					"pdos" : [
 						{
 							"index": 6720,
