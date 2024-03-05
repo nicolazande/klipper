@@ -48,7 +48,7 @@
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
 /* switches */
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
-#define CHECK_MASTER_STATE (0U)    //check ethercat master state
+#define CHECK_MASTER_STATE (01)    //check ethercat master state
 
 
 /****************************************************************
