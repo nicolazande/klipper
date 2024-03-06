@@ -1051,6 +1051,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
 
+        report_errno("ecrt_slave_config_pdos", ret);
+
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
                              master->monitor[i].assign_activate, //dc channel used
