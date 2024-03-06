@@ -123,6 +123,7 @@ class EthercatReader:
                     cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
                     cpdo_entries[pdo_entry_idx].bit_length = pdo_entry["bit_length"]
                 # configure sync (pdos and pdo entries)
+                logging.info("sync index = %s. direction = %s" % (sync["index"], sync["direction"]))
                 self.ffi_lib.ethercatqueue_slave_config_sync(self.ethercatqueue,
                                                              slave_idx, sync["index"], sync["direction"],
                                                              len(pdo_entries), cpdo_entries,
