@@ -112,7 +112,7 @@ class EthercatReader:
                 # get sync pdos
                 pdos = sync["pdos"]
                 n_pdos = len(pdos)
-                cpdos = 0
+                cpdos = self.ffi_main.cast("ec_pdo_info_t *", 0)
                 if n_pdos:
                     cpdos = self.ffi_main.new('ec_pdo_info_t['+str(n_pdos)+']')
                 for pdo_idx, pdo in enumerate(pdos):
@@ -121,7 +121,7 @@ class EthercatReader:
                 # get sync pdo entries
                 pdo_entries = sync["pdo_entries"]
                 n_pdo_entries = len(pdo_entries)
-                cpdo_entries = 0
+                cpdo_entries = self.ffi_main.cast("ec_pdo_entry_info_t *", 0)
                 if n_pdo_entries:
                     cpdo_entries = self.ffi_main.new('ec_pdo_entry_info_t['+str(n_pdo_entries)+']')
                 for pdo_entry_idx, pdo_entry in enumerate(pdo_entries):
@@ -139,7 +139,7 @@ class EthercatReader:
         for domain_idx, domain in enumerate(domains):
             registers = domain["registers"]
             n_registers = len(registers)
-            cregisters = 0
+            cregisters = self.ffi_main.cast("ec_pdo_entry_reg_t *", 0)
             if n_registers:
                 cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(n_registers)+']')
             for register_idx, register in enumerate(registers):
