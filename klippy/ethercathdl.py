@@ -90,6 +90,14 @@ class EthercatReader:
                 identify_data = json.load(coe_file)
         except:
             pass
+        # set low lever ethercat thread dedicated cpu
+        hardware = identify_data["hardware"]
+        n_cpus = os.cpu_count()
+        cpu = hardware["cpu"]
+        if n_cpus is not None and n_cpus > 1 and cpu < n_cpus:
+            self.ffi_lib.ethercatqueue_config_cpu(self.ethercatqueue, cpu)
+        else:
+            logging.exception("EtherCAT hardware not supported")
         # get master and slaves data
         master = identify_data["master"]
         slaves = identify_data["slaves"]
@@ -129,7 +137,6 @@ class EthercatReader:
                     cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
                     cpdo_entries[pdo_entry_idx].bit_length = pdo_entry["bit_length"]
                 # configure sync (pdos and pdo entries)
-                logging.info("sync index = %s. direction = %s" % (sync["index"], sync["direction"]))
                 self.ffi_lib.ethercatqueue_slave_config_sync(self.ethercatqueue,
                                                              slave_idx, sync["index"], sync["direction"],
                                                              n_pdo_entries, cpdo_entries,
@@ -160,12 +167,6 @@ class EthercatReader:
         '''
         # allocate ehtercatqueue
         self.ethercatqueue = self.ffi_lib.ethercatqueue_get()
-        # set low lever ethercat thread dedicated cpu
-        n_cpus = os.cpu_count()
-        if n_cpus is not None and n_cpus > 1:
-            self.ffi_lib.ethercatqueue_config_cpu(self.ethercatqueue, 1)
-        else:
-            logging.info("Hardware not suppoerted")
         # load ethercat configuration
         self._load_ethercat_config('./canopen/config.json')
         # initialize and start low level thread

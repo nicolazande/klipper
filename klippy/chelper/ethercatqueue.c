@@ -48,7 +48,7 @@
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
 /* switches */
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
-#define CHECK_MASTER_STATE (01)    //check ethercat master state
+#define CHECK_MASTER_STATE (0U)    //check ethercat master state
 
 
 /****************************************************************
@@ -716,17 +716,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
             //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
             struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
             sw->homing_attained = 1;
-            // if (!sw->operation_enabled)
-            // {
-            //     if (!sw->switch_on)
-            //     {
-            //         sw->switch_on = 1;
-            //     }
-            //     else
-            //     {
-            //         sw->operation_enabled = 1;
-            //     }
-            // }
         }
     }
 
@@ -828,7 +817,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     double t_end = get_monotonic();
     double t_delta = t_end - t_start;
-    if (t_delta > 0.000250)
+    if (t_delta > 0.000100)
     {
         errorf(">> eventtime = %lf, high load = %lf", eventtime, t_delta);
     }
@@ -918,12 +907,11 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[slave_index];
-    errorf("npdos = %u", n_pdos);
 
     /* store pdo entries */
     uint8_t old_n_pdo_entries = slave->n_pdo_entries;
     slave->n_pdo_entries += n_pdo_entries;
-    for (uint8_t i = 0; i < n_pdo_entries; i++)
+    for (uint8_t i = 0; pdo_entries && i < n_pdo_entries; i++)
     {
         uint8_t idx = i + old_n_pdo_entries;
         slave->pdo_entries[idx] = pdo_entries[i];
@@ -932,7 +920,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     /* store pdos */
     uint8_t old_n_pdos = slave->n_pdos;
     slave->n_pdos += n_pdos;
-    for (uint8_t i = 0; i < n_pdos; i++)
+    for (uint8_t i = 0; pdos && i < n_pdos; i++)
     {
         uint8_t idx = i + old_n_pdos;
         slave->pdos[idx].index = pdos[i].index;
@@ -942,7 +930,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     }
 
     /* get number of available syncs */
-    int8_t sync_size = sizeof(slave->syncs)/sizeof(slave->syncs[0]) - 1;    
+    int8_t sync_size = sizeof(slave->syncs)/sizeof(slave->syncs[0]) - 1;
     if ((sync_size > 0) && (sync_index < sync_size))
     {
         slave->syncs[sync_index].index = sync_index;
@@ -1049,12 +1037,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* register slave */
         slave->slave = sc;
 
-        report_errno("ecrt_slave_config_pdos: pre", ret);
-
         /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
-
-        report_errno("ecrt_slave_config_pdos: post", ret);
 
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
