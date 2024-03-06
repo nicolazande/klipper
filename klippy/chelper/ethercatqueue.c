@@ -941,10 +941,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     }
 
     /* get number of available syncs */
-    int8_t sync_size = sizeof(slave->syncs)/sizeof(slave->syncs[0]) - 1;
-
-    errorf("ethercatqueue_slave_config_sync: size = %u, index = %u", sync_size, sync_index);
-    
+    int8_t sync_size = sizeof(slave->syncs)/sizeof(slave->syncs[0]) - 1;    
     if ((sync_size > 0) && (sync_index < sync_size))
     {
         slave->syncs[sync_index].index = sync_index;
@@ -994,6 +991,7 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
                                       uint8_t n_registers,
                                       ec_pdo_entry_reg_t *registers)
 {
+    errorf("ethercatqueue_master_config_registers: start");
     /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct domainmonitor *dm = &master->domains[index];
@@ -1013,6 +1011,8 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
 
     /* reset stop flag (last empty register) */
     dm->registers[dm->n_registers] = (ec_pdo_entry_reg_t){};
+
+    errorf("ethercatqueue_master_config_registers: stop");
 }
 
 /** get ethercatqueue data */
