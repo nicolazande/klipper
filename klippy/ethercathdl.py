@@ -108,17 +108,22 @@ class EthercatReader:
                                                     slave["interpolation_window"])
             # get slave syncs and process them
             syncs = slave["syncs"]
-            logging.info("syncs = %s" % syncs)
             for sync_idx, sync in enumerate(syncs):
                 # get sync pdos
                 pdos = sync["pdos"]
-                cpdos = self.ffi_main.new('ec_pdo_info_t['+str(len(pdos))+']')
+                n_pdos = len(pdos)
+                cpdos = 0
+                if n_pdos:
+                    cpdos = self.ffi_main.new('ec_pdo_info_t['+str(n_pdos)+']')
                 for pdo_idx, pdo in enumerate(pdos):
                     cpdos[pdo_idx].index = pdo["index"]
                     cpdos[pdo_idx].n_entries = pdo["n_entries"]
                 # get sync pdo entries
                 pdo_entries = sync["pdo_entries"]
-                cpdo_entries = self.ffi_main.new('ec_pdo_entry_info_t['+str(len(pdo_entries))+']')
+                n_pdo_entries = len(pdo_entries)
+                cpdo_entries = 0
+                if n_pdo_entries:
+                    cpdo_entries = self.ffi_main.new('ec_pdo_entry_info_t['+str(n_pdo_entries)+']')
                 for pdo_entry_idx, pdo_entry in enumerate(pdo_entries):
                     cpdo_entries[pdo_entry_idx].index = pdo_entry["index"]
                     cpdo_entries[pdo_entry_idx].subindex = pdo_entry["subindex"]
@@ -127,13 +132,16 @@ class EthercatReader:
                 logging.info("sync index = %s. direction = %s" % (sync["index"], sync["direction"]))
                 self.ffi_lib.ethercatqueue_slave_config_sync(self.ethercatqueue,
                                                              slave_idx, sync["index"], sync["direction"],
-                                                             len(pdo_entries), cpdo_entries,
-                                                             len(pdos), cpdos)
+                                                             n_pdo_entries, cpdo_entries,
+                                                             n_pdos, cpdos)
         # process master
         domains = master["domains"]
         for domain_idx, domain in enumerate(domains):
             registers = domain["registers"]
-            cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(len(registers))+']')
+            n_registers = len(registers)
+            cregisters = 0
+            if n_registers:
+                cregisters = self.ffi_main.new('ec_pdo_entry_reg_t['+str(n_registers)+']')
             for register_idx, register in enumerate(registers):
                 cregisters[register_idx].alias = register["alias"]
                 cregisters[register_idx].position = register["position"]
@@ -144,7 +152,7 @@ class EthercatReader:
                 cregisters[register_idx].offset = self.ffi_main.cast("unsigned int *", register["offset"])
                 cregisters[register_idx].bit_position = self.ffi_main.cast("unsigned int *", register["bit_position"])
             # configure common master domain registers
-            self.ffi_lib.ethercatqueue_master_config_registers(self.ethercatqueue, domain_idx, len(registers), cregisters)
+            self.ffi_lib.ethercatqueue_master_config_registers(self.ethercatqueue, domain_idx, n_registers, cregisters)
 
     def _start_session(self):
         '''
