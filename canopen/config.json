@@ -136,32 +136,32 @@
 					"direction" : 1,
 					"pdos" : [
 						{
-							"index": 5696,
+							"index": 5632,
 							"n_entries": 1,
 							"entries": 0
 						},
 						{
-							"index": 5697,
+							"index": 5633,
 							"n_entries": 2,
 							"entries": 0
 						}
-        			],
+					],
 					"pdo_entries": [
-						{
+						{ 
 							"name" : "ip move segment command",
-							"index": 10256,
+							"index": 8208,
 							"subindex": 0,
 							"bit_length": 64
 						},
 						{
 							"name" : "control word",
-							"index": 26688,
+							"index": 24640,
 							"subindex": 0,
 							"bit_length": 16
 						},
 						{
 							"name" : "mode of operation",
-							"index": 26720,
+							"index": 24672,
 							"subindex": 0,
 							"bit_length": 16
 						}
@@ -172,12 +172,12 @@
 					"direction" : 2,
 					"pdos" : [
 						{
-							"index": 6720,
+							"index": 6656,
 							"n_entries": 3,
 							"entries": 0
 						},
 						{
-							"index": 6721,
+							"index": 6657,
 							"n_entries": 2,
 							"entries": 0
 						}
@@ -185,31 +185,31 @@
 					"pdo_entries": [
 						{
 							"name" : "trajectory buffer free count",
-							"index": 10257,
+							"index": 8209,
 							"subindex": 0,
 							"bit_length": 16
 						},
 						{
 							"name" : "trajectory buffer status",
-							"index": 10258,
+							"index": 8210,
 							"subindex": 0,
 							"bit_length": 32
 						},
 						{
 							"name" : "status word",
-							"index": 26689,
+							"index": 24641,
 							"subindex": 0,
 							"bit_length": 16
 						},
 						{
 							"name" : "position actual",
-							"index": 26724,
+							"index": 24676,
 							"subindex": 0,
 							"bit_length": 32
 						},
 						{
 							"name" : "velocity actual",
-							"index": 26732,
+							"index": 24684,
 							"subindex": 0,
 							"bit_length": 32
 						}
@@ -323,7 +323,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 10256,
+						"index" : 8208,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -334,7 +334,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 10257,
+						"index" : 8209,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -345,7 +345,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 10258,
+						"index" : 8210,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -356,7 +356,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 26688,
+						"index" : 24640,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -367,7 +367,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 26689,
+						"index" : 24641,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -378,7 +378,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 26720,
+						"index" : 24672,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -389,7 +389,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 26724,
+						"index" : 24676,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
@@ -400,7 +400,7 @@
 						"position": 1,
 						"vendor_id": 171,
 						"product_code": 4176,
-						"index" : 26732,
+						"index" : 24684,
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
