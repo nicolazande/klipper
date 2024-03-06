@@ -991,7 +991,6 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
                                       uint8_t n_registers,
                                       ec_pdo_entry_reg_t *registers)
 {
-    errorf("ethercatqueue_master_config_registers: start");
     /* get master domain monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct domainmonitor *dm = &master->domains[index];
@@ -1011,8 +1010,6 @@ ethercatqueue_master_config_registers(struct ethercatqueue *sq,
 
     /* reset stop flag (last empty register) */
     dm->registers[dm->n_registers] = (ec_pdo_entry_reg_t){};
-
-    errorf("ethercatqueue_master_config_registers: stop");
 }
 
 /** get ethercatqueue data */
@@ -1026,8 +1023,6 @@ ethercatqueue_get(void)
 int __visible
 ethercatqueue_init(struct ethercatqueue *sq)
 {
-    errorf("ethercatqueue_init");
-
     /* shared error code */
     int ret;
 
@@ -1053,10 +1048,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* register slave */
         slave->slave = sc;
 
+        report_errno("ecrt_slave_config_pdos: pre", ret);
+
         /* configure slave pdos */        
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
 
-        report_errno("ecrt_slave_config_pdos", ret);
+        report_errno("ecrt_slave_config_pdos: post", ret);
 
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
