@@ -918,6 +918,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[slave_index];
+    errorf("pdo address = %lu", (uint64_t)pdos);
 
     /* store pdo entries */
     uint8_t old_n_pdo_entries = slave->n_pdo_entries;
