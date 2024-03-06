@@ -108,7 +108,7 @@
 			"interpolation_window" : 3,
 			"syncs" : [
 				{
-					"index" : 0,
+					"index" : 2,
 					"direction" : 1,
 					"pdos" : [
 						{
@@ -144,7 +144,7 @@
 					]
             	},
 				{
-					"index" : 1,
+					"index" : 3,
 					"direction" : 2,
 					"pdos" : [
 						{

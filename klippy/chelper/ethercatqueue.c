@@ -942,6 +942,9 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
 
     /* get number of available syncs */
     int8_t sync_size = sizeof(slave->syncs)/sizeof(slave->syncs[0]) - 1;
+
+    errorf("ethercatqueue_slave_config_sync: size = %u, index = %u", sync_size, sync_index);
+    
     if ((sync_size > 0) && (sync_index < sync_size))
     {
         slave->syncs[sync_index].index = sync_index;
@@ -1023,6 +1026,8 @@ ethercatqueue_get(void)
 int __visible
 ethercatqueue_init(struct ethercatqueue *sq)
 {
+    errorf("ethercatqueue_init");
+
     /* shared error code */
     int ret;
 
