@@ -54,7 +54,7 @@
 							"name" : "mode of operation",
 							"index": 24672,
 							"subindex": 0,
-							"bit_length": 16
+							"bit_length": 8
 						}
 					]
             	},
@@ -162,7 +162,7 @@
 							"name" : "mode of operation",
 							"index": 24672,
 							"subindex": 0,
-							"bit_length": 16
+							"bit_length": 8
 						}
 					]
             	},

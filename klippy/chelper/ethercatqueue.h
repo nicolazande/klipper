@@ -73,7 +73,7 @@ struct slavemonitor
     uint8_t *off_status_word;      //status word image offset
     uint16_t status_word;          //local copy of status word
     uint8_t *off_operation_mode;   //operation mode offset
-    uint16_t operation_mode;       //local copy of operation mode
+    int8_t operation_mode;       //local copy of operation mode
     uint8_t *off_position_actual;  //actual position offset
     int32_t position_actual;       //local copy of actual position
     uint8_t *off_velocity_actual;  //actual velocity offset
