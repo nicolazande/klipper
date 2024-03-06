@@ -28,7 +28,7 @@
 #endif
 #define ETHERCAT_DRIVES 2  //number of ethercat drives
 #define ETHERCAT_DOMAINS 1 //total number of domains
-#define ETHERCAT_MAX_SYNCS 3 //max number of syncs per slave
+#define ETHERCAT_MAX_SYNCS 5 //max number of syncs per slave
 #define ETHERCAT_MAX_REGISTERS 20 //max number of master registers
 #define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
 #define ETHERCAT_MAX_PDO_ENTRIES 20 //max number of pdo enries per slave
