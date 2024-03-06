@@ -108,6 +108,7 @@ class EthercatReader:
                                                     slave["interpolation_window"])
             # get slave syncs and process them
             syncs = slave["syncs"]
+            logging.info("syncs = %s" % syncs)
             for sync_idx, sync in enumerate(syncs):
                 # get sync pdos
                 pdos = sync["pdos"]
