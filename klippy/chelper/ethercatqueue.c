@@ -918,7 +918,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
     /* get master and slave monitor */
     struct mastermonitor *master = &sq->masterifc;
     struct slavemonitor *slave = &master->monitor[slave_index];
-    errorf("pdo address = %lu", (uint64_t)pdos);
+    errorf("npdos = %u", n_pdos);
 
     /* store pdo entries */
     uint8_t old_n_pdo_entries = slave->n_pdo_entries;
@@ -948,7 +948,7 @@ ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
         slave->syncs[sync_index].index = sync_index;
         slave->syncs[sync_index].dir = direction;
         slave->syncs[sync_index].n_pdos = n_pdos;
-        slave->syncs[sync_index].pdos = &slave->pdos[old_n_pdos];
+        slave->syncs[sync_index].pdos = (n_pdos > 0) ? &slave->pdos[old_n_pdos] : NULL;
     }
 
     /* reset stop flag (last sync) */
