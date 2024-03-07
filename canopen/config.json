@@ -77,7 +77,12 @@
 					"pdos" : [
 						{
 							"index": 6656,
-							"n_entries": 10,
+							"n_entries": 8,
+							"entries": 0
+						},
+						{
+							"index": 6657,
+							"n_entries": 2,
 							"entries": 0
 						}
 					],
@@ -223,7 +228,12 @@
 					"pdos" : [
 						{
 							"index": 6656,
-							"n_entries": 10,
+							"n_entries": 8,
+							"entries": 0
+						},
+						{
+							"index": 6657,
+							"n_entries": 2,
 							"entries": 0
 						}
 					],
