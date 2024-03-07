@@ -511,6 +511,9 @@ coe_state_machine(struct slavemonitor *slave)
     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
     struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
 
+    slave->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+    *slave->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+
     /* check objects */
     if (cw && sw)
     {
