@@ -301,6 +301,8 @@ build_and_send_command(struct ethercatqueue *sq)
             return 0;
         }
 
+        errorf("--> oid = %u, tx_size = %u, rx_size = %u", qm->oid, slave->master_window, slave->slave_window);
+
         /* check for available space */
         if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size))    
         {
