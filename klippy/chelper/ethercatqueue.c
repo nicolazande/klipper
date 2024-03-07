@@ -314,7 +314,9 @@ build_and_send_command(struct ethercatqueue *sq)
             /* increase slave rx index in advance */
             slave->slave_window++;
 
-            errorf("--> oid = %u, p = %d, v = %d, t = %u", qm->oid, move->position, move->velocity, move->time);
+            errorf(".");
+            errorf("--> setpoint = oid = %u, p = %d, v = %d, t = %u", qm->oid, move->position, move->velocity, move->time);
+            errorf("--> feedback: oid = %u, p = %d, v = %d", slave->oid, slave->position_actual, slave->velocity_actual);
         }
         else
         {
