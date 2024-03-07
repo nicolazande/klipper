@@ -152,7 +152,7 @@
         	]
     	},
     	{
-			"name" : "pvt_drive_x",
+			"name" : "pvt_drive_y",
 			"alias": 0,
 			"position": 0,
 			"vendor_id": 171,
