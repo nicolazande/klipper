@@ -316,7 +316,7 @@ build_and_send_command(struct ethercatqueue *sq)
 
             errorf(".");
             errorf("--> setpoint = oid = %u, p = %d, v = %d, t = %u", qm->oid, move->position, move->velocity, move->time);
-            errorf("--> feedback: oid = %u, p = %d, v = %d", slave->oid, slave->position_actual, slave->velocity_actual);
+            errorf("--> feedback: oid = %u, master_window = %u, slave_window = %u", slave->oid, slave->master_window, slave->slave_window);
         }
         else
         {
