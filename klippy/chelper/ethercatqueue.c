@@ -701,6 +701,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         if (slave->off_slave_window)
         {
             slave->slave_window = slave->rx_size - EC_READ_U16(slave->off_slave_window);
+            errorf("slave: oid = %u, window = %u", slave->oid, slave->slave_window);
         }
         /* update actual position */
         if (slave->off_position_actual)
