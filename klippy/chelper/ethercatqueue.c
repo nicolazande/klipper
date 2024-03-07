@@ -511,10 +511,6 @@ coe_state_machine(struct slavemonitor *slave)
     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
     struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
 
-    /* force operation mode */
-    slave->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
-    *slave->off_operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
-
     /* check objects */
     if (cw && sw)
     {
@@ -642,7 +638,7 @@ process_frame(struct ethercatqueue *sq)
                 if (cw && (slave->slave_window < slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    cw->enable_operation = 0;
+                    //cw->enable_operation = 0;
                 }
             }
         }
