@@ -313,10 +313,6 @@ build_and_send_command(struct ethercatqueue *sq)
 
             /* increase slave rx index in advance */
             slave->slave_window++;
-
-            errorf(".");
-            errorf("--> setpoint = oid = %u, p = %d, v = %d, t = %u", qm->oid, move->position, move->velocity, move->time);
-            errorf("--> feedback: oid = %u, master_window = %u, slave_window = %u", slave->oid, slave->master_window, slave->slave_window);
         }
         else
         {
@@ -577,23 +573,23 @@ coe_state_machine(struct slavemonitor *slave)
             };
         }
 
-        errorf("============================");
-        errorf("aborted = %u", sw->aborted);
-        errorf("fault = %u", sw->fault);
-        errorf("generic error = %u", sw->generic_error);
-        errorf("homed = %u", sw->homed);
-        errorf("homing attained = %u", sw->homing_attained);
-        errorf("limit active = %u", sw->limit_active);
-        errorf("moving = %u", sw->moving);
-        errorf("operation enabled = %u", sw->operation_enabled);
-        errorf("quick stop = %u", sw->quick_stop);
-        errorf("remote = %u", sw->remote);
-        errorf("switch disabled = %u", sw->switch_diabled);
-        errorf("switch on = %u", sw->switch_on);
-        errorf("switch ready = %u", sw->switch_ready);
-        errorf("target reached = %u", sw->target_reached);
-        errorf("voltage enabled = %u", sw->voltage_enabled);
-        errorf("warning = %u", sw->warning);
+        // errorf("============================");
+        // errorf("aborted = %u", sw->aborted);
+        // errorf("fault = %u", sw->fault);
+        // errorf("generic error = %u", sw->generic_error);
+        // errorf("homed = %u", sw->homed);
+        // errorf("homing attained = %u", sw->homing_attained);
+        // errorf("limit active = %u", sw->limit_active);
+        // errorf("moving = %u", sw->moving);
+        // errorf("operation enabled = %u", sw->operation_enabled);
+        // errorf("quick stop = %u", sw->quick_stop);
+        // errorf("remote = %u", sw->remote);
+        // errorf("switch disabled = %u", sw->switch_diabled);
+        // errorf("switch on = %u", sw->switch_on);
+        // errorf("switch ready = %u", sw->switch_ready);
+        // errorf("target reached = %u", sw->target_reached);
+        // errorf("voltage enabled = %u", sw->voltage_enabled);
+        // errorf("warning = %u", sw->warning);
 
         /* update local copy of status word */
         slave->status_word = *(uint16_t *)sw;
