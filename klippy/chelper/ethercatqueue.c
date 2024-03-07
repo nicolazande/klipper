@@ -577,6 +577,7 @@ coe_state_machine(struct slavemonitor *slave)
             };
         }
 
+        cw->reset_fault = 1;
         errorf("============================");
         errorf("aborted = %u", sw->aborted);
         errorf("fault = %u", sw->fault);
