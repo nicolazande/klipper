@@ -358,6 +358,9 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* get slave */
         slave = &master->monitor[i];
 
+        errorf("--> oid = %u, tx_size = %u, rx_size = %u", slave->oid, slave->master_window, slave->slave_window);
+
+
         if ((slave->slave_window >= slave->rx_size) /* || (sq->masterifc.full_counter) */)
         {
             /* stop (drive buffer is full) */
@@ -803,8 +806,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
             /* stop (frame transmitted) */
             break;
         }
-
-        errorf("LLLLLLLLLLLLLLLL");
 
         /* build or update data to be sent */
         buflen += build_and_send_command(sq);
