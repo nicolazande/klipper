@@ -77,12 +77,12 @@
 					"pdos" : [
 						{
 							"index": 6656,
-							"n_entries": 8,
+							"n_entries": 6,
 							"entries": 0
 						},
 						{
 							"index": 6657,
-							"n_entries": 2,
+							"n_entries": 4,
 							"entries": 0
 						}
 					],
@@ -106,18 +106,6 @@
 							"bit_length": 16
 						},
 						{
-							"name" : "position actual",
-							"index": 24676,
-							"subindex": 0,
-							"bit_length": 32
-						},
-						{
-							"name" : "velocity actual",
-							"index": 24684,
-							"subindex": 0,
-							"bit_length": 32
-						},
-						{
 							"name" : "trajectory buffer free count",
 							"index": 10257,
 							"subindex": 0,
@@ -134,6 +122,18 @@
 							"index": 26689,
 							"subindex": 0,
 							"bit_length": 16
+						},
+						{
+							"name" : "position actual",
+							"index": 24676,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "velocity actual",
+							"index": 24684,
+							"subindex": 0,
+							"bit_length": 32
 						},
 						{
 							"name" : "position actual",
@@ -228,12 +228,12 @@
 					"pdos" : [
 						{
 							"index": 6656,
-							"n_entries": 8,
+							"n_entries": 6,
 							"entries": 0
 						},
 						{
 							"index": 6657,
-							"n_entries": 2,
+							"n_entries": 4,
 							"entries": 0
 						}
 					],
@@ -257,18 +257,6 @@
 							"bit_length": 16
 						},
 						{
-							"name" : "position actual",
-							"index": 24676,
-							"subindex": 0,
-							"bit_length": 32
-						},
-						{
-							"name" : "velocity actual",
-							"index": 24684,
-							"subindex": 0,
-							"bit_length": 32
-						},
-						{
 							"name" : "trajectory buffer free count",
 							"index": 10257,
 							"subindex": 0,
@@ -285,6 +273,18 @@
 							"index": 26689,
 							"subindex": 0,
 							"bit_length": 16
+						},
+						{
+							"name" : "position actual",
+							"index": 24676,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "velocity actual",
+							"index": 24684,
+							"subindex": 0,
+							"bit_length": 32
 						},
 						{
 							"name" : "position actual",
