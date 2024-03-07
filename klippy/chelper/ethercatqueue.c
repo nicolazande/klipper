@@ -301,8 +301,6 @@ build_and_send_command(struct ethercatqueue *sq)
             return 0;
         }
 
-        errorf("--> oid = %u, tx_size = %u, rx_size = %u", qm->oid, slave->master_window, slave->slave_window);
-
         /* check for available space */
         if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size))    
         {
@@ -805,6 +803,8 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
             /* stop (frame transmitted) */
             break;
         }
+
+        errorf("LLLLLLLLLLLLLLLL");
 
         /* build or update data to be sent */
         buflen += build_and_send_command(sq);
