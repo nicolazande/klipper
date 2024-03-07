@@ -1034,6 +1034,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
                                                          slave->vendor_id,
                                                          slave->product_code);
 
+        /* skip already configured slaves */
+        if (sc == slave->slave)
+        {
+            continue;
+        }
+
         /* register slave */
         slave->slave = sc;
 
