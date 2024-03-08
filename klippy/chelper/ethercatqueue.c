@@ -88,12 +88,17 @@ static inline void process_frame(struct ethercatqueue *sq);
 static inline void coe_state_machine(struct slavemonitor *slave);
 
 /** 
- * Perform EtherCAT preoperationl logic (called always after master activation).
- * NOTE: preoperational does not refer to the ethercat master/slave state
- *       but to the fact that this function is called before starting
- *       the low level EtherCAT thread.
+ * Perform EtherCAT configuration when the slaves are still in
+ * preoperational mode (i.e. SDO, ...).
  */
 static inline void coe_preoperational_setup(struct ethercatqueue *sq);
+
+/** 
+ * Perform EtherCAT configuration when the slaves are already in
+ * perational mode, the master is active, but the low lever
+ * ethercat thread is not yet started.
+ */
+static inline void coe_operational_setup(struct ethercatqueue *sq);
 
 /** check ethercat master state */
 static inline void check_master_state(struct ethercatqueue *sq);
@@ -612,6 +617,31 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
     /* get ethercat master interface */
     struct mastermonitor *master = &sq->masterifc;
 
+    /* drive configuration through SDO */
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        /* get slave monitor */
+        struct slavemonitor *slave = &master->monitor[i];
+
+        /* configure interpolation mode */
+        slave->interpolation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_INTERPOLATION_MODE(i));
+        if (slave->interpolation_mode_sdo)
+        {
+            uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
+            if (data)
+            {
+                EC_WRITE_S16(data, COE_SEGMENT_CUBIC_INTERPOLATION);
+                ecrt_sdo_request_write(slave->interpolation_mode_sdo);
+            }
+        }
+    }
+}
+
+static inline void coe_operational_setup(struct ethercatqueue *sq)
+{
+    /* get ethercat master interface */
+    struct mastermonitor *master = &sq->masterifc;
+
     /**
      * Get domain data addresses.
      * NOTE: perform this operation only after master activation since the process
@@ -678,25 +708,6 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
             offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_VELOCITY_ACTUAL;
             offset = dm->offsets[offset_idx];
             slave->off_velocity_actual = (uint8_t *)(dm->domain_pd + offset);
-        }
-    }
-
-    /* drive configuration through SDO */
-    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    {
-        /* get slave monitor */
-        struct slavemonitor *slave = &master->monitor[i];
-
-        /* configure interpolation mode */
-        slave->interpolation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_INTERPOLATION_MODE(i));
-        if (slave->interpolation_mode_sdo)
-        {
-            uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
-            if (data)
-            {
-                EC_WRITE_S16(data, COE_SEGMENT_CUBIC_INTERPOLATION);
-                ecrt_sdo_request_write(slave->interpolation_mode_sdo);
-            }
         }
     }
 }
@@ -1188,15 +1199,14 @@ ethercatqueue_init(struct ethercatqueue *sq)
         ret = ecrt_domain_reg_pdo_entry_list(dm->domain, dm->registers);
     }
 
+    /* ethercat preoperetional logic */
+    coe_preoperational_setup(sq);
+
     /* activate master */
     ret = ecrt_master_activate(master->master);
 
-    /**
-     * EtherCAT preoperetional logic and a priori known initialization
-     * (i.e. SDO, ...). All unpredictable commands are still handles
-     * by the protocol through the process_request function.
-     */
-    coe_preoperational_setup(sq);
+    /* ethercat operetional logic */
+    coe_operational_setup(sq);
 
     /**
      * Ethercat low level thread reactor setup. It handles low level
