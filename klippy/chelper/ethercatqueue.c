@@ -87,7 +87,12 @@ static inline void process_frame(struct ethercatqueue *sq);
 /** run canopen DS402 state machine */
 static inline void coe_state_machine(struct slavemonitor *slave);
 
-/** perform ethercat preoperationl logic */
+/** 
+ * Perform EtherCAT preoperationl logic (called always after master activation).
+ * NOTE: preoperational does not refer to the ethercat master/slave state
+ *       but to the fact that this function is called before starting
+ *       the low level EtherCAT thread.
+ */
 static inline void coe_preoperational_setup(struct ethercatqueue *sq);
 
 /** check ethercat master state */
@@ -607,7 +612,76 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
     /* get ethercat master interface */
     struct mastermonitor *master = &sq->masterifc;
 
-    /* loop over drives */
+    /**
+     * Get domain data addresses.
+     * NOTE: perform this operation only after master activation since the process
+     *       data image map from kernel to userspace has to be already valid.
+     */
+    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
+    {
+        /* get domain monitor */
+        struct domainmonitor *dm = &master->domains[i];
+
+        /* initialize domain data */
+        dm->domain_pd = ecrt_domain_data(dm->domain);
+
+        /* get domian data size */
+        dm->domain_size = ecrt_domain_size(dm->domain);
+
+        /* udate expected frame total size */
+        master->frame_size += dm->domain_size;
+
+        /* setup domain drive specific objects */
+        for (uint8_t j = 0; j < ETHERCAT_DRIVES; j++)
+        {
+            /* offset data */
+            uint16_t offset_idx;
+            uint32_t offset;
+
+            /* update expected pvt frame size */
+            master->frame_segment_size += ETHERCAT_PVT_SIZE;
+
+            /* get slave monitor */
+            struct slavemonitor *slave = &master->monitor[j];
+
+            /* setup interpolation move segment */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_MOVE_SEGMENT;
+            offset = dm->offsets[offset_idx];
+            slave->movedata[i] = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup buffer free slot count */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_BUFFER_FREE_COUNT;
+            offset = dm->offsets[offset_idx];
+            slave->off_slave_window = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave control word */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_CONTROL_WORD;
+            offset = dm->offsets[offset_idx];
+            slave->off_control_word = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave status word */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_STATUS_WORD;
+            offset = dm->offsets[offset_idx];
+            slave->off_status_word = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave operation mode */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_MODE_OF_OPERATION;
+            offset = dm->offsets[offset_idx];
+            slave->off_operation_mode = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave position actual offset */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_POSITION_ACTUAL;
+            offset = dm->offsets[offset_idx];
+            slave->off_position_actual = (uint8_t *)(dm->domain_pd + offset);
+
+            /* setup slave velocity actual offset */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_VELOCITY_ACTUAL;
+            offset = dm->offsets[offset_idx];
+            slave->off_velocity_actual = (uint8_t *)(dm->domain_pd + offset);
+        }
+    }
+
+    /* drive configuration through SDO */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave monitor */
@@ -1118,75 +1192,10 @@ ethercatqueue_init(struct ethercatqueue *sq)
     ret = ecrt_master_activate(master->master);
 
     /**
-     * Get domain data addresses.
-     * NOTE: perform this operation only after master activation since the process
-     *       data image map from kernel to userspace has to be already valid.
+     * EtherCAT preoperetional logic and a priori known initialization
+     * (i.e. SDO, ...). All unpredictable commands are still handles
+     * by the protocol through the process_request function.
      */
-    for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
-    {
-        /* get domain monitor */
-        struct domainmonitor *dm = &master->domains[i];
-
-        /* initialize domain data */
-        dm->domain_pd = ecrt_domain_data(dm->domain);
-
-        /* get domian data size */
-        dm->domain_size = ecrt_domain_size(dm->domain);
-
-        /* udate expected frame total size */
-        master->frame_size += dm->domain_size;
-
-        /* setup domain drive specific objects */
-        for (uint8_t j = 0; j < ETHERCAT_DRIVES; j++)
-        {
-            /* offset data */
-            uint16_t offset_idx;
-            uint32_t offset;
-
-            /* update expected pvt frame size */
-            master->frame_segment_size += ETHERCAT_PVT_SIZE;
-
-            /* get slave monitor */
-            struct slavemonitor *slave = &master->monitor[j];
-
-            /* setup interpolation move segment */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_MOVE_SEGMENT;
-            offset = dm->offsets[offset_idx];
-            slave->movedata[i] = (uint8_t *)(dm->domain_pd + offset);
-
-            /* setup buffer free slot count */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_BUFFER_FREE_COUNT;
-            offset = dm->offsets[offset_idx];
-            slave->off_slave_window = (uint8_t *)(dm->domain_pd + offset);
-
-            /* setup slave control word */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_CONTROL_WORD;
-            offset = dm->offsets[offset_idx];
-            slave->off_control_word = (uint8_t *)(dm->domain_pd + offset);
-
-            /* setup slave status word */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_STATUS_WORD;
-            offset = dm->offsets[offset_idx];
-            slave->off_status_word = (uint8_t *)(dm->domain_pd + offset);
-
-            /* setup slave operation mode */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_MODE_OF_OPERATION;
-            offset = dm->offsets[offset_idx];
-            slave->off_operation_mode = (uint8_t *)(dm->domain_pd + offset);
-
-            /* setup slave position actual offset */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_POSITION_ACTUAL;
-            offset = dm->offsets[offset_idx];
-            slave->off_position_actual = (uint8_t *)(dm->domain_pd + offset);
-
-            /* setup slave velocity actual offset */
-            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_VELOCITY_ACTUAL;
-            offset = dm->offsets[offset_idx];
-            slave->off_velocity_actual = (uint8_t *)(dm->domain_pd + offset);
-        }
-    }
-
-    /* perform ethercat preoperetional logic */
     coe_preoperational_setup(sq);
 
     /**
