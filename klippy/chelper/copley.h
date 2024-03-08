@@ -55,6 +55,18 @@ enum
     COE_CMD_NO_OPERATION
 };
 
+/* copley drives segment interpolation mode */
+enum
+{
+    COE_SEGMENT_LINEAR_INTERPOLATION = 0,
+    COE_SEGMENT_LINEAR_INTERPOLATION_CT = -1,
+    COE_SEGMENT_LINEAR_INTERPOLATION_VT = -2,
+    COE_SEGMENT_CUBIC_INTERPOLATION = -3
+};
+
+/* copley drives sdos */
+#define COE_SDO_INTERPOLATION_MODE(axis) 0x60C0 + axis*0x800, 0, 2
+
 
 /****************************************************************
  * CANopen data types

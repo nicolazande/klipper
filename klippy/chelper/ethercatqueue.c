@@ -87,6 +87,9 @@ static inline void process_frame(struct ethercatqueue *sq);
 /** run canopen DS402 state machine */
 static inline void coe_state_machine(struct slavemonitor *slave);
 
+/** perform ethercat preoperationl logic */
+static inline void coe_preoperational_setup(struct ethercatqueue *sq);
+
 /** check ethercat master state */
 static inline void check_master_state(struct ethercatqueue *sq);
 
@@ -596,6 +599,31 @@ coe_state_machine(struct slavemonitor *slave)
 
         /* update local copy of control word */
         slave->control_word = *(uint16_t *)cw;
+    }
+}
+
+static inline void coe_preoperational_setup(struct ethercatqueue *sq)
+{
+    /* get ethercat master interface */
+    struct mastermonitor *master = &sq->masterifc;
+
+    /* loop over drives */
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        /* get slave monitor */
+        struct slavemonitor *slave = &master->monitor[i];
+
+        /* configure interpolation mode */
+        slave->interpolation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_INTERPOLATION_MODE(i));
+        if (slave->interpolation_mode_sdo)
+        {
+            uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
+            if (data)
+            {
+                EC_WRITE_S16(data, COE_SEGMENT_CUBIC_INTERPOLATION);
+                ecrt_sdo_request_write(slave->interpolation_mode_sdo);
+            }
+        }
     }
 }
 
@@ -1158,24 +1186,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
         }
     }
 
-
-    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    {
-        /* get slave monitor */
-        struct slavemonitor *slave = &master->monitor[i];
-        slave->interpolation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, 0x60C0 + i*0x800, 0, 2);
-        if (slave->interpolation_mode_sdo)
-        {
-            uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
-            if (data)
-            {
-                EC_WRITE_S16(data, -3);
-                ecrt_sdo_request_write(slave->interpolation_mode_sdo);
-            }
-            errorf("data = %lu", (uint64_t)data);
-            errorf("LUCALUCA");
-        }
-    }
+    /* perform ethercat preoperetional logic */
+    coe_preoperational_setup(sq);
 
     /**
      * Ethercat low level thread reactor setup. It handles low level
