@@ -1159,7 +1159,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
     }
 
 
-    for (uint8_t i = 0; i , ETHERCAT_DRIVES; i++)
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
         /* get slave monitor */
         struct slavemonitor *slave = &master->monitor[i];
@@ -1172,7 +1172,7 @@ ethercatqueue_init(struct ethercatqueue *sq)
                 EC_WRITE_S16(data, -3);
                 ecrt_sdo_request_write(slave->interpolation_mode_sdo);
             }
-            errorf("data = %lu", (uint64)data);
+            errorf("data = %lu", (uint64_t)data);
             errorf("LUCALUCA");
         }
     }
