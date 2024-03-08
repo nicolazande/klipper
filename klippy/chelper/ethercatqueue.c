@@ -1167,8 +1167,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
         if (slave->interpolation_mode_sdo)
         {
             uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
-            EC_WRITE_S16(data, -3);
-            ecrt_sdo_request_write(slave->interpolation_mode_sdo);
+            if (data)
+            {
+                EC_WRITE_S16(data, -3);
+                ecrt_sdo_request_write(slave->interpolation_mode_sdo);
+            }
+            errorf("data = %lu", (uint64)data);
             errorf("LUCALUCA");
         }
     }
