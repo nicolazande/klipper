@@ -547,10 +547,10 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         if (slave->off_operation_mode)
         {
             /* operation mode in frame */
-            *slave->off_operation_mode = COLPEY_OPERATION_MODE_HOMING;
+            *slave->off_operation_mode = COE_OPERATION_MODE_HOMING;
             
             /* local copy of operation mode */
-            slave->operation_mode = COLPEY_OPERATION_MODE_HOMING;
+            slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
             /* disable operation (allow next trigger) */
             cw->enable_operation = 0;
@@ -589,7 +589,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         if (cw && sw)
         {
             /* get data */
-            uint8_t homing = (cw->operation_mode == COLPEY_OPERATION_MODE_HOMING);
+            uint8_t homing = (cw->operation_mode == COE_OPERATION_MODE_HOMING);
             uint8_t finished = sw->homing_attained; //homed
             uint32_t next_clock = sq->last_clock; //current input event clock
             /* get command encoder */
@@ -600,10 +600,10 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             if (slave->off_operation_mode && finished)
             {
                 /* reset operation mode in frame */
-                *slave->off_operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+                *slave->off_operation_mode = COE_OPERATION_MODE_INTERPOLATION;
 
                 /* reset local copy of interpolation mode */
-                slave->operation_mode = COLPEY_OPERATION_MODE_INTERPOLATION;
+                slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
 
                 /* disable operation (allow next trigger) */
                 cw->enable_operation = 0;

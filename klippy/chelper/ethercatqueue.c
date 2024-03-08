@@ -630,15 +630,15 @@ process_frame(struct ethercatqueue *sq)
              */
             if (move)
             {
-                move->command.type = COPLEY_MODE_CMD;
-                move->command.code = COPLEY_CMD_NO_OPERATION;
+                move->command.type = COE_SEGMENT_MODE_CMD;
+                move->command.code = COE_CMD_NO_OPERATION;
                 move->time = 0;
                 move->position = 0;
                 move->velocity = 0;
             }
 
             /* stop before buffer underflow */
-            if (slave->operation_mode == COLPEY_OPERATION_MODE_INTERPOLATION)
+            if (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
             {
                 /* get control word */
                 struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
@@ -1122,39 +1122,54 @@ ethercatqueue_init(struct ethercatqueue *sq)
             struct slavemonitor *slave = &master->monitor[j];
 
             /* setup interpolation move segment */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MOVE_SEGMENT;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_MOVE_SEGMENT;
             offset = dm->offsets[offset_idx];
             slave->movedata[i] = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup buffer free slot count */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_BUFFER_FREE_COUNT;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_BUFFER_FREE_COUNT;
             offset = dm->offsets[offset_idx];
             slave->off_slave_window = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup slave control word */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_CONTROL_WORD;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_CONTROL_WORD;
             offset = dm->offsets[offset_idx];
             slave->off_control_word = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup slave status word */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_STATUS_WORD;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_STATUS_WORD;
             offset = dm->offsets[offset_idx];
             slave->off_status_word = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup slave operation mode */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_MODE_OF_OPERATION;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_MODE_OF_OPERATION;
             offset = dm->offsets[offset_idx];
             slave->off_operation_mode = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup slave position actual offset */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_POSITION_ACTUAL;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_POSITION_ACTUAL;
             offset = dm->offsets[offset_idx];
             slave->off_position_actual = (uint8_t *)(dm->domain_pd + offset);
 
             /* setup slave velocity actual offset */
-            offset_idx = j * ETHERCAT_OFFSET_MAX + ETHERCAT_OFFSET_VELOCITY_ACTUAL;
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_VELOCITY_ACTUAL;
             offset = dm->offsets[offset_idx];
             slave->off_velocity_actual = (uint8_t *)(dm->domain_pd + offset);
+        }
+    }
+
+
+    for (uint8_t i = 0; i , ETHERCAT_DRIVES; i++)
+    {
+        /* get slave monitor */
+        struct slavemonitor *slave = &master->monitor[i];
+        slave->interpolation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, 0x60C0 + i*0x800, 0, 2);
+        if (slave->interpolation_mode_sdo)
+        {
+            uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
+            EC_WRITE_S16(data, -3);
+            ecrt_sdo_request_write(slave->interpolation_mode_sdo);
+            errorf("LUCALUCA");
         }
     }
 

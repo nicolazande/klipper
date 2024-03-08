@@ -78,6 +78,7 @@ struct slavemonitor
     int32_t position_actual;       //local copy of actual position
     uint8_t *off_velocity_actual;  //actual velocity offset
     int32_t velocity_actual;       //local copy of actual velocity
+    ec_sdo_request_t *interpolation_mode_sdo;
     /* monitoring */
     uint16_t tx_size;              //number tx pdo instances in the frame
     uint16_t rx_size;              //size of pvt buffer on slave side
