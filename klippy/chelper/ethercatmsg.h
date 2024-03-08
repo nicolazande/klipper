@@ -11,6 +11,8 @@
  * Includes
  ****************************************************************/
 #include <stdint.h> // uint8_t
+#include <stdlib.h>
+#include <string.h>
 #include "list.h" // struct list_node
 
 
@@ -18,7 +20,7 @@
  * Defines
  ****************************************************************/
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
-#define MAX_MOVE_SEGMENTS 1024U //drive move segment buffer size
+#define MAX_MOVE_SEGMENTS 1024U //drive move segment buffer size (NOTE: needs to be multiple of ETHERCAT_DRIVES)
 #define MAX_MSGPOOL_SLOTS 2U //number of messagepool consumers
 #define ETHERCAT_CACHE_ALIGNMENT 64U //data alignment to limit cach miss
 
