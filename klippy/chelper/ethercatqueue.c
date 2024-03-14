@@ -613,9 +613,18 @@ coe_state_machine(struct slavemonitor *slave)
         slave->control_word = *(uint16_t *)cw;
     }
 
-    errorf(".");
-    errorf("--> control word = %u", slave->control_word);
-    errorf("--> status word = %u", slave->status_word);
+    static uint16_t swold;
+    static uint16_t cwold;
+    if (cwold != slave->control_word)
+    {
+        errorf("--> control word = %u", slave->control_word);
+        cwold = slave->control_word;
+    }
+    if (swold != slave->status_word)
+    {
+        errorf("--> status word = %u", slave->status_word);
+        swold = slave->status_word;
+    }
 }
 
 static inline void coe_preoperational_setup(struct ethercatqueue *sq)
@@ -849,11 +858,11 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         }
         
         /** NOTE: following scope is only for test purpose, remove it!!!! */
-        // {
-        //     //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-        //     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-        //     sw->homing_attained = 1;
-        // }
+        {
+            //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+            struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
+            sw->homing_attained = 1;
+        }
     }
 
     /* process frame (cleanup and state machine) */
