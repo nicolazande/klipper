@@ -606,6 +606,8 @@ coe_state_machine(struct slavemonitor *slave)
         // errorf("voltage enabled = %u", sw->voltage_enabled);
         // errorf("warning = %u", sw->warning);
 
+        cw->reset_fault = 1;
+
         /* update local copy of status word */
         slave->status_word = *(uint16_t *)sw;
 
