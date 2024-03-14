@@ -3,7 +3,7 @@
 		{
 			"name" : "pvt_drive_x",
 			"alias": 0,
-			"position": 0,
+			"position": 3,
 			"vendor_id": 171,
 			"product_code": 4176,
 			"assign_activate" : 0,
@@ -154,7 +154,7 @@
     	{
 			"name" : "pvt_drive_y",
 			"alias": 0,
-			"position": 0,
+			"position": 3,
 			"vendor_id": 171,
 			"product_code": 4176,
 			"assign_activate" : 0,
@@ -317,7 +317,7 @@
 					{
 						"name" : "ip move segment command",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 8208,
@@ -328,7 +328,7 @@
 					{
 						"name" : "trajectory buffer free count",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 8209,
@@ -339,7 +339,7 @@
 					{
 						"name" : "trajectory buffer status",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 8210,
@@ -350,7 +350,7 @@
 					{
 						"name" : "control word",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 24640,
@@ -361,7 +361,7 @@
 					{
 						"name" : "status word",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 24641,
@@ -372,7 +372,7 @@
 					{
 						"name" : "mode of operation",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 24672,
@@ -383,7 +383,7 @@
 					{
 						"name" : "position actual",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 24676,
@@ -394,7 +394,7 @@
 					{
 						"name" : "velocity actual",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 24684,
@@ -405,7 +405,7 @@
 					{
 						"name" : "ip move segment command",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 10256,
@@ -416,7 +416,7 @@
 					{
 						"name" : "trajectory buffer free count",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 10257,
@@ -427,7 +427,7 @@
 					{
 						"name" : "trajectory buffer status",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 10258,
@@ -438,7 +438,7 @@
 					{
 						"name" : "control word",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 26688,
@@ -449,7 +449,7 @@
 					{
 						"name" : "status word",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 26689,
@@ -460,7 +460,7 @@
 					{
 						"name" : "mode of operation",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 26720,
@@ -471,7 +471,7 @@
 					{
 						"name" : "position actual",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 26724,
@@ -482,7 +482,7 @@
 					{
 						"name" : "velocity actual",
 						"alias": 0,
-						"position": 0,
+						"position": 3,
 						"vendor_id": 171,
 						"product_code": 4176,
 						"index" : 26732,

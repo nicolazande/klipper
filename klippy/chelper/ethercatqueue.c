@@ -588,30 +588,6 @@ coe_state_machine(struct slavemonitor *slave)
             };
         }
 
-        // errorf("============================");
-        // errorf("aborted = %u", sw->aborted);
-        // errorf("fault = %u", sw->fault);
-        // errorf("generic error = %u", sw->generic_error);
-        // errorf("homed = %u", sw->homed);
-        // errorf("homing attained = %u", sw->homing_attained);
-        // errorf("limit active = %u", sw->limit_active);
-        // errorf("moving = %u", sw->moving);
-        // errorf("operation enabled = %u", sw->operation_enabled);
-        // errorf("quick stop = %u", sw->quick_stop);
-        // errorf("remote = %u", sw->remote);
-        // errorf("switch disabled = %u", sw->switch_diabled);
-        // errorf("switch on = %u", sw->switch_on);
-        // errorf("switch ready = %u", sw->switch_ready);
-        // errorf("target reached = %u", sw->target_reached);
-        // errorf("voltage enabled = %u", sw->voltage_enabled);
-        // errorf("warning = %u", sw->warning);
-
-        cw->power_switch = 1;
-        cw->voltage_switch = 1;
-        cw->quick_stop = 1;
-        cw->enable_operation = 1;
-        cw->reset_fault = 1;
-
         /* update local copy of status word */
         slave->status_word = *(uint16_t *)sw;
 
