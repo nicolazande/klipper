@@ -520,6 +520,8 @@ coe_state_machine(struct slavemonitor *slave)
     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
     struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
 
+    static int counter = 0;
+
     /* check objects */
     if (cw && sw)
     {
@@ -610,6 +612,8 @@ coe_state_machine(struct slavemonitor *slave)
         /* update local copy of control word */
         slave->control_word = *(uint16_t *)cw;
     }
+
+    errorf("--> control word = %u", slave->control_word);
 }
 
 static inline void coe_preoperational_setup(struct ethercatqueue *sq)
