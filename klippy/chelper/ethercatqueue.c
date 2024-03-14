@@ -606,6 +606,10 @@ coe_state_machine(struct slavemonitor *slave)
         // errorf("voltage enabled = %u", sw->voltage_enabled);
         // errorf("warning = %u", sw->warning);
 
+        cw->power_switch = 1;
+        cw->voltage_switch = 1;
+        cw->quick_stop = 1;
+        cw->enable_operation = 1;
         cw->reset_fault = 1;
 
         /* update local copy of status word */
