@@ -613,7 +613,9 @@ coe_state_machine(struct slavemonitor *slave)
         slave->control_word = *(uint16_t *)cw;
     }
 
+    errorf(".");
     errorf("--> control word = %u", slave->control_word);
+    errorf("--> status word = %u", slave->status_word);
 }
 
 static inline void coe_preoperational_setup(struct ethercatqueue *sq)
