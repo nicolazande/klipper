@@ -750,14 +750,14 @@ process_frame(struct ethercatqueue *sq)
              *       with the same sequence number of the previous has no effect,
              *       therefore this reset may be uncecessary.
              */
-            if (move)
-            {
-                move->command.type = COE_SEGMENT_MODE_CMD;
-                move->command.code = COE_CMD_NO_OPERATION;
-                move->time = 0;
-                move->position = 0;
-                move->velocity = 0;
-            }
+            // if (move)
+            // {
+            //     move->command.type = COE_SEGMENT_MODE_CMD;
+            //     move->command.code = COE_CMD_NO_OPERATION;
+            //     move->time = 0;
+            //     move->position = 0;
+            //     move->velocity = 0;
+            // }
 
             /* stop before buffer underflow */
             if (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
@@ -937,8 +937,8 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
                 /* reset window */
                 slave->master_window = 0;
 
-                struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
-                errorf("--> move: oid = %u, p = %d, v = %d, t = %u", slave->oid, move->position, move->velocity, move->time);
+                // struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
+                // errorf("--> move: oid = %u, p = %d, v = %d, t = %u", slave->oid, move->position, move->velocity, move->time);
 
             }
 
