@@ -593,7 +593,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
         struct coe_status_word lsw = *sw;
-        errorf("STATUS WORD = %u = [%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u]",
+        errorf("STATUS WORD = %u = [%u%u%u%u %u%u%u%u %u%u%u%u %u%u%u%u]",
                 lsw,
                 lsw.homed,
                 lsw.moving,
