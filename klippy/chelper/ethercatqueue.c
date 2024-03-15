@@ -753,8 +753,8 @@ process_frame(struct ethercatqueue *sq)
             if (move)
             {
                 move->command.type = COE_SEGMENT_MODE_CMD;
-                move->command.code = COE_CMD_NO_OPERATION;
-                move->time = 0;
+                move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_NO_OPERATION;
+                move->time = 0xFF;
                 move->position = 0;
                 move->velocity = 0;
             }
