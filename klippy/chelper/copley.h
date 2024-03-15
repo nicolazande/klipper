@@ -131,4 +131,48 @@ struct coe_ip_move
     int32_t velocity:24; //current speed
 } __attribute((packed));
 
+
+/****************************************************************
+ * Helpers
+ ****************************************************************/
+#define PRINT_STATUS_WORD(sw) \
+    errorf("status word = %u = [%u%u%u%u %u%u%u%u %u%u%u%u %u%u%u%u]",\
+            *((uint16_t *)sw),\
+            sw->homed,\
+            sw->moving,\
+            sw->generic_error,\
+            sw->homing_attained,\
+            sw->limit_active,\
+            sw->target_reached,\
+            sw->remote,\
+            sw->aborted,\
+            sw->warning,\
+            sw->switch_diabled,\
+            sw->quick_stop,\
+            sw->voltage_enabled,\
+            sw->fault,\
+            sw->operation_enabled,\
+            sw->switch_on,\
+            sw->switch_ready);
+
+#define PRINT_CONTROL_WORD(cw) \
+    errorf("control word = %u = [%u%u%u%u %u%u%u%u %u%u%u%u %u%u%u%u]",\
+            *((uint16_t *)cw),\
+            cw->padding & 0b1000000,\
+            cw->padding & 0b0100000,\
+            cw->padding & 0b0010000,\
+            cw->padding & 0b0001000,\
+            cw->padding & 0b0000100,\
+            cw->padding & 0b0000010,\
+            cw->padding & 0b0000001,\
+            cw->halt,\
+            cw->reset_fault,\
+            cw->operation_mode & 0b100,\
+            cw->operation_mode & 0b010,\
+            cw->operation_mode & 0b001,\
+            cw->enable_operation,\
+            cw->quick_stop,\
+            cw->voltage_switch,\
+            cw->power_switch);
+
 #endif // copley.h
