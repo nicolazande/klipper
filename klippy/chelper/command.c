@@ -593,7 +593,40 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
         struct coe_status_word lsw = *sw;
-        errorf("STATUS WORD = %u, attained = %u, size = %u, ready = %u, homed = %u", lsw, lsw.homing_attained, sizeof(lsw), lsw.switch_ready, lsw.homed);
+        errorf("STATUS WORD = [%u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u,
+                %u",
+                lsw,
+                lsw.switch_ready,
+                lsw.switch_on,
+                lsw.operation_enabled,
+                lsw.fault,
+                lsw.voltage_enabled,
+                lsw.quick_stop,
+                lsw.switch_diabled,
+                lsw.warning,
+                lsw.aborted,
+                lsw.remote,
+                lsw.target_reached,
+                lsw.limit_active,
+                lsw.homing_attained,
+                lsw.generic_error,
+                lsw.moving,
+                lsw.homed);
         /* check data */
         if (cw && sw)
         {
