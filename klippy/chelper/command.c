@@ -5,6 +5,27 @@
  *        level ethercat threads.
  */
 
+#define PRINT_STATUS_WORD(sw) \
+    errorf("STATUS WORD = %u = [%u%u%u%u %u%u%u%u %u%u%u%u %u%u%u%u]", \
+            sw, \
+            sw.homed, \
+            sw.moving, \
+            sw.generic_error,\
+            sw.homing_attained,\
+            sw.limit_active,\
+            sw.target_reached,\
+            sw.remote,\
+            sw.aborted,\
+            sw.warning,\
+            sw.switch_diabled,\
+            sw.quick_stop,\
+            sw.voltage_enabled,\
+            sw.fault,\
+            sw.operation_enabled,\
+            sw.switch_on,\
+            sw.switch_ready);
+
+
 /****************************************************************
  * Includes
  ****************************************************************/
@@ -593,24 +614,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
         struct coe_status_word lsw = *sw;
-        errorf("STATUS WORD = %u = [%u%u%u%u %u%u%u%u %u%u%u%u %u%u%u%u]",
-                lsw,
-                lsw.homed,
-                lsw.moving,
-                lsw.generic_error,
-                lsw.homing_attained,
-                lsw.limit_active,
-                lsw.target_reached,
-                lsw.remote,
-                lsw.aborted,
-                lsw.warning,
-                lsw.switch_diabled,
-                lsw.quick_stop,
-                lsw.voltage_enabled,
-                lsw.fault,
-                lsw.operation_enabled,
-                lsw.switch_on,
-                lsw.switch_ready);
+        PRINT_STATUS_WORD(lsw)
         /* check data */
         if (cw && sw)
         {
