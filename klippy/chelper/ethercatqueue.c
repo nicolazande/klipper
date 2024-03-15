@@ -620,6 +620,18 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
         /* get slave monitor */
         struct slavemonitor *slave = &master->monitor[i];
 
+        /* configure operation mode */
+        slave->operation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_OPERATION_MODE(i));
+        if (slave->operation_mode_sdo)
+        {
+            uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
+            if (data)
+            {
+                EC_WRITE_S8(data, COE_OPERATION_MODE_INTERPOLATION);
+                ecrt_sdo_request_write(slave->operation_mode_sdo);
+            }
+        }
+
         /* configure interpolation mode */
         slave->interpolation_mode_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_INTERPOLATION_MODE(i));
         if (slave->interpolation_mode_sdo)

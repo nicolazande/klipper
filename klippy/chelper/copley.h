@@ -65,6 +65,7 @@ enum
 };
 
 /* copley drives sdo */
+#define COE_SDO_OPERATION_MODE(axis) 0x6060 + axis*0x800, 0, 1
 #define COE_SDO_INTERPOLATION_MODE(axis) 0x60C0 + axis*0x800, 0, 2
 
 

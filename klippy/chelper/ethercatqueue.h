@@ -80,6 +80,7 @@ struct slavemonitor
     int32_t velocity_actual;       //local copy of actual velocity
     /* sdo */
     ec_sdo_request_t *interpolation_mode_sdo; //sdo for setting interpolation mode
+    ec_sdo_request_t *operation_mode_sdo; //sdo for setting operation mode
     /* monitoring */
     uint16_t tx_size;              //number tx pdo instances in the frame
     uint16_t rx_size;              //size of pvt buffer on slave side
