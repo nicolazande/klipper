@@ -321,6 +321,8 @@ build_and_send_command(struct ethercatqueue *sq)
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
             *move = *((struct coe_ip_move *)qm->msg);
 
+            errorf("--> move: oid = %u, p = %d, v = %d, t = %u", slave->oid, move->position, move->velocity, move->time);
+
             /* increase master tx index */
             slave->master_window++;
 
