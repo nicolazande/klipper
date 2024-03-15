@@ -592,8 +592,6 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
-        PRINT_STATUS_WORD(sw)
-        PRINT_CONTROL_WORD(cw)
         /* check data */
         if (cw && sw)
         {
