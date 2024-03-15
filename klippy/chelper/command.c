@@ -592,13 +592,14 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
-        errorf("STATUS WORD = %u, attained = %u, size = %u", *((uint16_t *)sw), sw->homing_attained, sizeof(*sw));
+        struct coe_status_word lsw = *sw;
+        errorf("STATUS WORD = %u, attained = %u, size = %u", lsw, lsw.homing_attained, sizeof(lsw));
         /* check data */
         if (cw && sw)
         {
             /* get data */
             uint8_t homing = (cw->operation_mode == COE_OPERATION_MODE_HOMING);
-            uint8_t finished = sw->homing_attained; //homed
+            uint8_t finished = lsw.homing_attained; //sw->homing_attained; //homed
             uint32_t next_clock = sq->last_clock; //current input event clock
             /* get command encoder */
             struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
