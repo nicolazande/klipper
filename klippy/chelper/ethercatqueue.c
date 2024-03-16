@@ -326,9 +326,9 @@ build_and_send_command(struct ethercatqueue *sq)
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
             slave->seq_num = (slave->seq_num + 1) & SEQ_NUM_MASK;
 
-            struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
-                            slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
+            // struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
+            // errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
+            //                 slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
 
             /* increase master tx index */
             slave->master_window++;
@@ -769,10 +769,10 @@ process_frame(struct ethercatqueue *sq)
                 struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
                 if (bs->seq_error)
                 {
-                    move->command.code = COE_CMD_RESET_SEGMENT_ID;
-                    slave->seq_num = 0;
-                    // errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
-                    //         slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
+                    move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_RESET_SEGMENT_ID;
+                    slave->seq_num = bs->next_id & SEQ_NUM_MASK;
+                    errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
+                            slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
                 }
                 else
                 {
