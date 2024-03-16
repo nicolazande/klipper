@@ -760,15 +760,12 @@ process_frame(struct ethercatqueue *sq)
              *       with the same sequence number of the previous has no effect,
              *       therefore this reset may be uncecessary.
              */
-            if (move)
+            if (move && slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
             {
                 struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
                 if (bs->seq_error)
                 {
-                    errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
-                            slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
-                    move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_RESET_SEGMENT_ID;
-                    move->time = 0xFF;
+                    move->command.code = COE_CMD_RESET_SEGMENT_ID;
                     slave->seq_num = 0;
                 }
                 else
@@ -777,7 +774,7 @@ process_frame(struct ethercatqueue *sq)
                 }
 
                 move->command.type = COE_SEGMENT_MODE_CMD;
-                move->time = 0;
+                move->time = 0xFF;
                 move->position = 0;
                 move->velocity = 0;
             }
