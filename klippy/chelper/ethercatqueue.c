@@ -788,11 +788,13 @@ process_frame(struct ethercatqueue *sq)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->enable_operation = 0;
-                    
-                    static uint8_t old_enable_operation = 1;
+                }
+                /** TODO: remove next scope */
+                {
+                    static uint8_t old_enable_operation;
                     if (cw->enable_operation != old_enable_operation)
                     {
-                        errorf("--> disable operation, not enough samples: old = %u", cw->enable_operation);
+                        errorf("--> enable operation: old = %u, new = %u", old_enable_operation, cw->enable_operation);
                     }
                     old_enable_operation = cw->enable_operation;
                 }
