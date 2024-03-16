@@ -26,7 +26,6 @@
  ****************************************************************/
 #define HISTORY_EXPIRE (30.0) //history time window in seconds
 #define CLOCK_DIFF_MAX (3<<28) //maximium clock delta between messages in the queue
-#define SEQ_NUM_MASK (0b00000111)
 
 
 /****************************************************************
@@ -43,7 +42,6 @@ struct pvtcompress
     double last_step_print_time; //print time of the last scheduled move
     uint64_t last_step_clock; //drive clock value of the last scheduled move
     uint32_t oid; //object id associated with the pvt step compressor (unique for each drive)
-    uint32_t seq_num; //sequence number of last scheduled step
     double position_scaling; //position scaling (from mm to ticks)
     double velocity_scaling; //position scaling (from mm/s to ticks/s)
     double last_position; //last known position of the drive
@@ -505,7 +503,6 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
      */
     struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
     move->header.type = COE_SEGMENT_MODE_BUFFER;
-    move->header.seq_num = sc->seq_num & SEQ_NUM_MASK; //step sequence number
     move->header.format = 0; //0 = buffer mode, 1 = command mode
     move->position = (int32_t)(pose->position * sc->position_scaling); //move absolute start position [ticks].
     move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
@@ -545,9 +542,6 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
 
     /* update stepcompress position (start of next move) */
     sc->last_position = pose->position + pose->velocity * move_time;
-
-    /* update step sequence number (avoid overflow) */
-    sc->seq_num = (sc->seq_num + 1) & SEQ_NUM_MASK;
 
     /* create and store move in history tracking */
     struct pvthistory *hs = malloc(sizeof(*hs));

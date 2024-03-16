@@ -49,6 +49,7 @@
 /* switches */
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
+#define SEQ_NUM_MASK (0b00000111)
 
 
 /****************************************************************
@@ -321,15 +322,15 @@ build_and_send_command(struct ethercatqueue *sq)
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
             *move = *((struct coe_ip_move *)qm->msg);
 
+            /* update step sequence number (avoid overflow) */
+            move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
+            slave->seq_num = (slave->seq_num + 1) & SEQ_NUM_MASK;
+
             /* increase master tx index */
             slave->master_window++;
 
             /* increase slave rx index in advance */
             slave->slave_window++;
-
-            struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
-                    slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
         }
         else
         {
@@ -761,8 +762,18 @@ process_frame(struct ethercatqueue *sq)
              */
             if (move)
             {
+                struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
+                if (bs->seq_error)
+                {
+                    move->command.code = COE_CMD_RESET_SEGMENT_ID;
+                    slave->seq_num = 0;
+                }
+                else
+                {
+                    move->command.code = COE_CMD_NO_OPERATION; //COE_CMD_CLEAR_ERRORS
+                }
+
                 move->command.type = COE_SEGMENT_MODE_CMD;
-                move->command.code = COE_CMD_NO_OPERATION; //COE_CMD_CLEAR_ERRORS
                 move->time = 0;
                 move->position = 0;
                 move->velocity = 0;
