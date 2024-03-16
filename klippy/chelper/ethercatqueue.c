@@ -576,13 +576,13 @@ coe_state_machine(struct slavemonitor *slave)
             else
             {
                 /* enable operation */
-                *cw = (struct coe_control_word)
-                {
-                    .power_switch = 1,
-                    .voltage_switch = 1,
-                    .quick_stop = 1,
-                    .enable_operation = 1
-                };
+                // *cw = (struct coe_control_word)
+                // {
+                //     .power_switch = 1,
+                //     .voltage_switch = 1,
+                //     .quick_stop = 1,
+                //     .enable_operation = 1
+                // };
             }
         }
         else
@@ -773,7 +773,7 @@ process_frame(struct ethercatqueue *sq)
             }
 
             /* stop before buffer underflow */
-            if (0 && slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
+            if (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
             {
                 /* get control word */
                 struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
@@ -789,14 +789,9 @@ process_frame(struct ethercatqueue *sq)
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->enable_operation = 0;
                 }
-                /** TODO: remove next scope */
+                else
                 {
-                    static uint8_t old_enable_operation;
-                    if (cw->enable_operation != old_enable_operation)
-                    {
-                        errorf("--> enable operation: old = %u, new = %u", old_enable_operation, cw->enable_operation);
-                    }
-                    old_enable_operation = cw->enable_operation;
+                    cw->enable_operation = 1;
                 }
             }
         }
