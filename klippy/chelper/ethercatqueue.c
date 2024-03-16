@@ -788,6 +788,7 @@ process_frame(struct ethercatqueue *sq)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->enable_operation = 0;
+                    errorf("--> disable operation, not enough samples: old = %u", cw->enable_operation);
                 }
             }
         }
