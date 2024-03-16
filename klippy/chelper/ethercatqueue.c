@@ -551,6 +551,7 @@ coe_state_machine(struct slavemonitor *slave)
                         {
                             .reset_fault = 1
                         };
+                        errorf("reset fault");
                     }
                     else
                     {
@@ -571,6 +572,7 @@ coe_state_machine(struct slavemonitor *slave)
                         .voltage_switch = 1,
                         .quick_stop = 1
                     };
+                    errorf("switch not ready");
                 }
             }
             else
