@@ -961,10 +961,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
                 /* reset window */
                 slave->master_window = 0;
-
-                struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
-                errorf("--> move: oid = %u, p = %d, v = %d, t = %u", slave->oid, move->position, move->velocity, move->time);
-
             }
 
             /* stop (frame transmitted) */
