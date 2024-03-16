@@ -764,7 +764,7 @@ process_frame(struct ethercatqueue *sq)
              *       with the same sequence number of the previous has no effect,
              *       therefore this reset may be uncecessary.
              */
-            if (move && slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
+            if (move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
             {
                 struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
                 if (bs->seq_error)
@@ -776,7 +776,7 @@ process_frame(struct ethercatqueue *sq)
                 }
                 else
                 {
-                    move->command.code = COE_CMD_NO_OPERATION; //COE_CMD_CLEAR_ERRORS
+                    move->command.code = COE_CMD_NO_OPERATION;
                 }
 
                 move->command.type = COE_SEGMENT_MODE_CMD;
@@ -800,7 +800,7 @@ process_frame(struct ethercatqueue *sq)
                 if (cw && (slave->slave_window < slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    cw->enable_operation = 0;
+                    //cw->enable_operation = 0;
                 }
             }
         }
