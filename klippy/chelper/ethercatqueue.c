@@ -767,7 +767,8 @@ process_frame(struct ethercatqueue *sq)
                 {
                     errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
                             slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
-                    move->command.code = COE_CMD_RESET_SEGMENT_ID;
+                    move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_RESET_SEGMENT_ID;
+                    move->time = 0xFF;
                     slave->seq_num = 0;
                 }
                 else
