@@ -326,9 +326,9 @@ build_and_send_command(struct ethercatqueue *sq)
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
             slave->seq_num = (slave->seq_num + 1) & SEQ_NUM_MASK;
 
-            // struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
-            // errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
-            //                 slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
+            struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
+            errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
+                            slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
 
             /* increase master tx index */
             slave->master_window++;
@@ -603,19 +603,6 @@ coe_state_machine(struct slavemonitor *slave)
         /* update local copy of control word */
         slave->control_word = *(uint16_t *)cw;
     }
-
-    // static uint16_t swold;
-    // static uint16_t cwold;
-    // if (cwold != slave->control_word)
-    // {
-    //     errorf("--> control word = %u", slave->control_word);
-    //     cwold = slave->control_word;
-    // }
-    // if (swold != slave->status_word)
-    // {
-    //     errorf("--> status word = %u", slave->status_word);
-    //     swold = slave->status_word;
-    // }
 }
 
 static inline void coe_preoperational_setup(struct ethercatqueue *sq)
