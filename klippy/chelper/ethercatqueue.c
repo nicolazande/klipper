@@ -588,13 +588,13 @@ coe_state_machine(struct slavemonitor *slave)
         else
         {
             /* maintain enable operation */
-            *cw = (struct coe_control_word)
-            {
-                .power_switch = 1,
-                .voltage_switch = 1,
-                .quick_stop = 1,
-                .enable_operation = 1
-            };
+            // *cw = (struct coe_control_word)
+            // {
+            //     .power_switch = 1,
+            //     .voltage_switch = 1,
+            //     .quick_stop = 1,
+            //     .enable_operation = 1
+            // };
         }
 
         /* update local copy of status word */
@@ -784,13 +784,9 @@ process_frame(struct ethercatqueue *sq)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                if (cw && (slave->slave_window < slave->interpolation_window))
+                if (cw && (slave->slave_window > slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    //cw->enable_operation = 0;
-                }
-                else
-                {
                     cw->enable_operation = 1;
                 }
             }
