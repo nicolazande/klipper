@@ -326,6 +326,9 @@ build_and_send_command(struct ethercatqueue *sq)
 
             /* increase slave rx index in advance */
             slave->slave_window++;
+
+            uint16_t seqid = slave->buffer_status & 0xFFFF;
+            errorf("--> oid = %u, seqid = %u, id = %u", slave->oid, seqid, move->header.seq_num);
         }
         else
         {
@@ -693,6 +696,11 @@ static inline void coe_operational_setup(struct ethercatqueue *sq)
             offset = dm->offsets[offset_idx];
             slave->off_slave_window = (uint8_t *)(dm->domain_pd + offset);
 
+            /* setup buffer status */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_BUFFER_STATUS;
+            offset = dm->offsets[offset_idx];
+            slave->off_buffer_status = (uint8_t *)(dm->domain_pd + offset);
+
             /* setup slave control word */
             offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_CONTROL_WORD;
             offset = dm->offsets[offset_idx];
@@ -849,6 +857,11 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         if (slave->off_velocity_actual)
         {
             slave->velocity_actual = EC_READ_S32(slave->off_velocity_actual);
+        }
+        /* update buffer status */
+        if (slave->off_buffer_status)
+        {
+            slave->buffer_status = EC_READ_U32(slave->off_buffer_status);
         }
         
         /** NOTE: following scope is only for test purpose, remove it!!!! */
