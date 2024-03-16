@@ -753,8 +753,8 @@ process_frame(struct ethercatqueue *sq)
             if (move)
             {
                 move->command.type = COE_SEGMENT_MODE_CMD;
-                move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_NO_OPERATION;
-                move->time = 0xFF;
+                move->command.code = COE_CMD_NO_OPERATION; //COE_CMD_CLEAR_ERRORS
+                move->time = 0;
                 move->position = 0;
                 move->velocity = 0;
             }
@@ -774,7 +774,7 @@ process_frame(struct ethercatqueue *sq)
                 if (cw && (slave->slave_window < slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    cw->enable_operation = 0;
+                    //cw->enable_operation = 0;
                 }
             }
         }
