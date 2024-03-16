@@ -787,8 +787,11 @@ process_frame(struct ethercatqueue *sq)
                 if (cw && (slave->slave_window < slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    cw->enable_operation = 0;
-                    errorf("--> disable operation, not enough samples: old = %u", cw->enable_operation);
+                    if (cw->enable_operation)
+                    {
+                        cw->enable_operation = 0;
+                        errorf("--> disable operation, not enough samples: old = %u", cw->enable_operation);
+                    }
                 }
             }
         }
