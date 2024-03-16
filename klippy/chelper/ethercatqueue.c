@@ -774,7 +774,7 @@ process_frame(struct ethercatqueue *sq)
                 if (cw && (slave->slave_window < slave->interpolation_window))
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    //cw->enable_operation = 0;
+                    cw->enable_operation = 0;
                 }
             }
         }
