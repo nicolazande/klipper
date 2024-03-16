@@ -106,6 +106,18 @@ struct coe_status_word
     uint8_t homed:1;
 } __attribute((packed));
 
+/* buffer status */
+struct coe_buffer_status
+{
+    uint16_t next_id;
+    uint8_t free_slot;
+    uint8_t seq_error:1;
+    uint8_t overflow:1;
+    uint8_t underflow:1;
+    uint8_t reserved:4;
+    uint8_t empty:1;
+} __attribute((packed));
+
 /* interpolation move command */
 struct coe_ip_move
 {

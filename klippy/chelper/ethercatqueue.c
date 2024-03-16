@@ -327,8 +327,9 @@ build_and_send_command(struct ethercatqueue *sq)
             /* increase slave rx index in advance */
             slave->slave_window++;
 
-            uint16_t seqid = slave->buffer_status & 0xFFFF;
-            errorf("--> oid = %u, seqid = %u, id = %u", slave->oid, seqid, move->header.seq_num);
+            struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
+            errorf("--> oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
+                    slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
         }
         else
         {
