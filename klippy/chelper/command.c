@@ -559,7 +559,7 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
             /* local copy of operation mode */
             slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
-            errorf("HOMING OID = %u", oid);
+            errorf("COMMAND HOMING OID = %u", oid);
 
             errorf("commanded mode = %d", *((int8_t *)(slave->off_operation_mode)));
 
@@ -611,6 +611,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
 
+            errorf("RECEIVED OID = %u", oid);
             errorf("received mode = %d", *((int8_t *)(slave->off_operation_mode)));
 
             /* check if homing finished */
