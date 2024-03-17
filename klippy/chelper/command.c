@@ -560,7 +560,7 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
             slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
             /* disable signal (allow next trigger) */
-            cw->signal = 0;
+            cw->signal = 1;
         }
     }
     return 0;
@@ -596,7 +596,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         if (cw && sw)
         {
             /* signal start homing */
-            cw->signal = 1;
+            //cw->signal = 1;
 
             /* get data */
             uint8_t homing = (slave->operation_mode == COE_OPERATION_MODE_HOMING);
