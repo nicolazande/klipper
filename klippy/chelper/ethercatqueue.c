@@ -639,6 +639,18 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
                 ecrt_sdo_request_write(slave->interpolation_mode_sdo);
             }
         }
+
+        /* configure homing mode */
+        slave->homing_method_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_HOMING_METHOD(i));
+        if (slave->homing_method_sdo)
+        {
+            uint8_t *data = ecrt_sdo_request_data(slave->homing_method_sdo);
+            if (data)
+            {
+                EC_WRITE_S8(data, COE_HOMING_NEGATIVE_HARD_STOP);
+                ecrt_sdo_request_write(slave->homing_method_sdo);
+            }
+        }
     }
 }
 

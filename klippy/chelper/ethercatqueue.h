@@ -83,6 +83,7 @@ struct slavemonitor
     /* sdo */
     ec_sdo_request_t *interpolation_mode_sdo; //sdo for setting interpolation mode
     ec_sdo_request_t *operation_mode_sdo; //sdo for setting operation mode
+    ec_sdo_request_t *homing_method_sdo; //sdo for setting operation mode
     /* monitoring */
     uint16_t seq_num;
     uint16_t tx_size;              //number tx pdo instances in the frame

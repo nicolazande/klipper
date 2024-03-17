@@ -33,6 +33,13 @@ enum
     COE_SEGMENT_CUBIC_INTERPOLATION = -3
 };
 
+/* copley drives homing methods */
+enum
+{
+    COE_HOMING_NEGATIVE_HARD_STOP = -2,
+    COE_HOMING_POSITIVE_HARD_STOP = -1
+};
+
 /* copley drives operation mode */
 enum
 {
@@ -67,6 +74,7 @@ enum
 /* copley drives sdo */
 #define COE_SDO_OPERATION_MODE(axis) 0x6060 + axis*0x800, 0, 1
 #define COE_SDO_INTERPOLATION_MODE(axis) 0x60C0 + axis*0x800, 0, 2
+#define COE_SDO_HOMING_METHOD(axis) 0x6098 + axis*0x800, 0, 1
 
 
 /****************************************************************
