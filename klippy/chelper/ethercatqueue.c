@@ -758,7 +758,7 @@ process_frame(struct ethercatqueue *sq)
                 {
                     move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_RESET_SEGMENT_ID;
                     slave->seq_num = bs->next_id;
-                    errorf("--> error: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
+                    errorf("--> sequence error: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
                             slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
                 }
                 else
@@ -786,8 +786,12 @@ process_frame(struct ethercatqueue *sq)
                  */
                 if (cw && (slave->slave_window > slave->interpolation_window))
                 {
-                    /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->enable_operation = 1;
+                }
+                else
+                {
+                    /** NOTE: this causes hard stop (remove if unwanted) */
+                    cw->enable_operation = 0;
                 }
             }
         }
