@@ -560,7 +560,7 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
             slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
             /* disable operation (allow next trigger) */
-            cw->enable_operation = 0;
+            //cw->enable_operation = 0;
         }
     }
     return 0;
