@@ -559,12 +559,8 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
             /* local copy of operation mode */
             slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
-            errorf("COMMAND HOMING OID = %u", oid);
-            errorf("commanded mode = %d", *((int8_t *)(slave->off_operation_mode)));
-            errorf("commanded mode addr = %lu", (uint64_t)(slave->off_operation_mode));
-
             /* disable operation (allow next trigger) */
-            //cw->enable_operation = 0;
+            cw->enable_operation = 0;
         }
     }
     return 0;
@@ -603,7 +599,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             cw->enable_operation = 1;
 
             /* get data */
-            uint8_t homing = (cw->operation_mode == COE_OPERATION_MODE_HOMING);
+            uint8_t homing = (slave->operation_mode == COE_OPERATION_MODE_HOMING);
             uint8_t finished = sw->homing_attained; //homed
             uint32_t next_clock = sq->last_clock; //current input event clock
             /* get command encoder */
@@ -611,9 +607,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
 
-            errorf("RECEIVED OID = %u", oid);
-            errorf("received mode = %d", *((int8_t *)(slave->off_operation_mode)));
-            errorf("received mode addr = %lu", (uint64_t)(slave->off_operation_mode));
+            PRINT_STATUS_WORD(sw)
 
             /* check if homing finished */
             if (slave->off_operation_mode && finished)
