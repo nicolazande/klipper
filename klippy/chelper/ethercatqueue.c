@@ -586,13 +586,13 @@ coe_state_machine(struct slavemonitor *slave)
         else
         {
             /* maintain enable operation */
-            *cw = (struct coe_control_word)
-            {
-                .power_switch = 1,
-                .voltage_switch = 1,
-                .quick_stop = 1,
-                .enable_operation = 1
-            };
+            // *cw = (struct coe_control_word)
+            // {
+            //     .power_switch = 1,
+            //     .voltage_switch = 1,
+            //     .quick_stop = 1,
+            //     .enable_operation = 1
+            // };
         }
 
         /* update local copy of status word */
