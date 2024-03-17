@@ -87,7 +87,8 @@ struct coe_control_word
     uint8_t voltage_switch:1;
     uint8_t quick_stop:1;
     uint8_t enable_operation:1;
-    uint8_t operation_mode:3; //operation mode specific
+    uint8_t signal:1;
+    uint8_t reserved:2; //operation mode specific
     uint8_t reset_fault:1;
     uint8_t halt:1;
     uint8_t padding:7;
@@ -187,9 +188,9 @@ struct coe_ip_move
             cw->padding & 0b0000001,\
             cw->halt,\
             cw->reset_fault,\
-            cw->operation_mode & 0b100,\
-            cw->operation_mode & 0b010,\
-            cw->operation_mode & 0b001,\
+            cw->signal,\
+            cw->reserved & 0b10,\
+            cw->reserved & 0b01,\
             cw->enable_operation,\
             cw->quick_stop,\
             cw->voltage_switch,\
