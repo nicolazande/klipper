@@ -586,13 +586,13 @@ coe_state_machine(struct slavemonitor *slave)
         else
         {
             /* maintain enable operation */
-            // *cw = (struct coe_control_word)
-            // {
-            //     .power_switch = 1,
-            //     .voltage_switch = 1,
-            //     .quick_stop = 1,
-            //     .enable_operation = 1
-            // };
+            *cw = (struct coe_control_word)
+            {
+                .power_switch = 1,
+                .voltage_switch = 1,
+                .quick_stop = 1,
+                .enable_operation = 1
+            };
         }
 
         /* update local copy of status word */
@@ -884,11 +884,11 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         }
         
         /** NOTE: following scope is only for test purpose, remove it!!!! */
-        {
-            //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-            struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-            sw->homing_attained = 1;
-        }
+        // {
+        //     //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        //     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
+        //     sw->homing_attained = 1;
+        // }
     }
 
     /* process frame (cleanup and state machine) */
