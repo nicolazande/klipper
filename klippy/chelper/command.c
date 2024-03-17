@@ -663,7 +663,7 @@ static int cp_f_stepper_stop_on_trigger(struct ethercatqueue *sq, void *out, uin
         /** hard stop */
         if (cw)
         {
-            cw->signal = 0;
+            //cw->signal = 0;
         }
     }
 
