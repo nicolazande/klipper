@@ -549,12 +549,12 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
             /* operation mode in frame */
             *slave->off_operation_mode = COE_OPERATION_MODE_HOMING;
 
-            uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
-            if (data)
-            {
-                EC_WRITE_S8(data, COE_OPERATION_MODE_HOMING);
-                ecrt_sdo_request_write(slave->operation_mode_sdo);
-            }
+            // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
+            // if (data)
+            // {
+            //     EC_WRITE_S8(data, COE_OPERATION_MODE_HOMING);
+            //     ecrt_sdo_request_write(slave->operation_mode_sdo);
+            // }
             
             /* local copy of operation mode */
             slave->operation_mode = COE_OPERATION_MODE_HOMING;
