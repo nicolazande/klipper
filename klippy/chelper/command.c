@@ -561,6 +561,8 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
 
             errorf("HOMING OID = %u", oid);
 
+            errorf("commanded mode = %d", *((int8_t *)(slave->off_operation_mode)));
+
             /* disable operation (allow next trigger) */
             //cw->enable_operation = 0;
         }
@@ -608,6 +610,9 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
+
+            errorf("received mode = %d", *((int8_t *)(slave->off_operation_mode)));
+
             /* check if homing finished */
             if (slave->off_operation_mode && finished)
             {
