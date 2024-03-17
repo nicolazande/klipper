@@ -884,6 +884,12 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     /* process frame (cleanup and state machine) */
     process_frame(sq);
 
+    /* update last clock for protocol */
+    sq->last_clock = clock_from_time(&sq->ce, eventtime);
+
+    /* process a high level thread request */
+    process_request(sq, eventtime);
+
 #if CHECK_MASTER_STATE
     /* check master state */
     check_master_state(sq);
@@ -967,12 +973,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         /* build or update data to be sent */
         buflen += build_and_send_command(sq);
     }
-
-    /* update last clock for protocol */
-    sq->last_clock = clock_from_time(&sq->ce, eventtime);
-
-    /* process a high level thread request */
-    process_request(sq, eventtime);
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
