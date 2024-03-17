@@ -623,7 +623,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
                 slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
 
                 /* disable operation (allow next trigger) */
-                cw->enable_operation = 0;
+                //cw->enable_operation = 0;
             }
         }
     }
