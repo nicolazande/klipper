@@ -647,7 +647,7 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
             uint8_t *data = ecrt_sdo_request_data(slave->homing_method_sdo);
             if (data)
             {
-                EC_WRITE_S8(data, COE_HOMING_POSITIVE_HARD_STOP);
+                EC_WRITE_S8(data, COE_HOMING_NEGATIVE_HARD_STOP);
                 ecrt_sdo_request_write(slave->homing_method_sdo);
             }
         }
