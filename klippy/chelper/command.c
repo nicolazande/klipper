@@ -559,6 +559,8 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
             /* local copy of operation mode */
             slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
+            errorf("HOMING OID = %u", oid);
+
             /* disable operation (allow next trigger) */
             //cw->enable_operation = 0;
         }
@@ -609,15 +611,16 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             /* check if homing finished */
             if (slave->off_operation_mode && finished)
             {
+                errorf("FINISHED OID = %u", oid);
                 /* reset operation mode in frame */
                 *slave->off_operation_mode = COE_OPERATION_MODE_INTERPOLATION;
                 
-                uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
-                if (data)
-                {
-                    EC_WRITE_S8(data, COE_OPERATION_MODE_INTERPOLATION);
-                    ecrt_sdo_request_write(slave->operation_mode_sdo);
-                }
+                // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
+                // if (data)
+                // {
+                //     EC_WRITE_S8(data, COE_OPERATION_MODE_INTERPOLATION);
+                //     ecrt_sdo_request_write(slave->operation_mode_sdo);
+                // }
 
                 /* reset local copy of interpolation mode */
                 slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
