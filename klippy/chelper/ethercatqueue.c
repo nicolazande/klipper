@@ -808,7 +808,7 @@ process_frame(struct ethercatqueue *sq)
                 else
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    //cw->signal = 0;
+                    cw->signal = 0;
                 }
             }
         }
