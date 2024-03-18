@@ -85,7 +85,11 @@ static inline void process_request(struct ethercatqueue *sq, double eventtime);
 /** process ethercat frame (reset and configuration check) */
 static inline void process_frame(struct ethercatqueue *sq);
 
-/** run canopen DS402 state machine */
+/** 
+ * Run canopen DS402 state machine default transition.
+ * NOTE: to force specifica actions modify the control
+ *       word after this function is called.
+ */
 static inline void coe_state_machine(struct slavemonitor *slave);
 
 /** 
@@ -326,9 +330,9 @@ build_and_send_command(struct ethercatqueue *sq)
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
             slave->seq_num++;
 
-            struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
+            struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
             errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, p = %d, v = %d, t = %u",
-                    slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error, move->position, move->velocity, move->time);
+                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
@@ -532,7 +536,7 @@ coe_state_machine(struct slavemonitor *slave)
     /* check objects */
     if (cw && sw)
     {
-        /* check operation emable */
+        /* check operation enable */
         if (!sw->operation_enabled)
         {
             /* check switch on */
@@ -585,14 +589,12 @@ coe_state_machine(struct slavemonitor *slave)
         }
         else
         {
-            /* maintain enable operation */
-            // *cw = (struct coe_control_word)
-            // {
-            //     .power_switch = 1,
-            //     .voltage_switch = 1,
-            //     .quick_stop = 1,
-            //     .enable_operation = 1
-            // };
+            /* check quick stop */
+            if (!sw->quick_stop)
+            {
+                /* disable switch */
+                *cw = (struct coe_control_word){};
+            }
         }
 
         /* update local copy of status word */
@@ -748,6 +750,9 @@ process_frame(struct ethercatqueue *sq)
             /* get slave */
             struct slavemonitor *slave = &master->monitor[j];
 
+            /* get control word */
+            struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
             /* get slave segment buffer data */
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[i];
 
@@ -757,36 +762,28 @@ process_frame(struct ethercatqueue *sq)
             /**
              * Reset segment slot in doamin allowing to schedule the command
              * events at regular intervals, even without active segments.
-             * TODO: from documentation it is not clear, but maybe sending a segment
-             *       with the same sequence number of the previous has no effect,
-             *       therefore this reset may be uncecessary.
              */
-            if (move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
+            if (cw && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
             {
-                struct coe_buffer_status *bs = (struct coe_buffer_status *)slave->off_buffer_status;
-                if (bs->seq_error)
+                /* get buffer status */
+                struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
+
+                /* check error */
+                if (status->seq_error)
                 {
-                    move->command.code = COE_CMD_CLEAR_ERRORS; //COE_CMD_RESET_SEGMENT_ID;
-                    slave->seq_num = bs->next_id;
-                    errorf("--> sequence error: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u",
-                            slave->oid, bs->next_id, move->header.seq_num, bs->free_slot, bs->seq_error);
+                    /* clear error and update slave sequence */
+                    move->command.code = COE_CMD_CLEAR_ERRORS;
+                    slave->seq_num = status->next_id;
                 }
                 else
                 {
+                    /* disable command (discarded by drive) */
                     move->command.code = COE_CMD_NO_OPERATION;
                 }
 
+                /* common fields */
+                move->error_mask = 0xFF;
                 move->command.type = COE_SEGMENT_MODE_CMD;
-                move->time = 0xFF;
-                move->position = 0;
-                move->velocity = 0;
-            }
-
-            /* stop before buffer underflow */
-            if (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION)
-            {
-                /* get control word */
-                struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
 
                 /**
                  * Check receive buffer status and perform automatic transition
@@ -794,7 +791,7 @@ process_frame(struct ethercatqueue *sq)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                if (cw && (slave->slave_window > slave->interpolation_window))
+                if (slave->slave_window > slave->interpolation_window)
                 {
                     cw->signal = 1;
                 }

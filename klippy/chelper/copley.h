@@ -147,7 +147,11 @@ struct coe_ip_move
             uint8_t type:1; //always one, identifies drive command
         } command;
     };
-    uint8_t time; //time in ms
+    union
+    {
+        uint8_t time; //time in ms
+        uint8_t error_mask; //erorr mask
+    };
     int32_t position:24; //current position
     int32_t velocity:24; //current speed
 } __attribute((packed));
