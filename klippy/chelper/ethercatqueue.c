@@ -772,16 +772,19 @@ process_frame(struct ethercatqueue *sq)
                     /* clear error and update slave sequence */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
                     slave->seq_num = status->next_id;
+                    /* common fields */
+                    move->error_mask = 0xFF;
+                    move->command.type = COE_SEGMENT_MODE_CMD;
                 }
                 else
                 {
                     /* disable command (discarded by drive) */
-                    move->command.code = COE_CMD_NO_OPERATION;
+                    // move->command.code = COE_CMD_NO_OPERATION;
                 }
 
-                /* common fields */
-                move->error_mask = 0xFF;
-                move->command.type = COE_SEGMENT_MODE_CMD;
+                // /* common fields */
+                // move->error_mask = 0xFF;
+                // move->command.type = COE_SEGMENT_MODE_CMD;
 
                 /**
                  * Check receive buffer status and perform automatic transition
