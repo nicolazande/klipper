@@ -7,7 +7,7 @@
 			"vendor_id": 171,
 			"product_code": 4176,
 			"assign_activate" : 0,
-			"rx_size" : 32,
+			"rx_size" : 31,
 			"interpolation_window" : 3,
 			"syncs" : [
 				{
@@ -158,7 +158,7 @@
 			"vendor_id": 171,
 			"product_code": 4176,
 			"assign_activate" : 0,
-			"rx_size" : 32,
+			"rx_size" : 31,
 			"interpolation_window" : 3,
 			"syncs" : [
 				{
