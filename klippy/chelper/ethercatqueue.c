@@ -49,7 +49,9 @@
 /* switches */
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
-#define SEQ_NUM_MASK (0b00000111)
+/* local parameters */
+#define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
+#define BUFFER_MARGIN (4U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
@@ -320,7 +322,7 @@ build_and_send_command(struct ethercatqueue *sq)
         }
 
         /* check for available space */
-        if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size - 4))    
+        if ((slave->master_window < slave->tx_size) && (slave->slave_window + BUFFER_MARGIN < slave->rx_size))    
         {
             /* populate domain data (directly mapped to kernel) */
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
@@ -329,10 +331,6 @@ build_and_send_command(struct ethercatqueue *sq)
             /* update step sequence number (avoid overflow) */
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
             slave->seq_num++;
-
-            struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
-                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
