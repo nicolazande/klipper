@@ -331,8 +331,8 @@ build_and_send_command(struct ethercatqueue *sq)
             slave->seq_num++;
 
             struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, p = %d, v = %d, t = %u",
-                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, move->position, move->velocity, move->time);
+            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
+                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
@@ -769,7 +769,7 @@ process_frame(struct ethercatqueue *sq)
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
                 /* check error */
-                if (status->seq_error || status->overflow || status->underflow)
+                if (status->seq_error /* || status->overflow || status->underflow */)
                 {
                     /* clear error and update slave sequence */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
@@ -879,13 +879,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         {
             slave->buffer_status = EC_READ_U32(slave->off_buffer_status);
         }
-        
-        /** NOTE: following scope is only for test purpose, remove it!!!! */
-        // {
-        //     //struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
-        //     struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;   
-        //     sw->homing_attained = 1;
-        // }
     }
 
     /* process frame (cleanup and state machine) */
