@@ -320,7 +320,7 @@ build_and_send_command(struct ethercatqueue *sq)
         }
 
         /* check for available space */
-        if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size))    
+        if ((slave->master_window < slave->tx_size) && (slave->slave_window < slave->rx_size - 4))    
         {
             /* populate domain data (directly mapped to kernel) */
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
@@ -382,7 +382,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* get slave */
         slave = &master->monitor[i];
 
-        if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
+        if ((slave->slave_window > slave->rx_size - 4) /* || (sq->masterifc.full_counter) */)
         {
             /* stop (drive buffer is full) */
             return PR_NEVER;
