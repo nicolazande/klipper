@@ -158,7 +158,7 @@
 			"vendor_id": 171,
 			"product_code": 4176,
 			"assign_activate" : 0,
-			"rx_size" : 31,
+			"rx_size" : 32,
 			"interpolation_window" : 3,
 			"syncs" : [
 				{
@@ -305,7 +305,7 @@
     ],
 	"master" :
 	{
-		"sync0_ct" : 0.005,
+		"sync0_ct" : 0.01,
 		"sync0_st" : 0.0025,
 		"sync1_ct" : 0,
 		"sync1_st" : 0,
