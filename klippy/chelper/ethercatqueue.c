@@ -769,7 +769,7 @@ process_frame(struct ethercatqueue *sq)
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
                 /* check error */
-                if (status->seq_error)
+                if (status->seq_error || status->overflow || status->underflow)
                 {
                     /* clear error and update slave sequence */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
