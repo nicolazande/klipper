@@ -382,7 +382,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* get slave */
         slave = &master->monitor[i];
 
-        if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
+        if ((slave->slave_window >= slave->rx_size) /* || (sq->masterifc.full_counter) */)
         {
             /* stop (drive buffer is full) */
             return PR_NEVER;
