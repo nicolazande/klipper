@@ -305,7 +305,7 @@
     ],
 	"master" :
 	{
-		"sync0_ct" : 0.005,
+		"sync0_ct" : 0.01,
 		"sync0_st" : 0.0025,
 		"sync1_ct" : 0,
 		"sync1_st" : 0,
