@@ -546,18 +546,16 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         /* set homing mode */
         if (slave->off_operation_mode)
         {
-            /* operation mode in frame */
-            *slave->off_operation_mode = COE_OPERATION_MODE_HOMING;
-
+            /** NOTE: uncomment to use sdo */
             // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
             // if (data)
             // {
             //     EC_WRITE_S8(data, COE_OPERATION_MODE_HOMING);
             //     ecrt_sdo_request_write(slave->operation_mode_sdo);
             // }
-            
-            /* local copy of operation mode */
-            slave->operation_mode = COE_OPERATION_MODE_HOMING;
+
+            /* change operation mode */
+            *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
             /* disable signal (allow next trigger) */
             cw->signal = 1;
@@ -595,9 +593,6 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
         /* check data */
         if (cw && sw)
         {
-            /* signal start homing */
-            //cw->signal = 1;
-
             /* get data */
             uint8_t homing = (slave->operation_mode == COE_OPERATION_MODE_HOMING);
             uint8_t finished = sw->homing_attained; //homed
@@ -607,15 +602,10 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
 
-            PRINT_STATUS_WORD(sw)
-
             /* check if homing finished */
-            if (slave->off_operation_mode && finished)
-            {
-                errorf("FINISHED OID = %u", oid);
-                /* reset operation mode in frame */
-                *slave->off_operation_mode = COE_OPERATION_MODE_INTERPOLATION;
-                
+            if (finished && slave->off_operation_mode)
+            {                
+                /** NOTE: uncomment to use sdo */
                 // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
                 // if (data)
                 // {
@@ -623,8 +613,8 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
                 //     ecrt_sdo_request_write(slave->operation_mode_sdo);
                 // }
 
-                /* reset local copy of interpolation mode */
-                slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
+                /* reset operation mode in frame */
+                *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
 
                 /* disable signal (allow next trigger) */
                 cw->signal = 0;
@@ -663,7 +653,7 @@ static int cp_f_stepper_stop_on_trigger(struct ethercatqueue *sq, void *out, uin
         /** hard stop */
         if (cw)
         {
-            //cw->signal = 0;
+            cw->signal = 0;
         }
     }
 

@@ -771,7 +771,7 @@ process_frame(struct ethercatqueue *sq)
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
                 /* check error */
-                if (status->seq_error /* || status->overflow || status->underflow */)
+                if (status->seq_error || status->overflow || status->underflow)
                 {
                     /* clear error and update slave sequence */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
@@ -780,11 +780,16 @@ process_frame(struct ethercatqueue *sq)
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
                 }
-                else
-                {
-                    /* disable command (discarded by drive) */
-                    // move->command.code = COE_CMD_NO_OPERATION;
-                }
+
+                /** 
+                 * NOTE: uncomment the following block in case a dummy command
+                 *       needs to be sent every cycle.
+                 */
+                // else
+                // {
+                //     /* disable command (discarded by drive) */
+                //     move->command.code = COE_CMD_NO_OPERATION;
+                // }
 
                 // /* common fields */
                 // move->error_mask = 0xFF;
