@@ -331,8 +331,8 @@ build_and_send_command(struct ethercatqueue *sq)
             slave->seq_num++;
 
             struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow  =%u, underflow = %u, p = %d, v = %d, t = %u",
-                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow,move->position, move->velocity, move->time);
+            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
+                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
@@ -382,7 +382,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* get slave */
         slave = &master->monitor[i];
 
-        if ((slave->slave_window >= slave->rx_size) /* || (sq->masterifc.full_counter) */)
+        if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
         {
             /* stop (drive buffer is full) */
             return PR_NEVER;
