@@ -143,6 +143,9 @@ check_wake_receive(struct ethercatqueue *sq)
 static inline void
 process_request(struct ethercatqueue *sq, double eventtime)
 {
+    /* update last clock for protocol */
+    sq->last_clock = clock_from_time(&sq->ce, eventtime);
+    
     /* check request from high level thread */
     if (!list_empty(&sq->request_queue))
     {
@@ -331,10 +334,6 @@ build_and_send_command(struct ethercatqueue *sq)
             /* update step sequence number (avoid overflow) */
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
             slave->seq_num++;
-
-            struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
-                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
@@ -872,6 +871,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         /* update slave window */
         if (slave->off_slave_window)
         {
+            /* clamp slave window */
             int16_t window = slave->rx_size - EC_READ_U16(slave->off_slave_window);
             slave->slave_window = window > 0 ? window : 0;
         }
@@ -895,10 +895,16 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     /* process frame (cleanup and state machine) */
     process_frame(sq);
 
-    /* update last clock for protocol */
-    sq->last_clock = clock_from_time(&sq->ce, eventtime);
-
-    /* process a high level thread request */
+    /** 
+     * Process a high level thread request.
+     * NOTE: The current implementation uses pdos for protocol communication,
+     *       therefore it needs to be called between read and write frame
+     *       operations (otherwise it will be cleared before transmission).
+     *       Using runtime sdos gives the freedom to place this function
+     *       after frame transmission, reducing function execution time
+     *       variability, however it will potentially introduce additional
+     *       jitter (avoid sdos in operational mode). 
+     */
     process_request(sq, eventtime);
 
 #if CHECK_MASTER_STATE
