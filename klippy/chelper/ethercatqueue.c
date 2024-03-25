@@ -591,11 +591,11 @@ coe_state_machine(struct slavemonitor *slave)
         else
         {
             /* check quick stop */
-            // if (!sw->quick_stop)
-            // {
-            //     /* disable switch */
-            //     *cw = (struct coe_control_word){};
-            // }
+            if (!sw->quick_stop)
+            {
+                /* disable switch */
+                *cw = (struct coe_control_word){};
+            }
         }
 
         /* update local copy of status word */
