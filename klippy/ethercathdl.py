@@ -1,10 +1,10 @@
 #
-# Ethercat management for firmware communication
+# Ethercat management for firmware communication.
 #
 
 # imports
 import os, logging, threading, json
-import msgproto, chelper, util
+import msgproto, chelper
 
 class error(Exception):
     pass
