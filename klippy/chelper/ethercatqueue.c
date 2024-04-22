@@ -813,6 +813,7 @@ process_frame(struct ethercatqueue *sq)
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->signal = 0;
                 }
+                errorf("->> signal = %u", cw->signal);
             }
         }
     }
