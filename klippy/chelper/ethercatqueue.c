@@ -652,8 +652,20 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
             uint8_t *data = ecrt_sdo_request_data(slave->homing_method_sdo);
             if (data)
             {
-                EC_WRITE_S8(data, COE_HOMING_NEGATIVE_SWITCH /* COE_HOMING_NEGATIVE_HARD_STOP */);
+                EC_WRITE_S8(data, COE_HOMING_NEGATIVE_SWITCH);
                 ecrt_sdo_request_write(slave->homing_method_sdo);
+            }
+        }
+
+        /* clear buffer inputs */
+        slave->clear_buffer_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_CLEAR_BUFFER(i));
+        if (slave->clear_buffer_sdo)
+        {
+            uint8_t *data = ecrt_sdo_request_data(slave->clear_buffer_sdo);
+            if (data)
+            {
+                EC_WRITE_U8(data, 0); //0x0 = clear buffer inputs command
+                ecrt_sdo_request_write(slave->clear_buffer_sdo);
             }
         }
     }
