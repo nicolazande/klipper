@@ -51,7 +51,7 @@
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
 #define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
-#define BUFFER_MARGIN (4U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_MARGIN (0U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
