@@ -37,7 +37,9 @@ enum
 enum
 {
     COE_HOMING_NEGATIVE_HARD_STOP = -2,
-    COE_HOMING_POSITIVE_HARD_STOP = -1
+    COE_HOMING_POSITIVE_HARD_STOP = -1,
+    COE_HOMING_NEGATIVE_SWITCH = 21,
+    COE_HOMING_POSITIVE_SWITCH = 19
 };
 
 /* copley drives operation mode */
