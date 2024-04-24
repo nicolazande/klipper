@@ -26,7 +26,7 @@
  ****************************************************************/
 #define HISTORY_EXPIRE (30.0) //history time window in seconds
 #define CLOCK_DIFF_MAX (3<<28) //maximium clock delta between messages in the queue
-#define MIN_STEP_TIME (0.5lf)  //min step time in [ms] (used for rounding)
+#define MIN_STEP_TIME (0.5f)  //min step time in [ms] (used for rounding)
 
 
 /****************************************************************
