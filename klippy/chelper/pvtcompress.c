@@ -26,7 +26,7 @@
  ****************************************************************/
 #define HISTORY_EXPIRE (30.0) //history time window in seconds
 #define CLOCK_DIFF_MAX (3<<28) //maximium clock delta between messages in the queue
-#define MIN_STEP_TIME (0.1f)  //min step time in [ms] (used for rounding)
+#define STEP_TIME_ROUND (0.1)  //step rounding time in [ms]
 
 
 /****************************************************************
@@ -507,9 +507,7 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     move->header.format = 0; //0 = buffer mode, 1 = command mode
     move->position = (int32_t)(pose->position * sc->position_scaling); //move absolute start position [ticks].
     move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
-    move->time = (uint8_t)(move_time * 1000. + MIN_STEP_TIME);  //move time duration [ms] (up to next pose)
-
-    errorf("-> DELTA TIME = %lf", move_time);
+    move->time = (uint8_t)(move_time * 1000. + STEP_TIME_ROUND);  //move time duration [ms] (up to next pose)
 
     /*
      * Queue messages from different pvtcompress objects are merged in a single
