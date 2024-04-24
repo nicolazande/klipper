@@ -509,7 +509,7 @@ pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time)
     move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
     move->time = (uint8_t)(move_time * 1000. + MIN_STEP_TIME);  //move time duration [ms] (up to next pose)
 
-    errorf('-> DELTA TIME = %lf', move_time);
+    errorf("-> DELTA TIME = %lf", move_time);
 
     /*
      * Queue messages from different pvtcompress objects are merged in a single
