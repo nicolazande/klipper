@@ -51,7 +51,7 @@
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
 #define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
-#define BUFFER_MARGIN (2U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_MARGIN (5U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
@@ -782,7 +782,7 @@ process_frame(struct ethercatqueue *sq)
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
                 /* check error */
-                if (status->seq_error || status->overflow || status->underflow)
+                if (status->seq_error /* || status->overflow || status->underflow */)
                 {
                     /* clear error and update slave sequence */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
