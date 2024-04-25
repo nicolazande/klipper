@@ -42,7 +42,7 @@
 #define MIN_REQTIME_DELTA 0.100     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
-#define MAX_CYCLE_SEGMENTS (2*ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
+#define MAX_CYCLE_SEGMENTS (1*ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
