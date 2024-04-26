@@ -42,7 +42,7 @@
 #define MIN_REQTIME_DELTA 0.100     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
-#define MAX_CYCLE_SEGMENTS (1*ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
+#define MAX_CYCLE_SEGMENTS (ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
 /* helpers */
 #define TIMES2NS(time) ((uint64_t)(time * 1e9)) //convert internal time to nanaoseconds
 #define HANDLE_ERROR(condition, exit) if(condition) {goto exit;} //error handling
@@ -51,7 +51,7 @@
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
 #define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
-#define BUFFER_MARGIN (5U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
@@ -549,8 +549,6 @@ coe_state_machine(struct slavemonitor *slave)
                     /* check fault */
                     if (sw->fault)
                     {
-                        PRINT_STATUS_WORD(sw);
-                        
                         /* reset fault */
                         *cw = (struct coe_control_word)
                         {
