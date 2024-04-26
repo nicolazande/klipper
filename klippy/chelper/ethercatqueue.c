@@ -549,6 +549,8 @@ coe_state_machine(struct slavemonitor *slave)
                     /* check fault */
                     if (sw->fault)
                     {
+                        PRINT_STATUS_WORD(sw);
+                        
                         /* reset fault */
                         *cw = (struct coe_control_word)
                         {
