@@ -812,7 +812,7 @@ process_frame(struct ethercatqueue *sq)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                if (slave->slave_window > slave->interpolation_window)
+                if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
                 {
                     cw->signal = 1;
                 }
