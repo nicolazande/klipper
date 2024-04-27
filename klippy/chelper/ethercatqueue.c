@@ -829,7 +829,7 @@ process_frame(struct ethercatqueue *sq)
                     }
                     dbg_move = 1;
                 }
-                else
+                else if (slave->slave_window <= slave->interpolation_window)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->signal = 0;
