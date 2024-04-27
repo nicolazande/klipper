@@ -794,6 +794,9 @@ process_frame(struct ethercatqueue *sq)
                     /* common fields */
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
+
+                    errorf("--> error: sequence = %u, overflow = %u, underflow = %u",
+                            status->seq_error, status->overflow,  status->underflow);
                 }
 
                 /** 
