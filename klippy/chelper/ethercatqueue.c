@@ -824,7 +824,10 @@ process_frame(struct ethercatqueue *sq)
                     cw->signal = 1;
                     if (move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
                     {
-                        errorf('--> start move: p = %i, v = %i, t = %u', move->position, move->velocity, move->time);
+                        int32_t p = move->position;
+                        int32_t v = move->velocity;
+                        uint8_t t = move->time;
+                        errorf('--> start move: p = %i, v = %i, t = %u', p, v, t);
                     }
                 }
                 else
@@ -833,8 +836,10 @@ process_frame(struct ethercatqueue *sq)
                     cw->signal = 0;
                     if (move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
                     {
-                        errorf('--> stop move: p = %i, v = %i, t = %u', move->position, move->velocity, move->time);
-                    }
+                        int32_t p = move->position;
+                        int32_t v = move->velocity;
+                        uint8_t t = move->time;
+                        errorf('--> stop move: p = %i, v = %i, t = %u', p, v, t);                    }
                 }
             }
         }
