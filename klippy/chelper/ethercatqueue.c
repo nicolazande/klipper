@@ -335,9 +335,9 @@ build_and_send_command(struct ethercatqueue *sq)
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
             slave->seq_num++;
 
-            struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
-            errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
-                    slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
+            // struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
+            // errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
+            //         slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
@@ -786,7 +786,7 @@ process_frame(struct ethercatqueue *sq)
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
                 /* check error */
-                if (status->seq_error /* || status->overflow || status->underflow */)
+                if (status->seq_error || status->overflow || status->underflow)
                 {
                     /* clear error and update slave sequence */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
@@ -794,15 +794,6 @@ process_frame(struct ethercatqueue *sq)
                     /* common fields */
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
-                }
-
-                if (status->underflow)
-                {
-                    errorf('UNDERFLOW');
-                }
-                if (status->overflow)
-                {
-                    errorf('OVERFLOW');
                 }
 
                 /** 
