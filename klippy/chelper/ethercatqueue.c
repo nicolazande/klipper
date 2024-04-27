@@ -822,11 +822,14 @@ process_frame(struct ethercatqueue *sq)
                 if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
                 {
                     cw->signal = 1;
+                    errorf('--> start move: p = %i, v = %i, t = %u', move->position, move->velocity, move->time);
                 }
                 else
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->signal = 0;
+                    errorf('--> stop move: p = %i, v = %i, t = %u', move->position, move->velocity, move->time);
+
                 }
             }
         }
