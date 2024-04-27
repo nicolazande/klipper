@@ -20,7 +20,7 @@
  ****************************************************************/
 #define NEVER_TIME 9999999999999999.9
 #define MAX_NULL_MOVE 1.0
-#define MIN_MOVE_TIME (0.0001)
+#define MIN_MOVE_TIME (0.001)
 
 
 /****************************************************************
@@ -150,7 +150,7 @@ trapq_append(struct trapq *tq, double print_time,
     struct coord start_pos = {.x=start_pos_x, .y=start_pos_y, .z=start_pos_z};
     struct coord axes_r = {.x=axes_r_x, .y=axes_r_y, .z=axes_r_z};
     /* acceleration */
-    if (accel_t >= MIN_MOVE_TIME)
+    if (accel_t > MIN_MOVE_TIME)
     {
         struct move *m = move_alloc();
         m->print_time = print_time;
@@ -164,7 +164,7 @@ trapq_append(struct trapq *tq, double print_time,
         start_pos = move_get_coord(m, accel_t);
     }
     /* cruise */
-    if (cruise_t >= MIN_MOVE_TIME)
+    if (cruise_t > MIN_MOVE_TIME)
     {
         struct move *m = move_alloc();
         m->print_time = print_time;
@@ -178,7 +178,7 @@ trapq_append(struct trapq *tq, double print_time,
         start_pos = move_get_coord(m, cruise_t);
     }
     /* deceleration */
-    if (decel_t >= MIN_MOVE_TIME)
+    if (decel_t > MIN_MOVE_TIME)
     {
         struct move *m = move_alloc();
         m->print_time = print_time;
