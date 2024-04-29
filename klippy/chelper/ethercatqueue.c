@@ -39,7 +39,7 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time limits */
-#define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
+#define MIN_REQTIME_DELTA 0.100     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
 #define MAX_CYCLE_SEGMENTS (ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
@@ -51,7 +51,7 @@
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
 #define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
-#define BUFFER_MARGIN (6U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
@@ -652,7 +652,7 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
             uint8_t *data = ecrt_sdo_request_data(slave->homing_method_sdo);
             if (data)
             {
-                EC_WRITE_S8(data, COE_HOMING_NEGATIVE_SWITCH);
+                EC_WRITE_S8(data, COE_HOMING_POSITIVE_SWITCH);
                 ecrt_sdo_request_write(slave->homing_method_sdo);
             }
         }
