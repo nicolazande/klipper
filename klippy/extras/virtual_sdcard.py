@@ -260,6 +260,9 @@ class VirtualSD:
             line = lines.pop()
             next_file_position = self.file_position + len(line.encode()) + 1
             self.next_file_position = next_file_position
+
+            logging.info("DIOBRASCA: (t = %s, cmd = %s)" % 
+                         (self.reactor.monotonic(), line))
             try:
                 self.gcode.run_script(line)
             except self.gcode.error as e:
