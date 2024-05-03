@@ -558,7 +558,6 @@ coe_state_machine(struct slavemonitor *slave)
                         {
                             .reset_fault = 1
                         };
-                        errorf("--> fault detected on slave[%u]", slave->oid);
                     }
                     else
                     {

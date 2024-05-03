@@ -408,6 +408,7 @@ class GCodeIO:
             self.printer.request_exit('error_exit')
     m112_r = re.compile('^(?:[nN][0-9]+)?\s*[mM]112(?:\s|$)')
     def _process_data(self, eventtime):
+        logging.info("IO PROCESSO: t = %s", eventtime)
         # Read input, separate by newline, and add to pending_commands
         try:
             data = str(os.read(self.fd, 4096).decode())
