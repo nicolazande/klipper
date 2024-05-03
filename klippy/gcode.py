@@ -186,7 +186,6 @@ class GCodeDispatch:
     # Parse input into commands
     args_r = re.compile('([A-Z_]+|[A-Z*/])')
     def _process_commands(self, commands, need_ack=True):
-        logging.info("IO PROCESSO: %s", commands)
         for line in commands:
             # Ignore comments and leading/trailing spaces
             line = origline = line.strip()
@@ -224,8 +223,10 @@ class GCodeDispatch:
                     raise
             gcmd.ack()
     def run_script_from_command(self, script):
+        logging.info("IO PROCESSO: run_script_from_command")
         self._process_commands(script.split('\n'), need_ack=False)
     def run_script(self, script):
+        logging.info("IO PROCESSO: run_script")
         with self.mutex:
             self._process_commands(script.split('\n'), need_ack=False)
     def get_mutex(self):
@@ -409,6 +410,7 @@ class GCodeIO:
             self.printer.request_exit('error_exit')
     m112_r = re.compile('^(?:[nN][0-9]+)?\s*[mM]112(?:\s|$)')
     def _process_data(self, eventtime):
+        logging.info("IO PROCESSO: _process_data")
         # Read input, separate by newline, and add to pending_commands
         try:
             data = str(os.read(self.fd, 4096).decode())
