@@ -71,6 +71,7 @@ class IdleTimeout:
         # Idle timeout has elapsed
         return self.transition_idle_state(eventtime)
     def timeout_handler(self, eventtime):
+        logging.info("DIOBRASCA: timeout_handler = %s" % eventtime)
         if self.printer.is_shutdown():
             return self.reactor.NEVER
         if self.state == "Ready":

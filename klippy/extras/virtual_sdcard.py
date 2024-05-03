@@ -217,7 +217,6 @@ class VirtualSD:
         return self.cmd_from_sd
     # Background work timer
     def work_handler(self, eventtime):
-        logging.info("DIOBRASCA: %s" % eventtime)
         logging.info("Starting SD card print (position %d)", self.file_position)
         self.reactor.unregister_timer(self.work_timer)
         try:
