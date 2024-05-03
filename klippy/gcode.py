@@ -186,7 +186,6 @@ class GCodeDispatch:
     # Parse input into commands
     args_r = re.compile('([A-Z_]+|[A-Z*/])')
     def _process_commands(self, commands, need_ack=True):
-        logging.info("BRASCAMENTA: %s", commands)
         for line in commands:
             # Ignore comments and leading/trailing spaces
             line = origline = line.strip()
