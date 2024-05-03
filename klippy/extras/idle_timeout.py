@@ -71,11 +71,11 @@ class IdleTimeout:
         # Idle timeout has elapsed
         return self.transition_idle_state(eventtime)
     def timeout_handler(self, eventtime):
-        logging.info("DIOBRASCA: timeout_handler = %s" % eventtime)
         if self.printer.is_shutdown():
             return self.reactor.NEVER
         if self.state == "Ready":
             return self.check_idle_timeout(eventtime)
+        logging.info("DIOBRASCA: not ready")
         # Check if need to transition to "ready" state
         print_time, est_print_time, lookahead_empty = self.toolhead.check_busy(
             eventtime)
@@ -95,7 +95,6 @@ class IdleTimeout:
                                 est_print_time + PIN_MIN_TIME)
         return eventtime + self.idle_timeout
     def handle_sync_print_time(self, curtime, print_time, est_print_time):
-        logging.info("DIOBRASCA: handle_sync_print_time = (ct = %s, pt = %s, ept = %s)" % (curtime, print_time, est_print_time))
         if self.state == "Printing":
             return
         # Transition to "printing" state
