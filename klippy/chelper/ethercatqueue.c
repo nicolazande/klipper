@@ -113,7 +113,7 @@ static inline void check_master_state(struct ethercatqueue *sq);
  * Populate ethercat domain for the current cycle, all mapped objects
  * are transmitted in the current cycle frame.
  */
-static inline int build_and_send_command(struct ethercatqueue *sq);
+static inline int build_and_send_command(struct ethercatqueue *sq, double eventtime);
 
 /**
  * Determine schedule time of next command event and move messages
@@ -294,7 +294,7 @@ process_request(struct ethercatqueue *sq, double eventtime)
 };
 
 static inline int
-build_and_send_command(struct ethercatqueue *sq)
+build_and_send_command(struct ethercatqueue *sq, double eventtime)
 {
     /* data */
     int len = 0; //number of bytes added in to the current frame
@@ -335,7 +335,7 @@ build_and_send_command(struct ethercatqueue *sq)
             move->header.seq_num = nseq; //step sequence number
 
             slave->time_track[nseq] = clock_to_time(&sq->ce, qm->req_clock);
-            errorf("time track: (oid = %u, seq = %u, t = %lf)", slave->oid, nseq, slave->time_track[nseq]);
+            errorf("time track: (oid = %u, seq = %u, req_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_track[nseq], eventtime);
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
@@ -1023,7 +1023,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         }
 
         /* build or update data to be sent */
-        buflen += build_and_send_command(sq);
+        buflen += build_and_send_command(sq, eventtime);
     }
 
     /* releas mutex */
