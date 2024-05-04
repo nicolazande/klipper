@@ -336,7 +336,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
 
             slave->time_track[nseq] = clock_to_time(&sq->ce, qm->req_clock);
             double tmp_min_time = clock_to_time(&sq->ce, qm->min_clock);
-            errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_track[nseq], tmp_min_time, eventtime);
+            //errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_track[nseq], tmp_min_time, eventtime);
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
