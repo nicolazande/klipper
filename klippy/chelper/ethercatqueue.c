@@ -769,8 +769,11 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                         errorf("--> start move: (seq = %u, nex_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
                                 slave->seq_num % BUFFER_SIZE, next_id, delta_time,
                                 slave->oid, slave->slave_window);
-                                
-                        cw->signal = 1;
+
+                        if (delta_time <= master->sync0_ct)
+                        {
+                            cw->signal = 1;
+                        }
                     }
                     
                 }
