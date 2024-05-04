@@ -765,7 +765,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     {
                         uint8_t next_id = (status->next_id - slave->slave_window) % 32;
                         errorf("--> start move: (seq = %u, nex_id = %u, time = %lf) - (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u",
-                                slave->seq_num , next_id, slave->time_track[next_id],
+                                slave->seq_num % 32, next_id, slave->time_track[next_id],
                                 slave->oid, eventtime, slave->slave_window,
                                 move->position, move->velocity, move->time);
                     }
@@ -776,7 +776,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     if (cw->signal)
                     {
-                        errorf("--> stop move (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
+                        errorf("--> stop move: (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
                     }
                     cw->signal = 0;
                 }
