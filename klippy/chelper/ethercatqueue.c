@@ -381,11 +381,9 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
     struct slavemonitor *slave; //ethercat slave interface
-    double idletime = eventtime + master->sync0_st; //current transmission estimated drive reception time (frame is back to master).
-    uint64_t ack_clock = clock_from_time(&sq->ce, idletime); //current transmission estimated drive reception clock
-    uint64_t min_stalled_clock = MAX_CLOCK; //min clock among stalled messages (for next cycle)
+    uint64_t ack_clock = clock_from_time(&sq->ce, eventtime + master->sync0_st); //current transmission estimated drive reception clock
     uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
-    uint64_t reqclock_delta = (master->sync0_ct + MIN_REQTIME_DELTA) * sq->ce.est_freq; //time safe margin
+    uint64_t reqclock_delta = (master->sync0_ct + MIN_REQTIME_DELTA) * sq->ce.est_freq; //time margin
 
     /* 
      * Check for free buffer slots on slave side only. There is no need to check tx side
@@ -400,7 +398,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 
         if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
         {
-            /* stop (drive buffer is full) */
+            /* stop and send frame (drive buffer is full) */
             return PR_NEVER;
         }
     }
@@ -417,17 +415,8 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
          * message can be sent, if it is greater than the estimated frame reception time
          * (ack_clock) stop immediately.
          */
-        if ((ack_clock + reqclock_delta < qm->req_clock) || (ack_clock < qm->min_clock))
+        if ((ack_clock < qm->min_clock) || (ack_clock + reqclock_delta < qm->req_clock))
         {
-            if (qm->min_clock < min_stalled_clock)
-            {
-                /* 
-                 * The current message is not added to the ready queue, however the
-                 * min_stalled_clock is updated for the next function call (start
-                 * with the min possible value of min_stalled_clock).
-                 */
-                min_stalled_clock = qm->min_clock;
-            }
             /*
              * The ack clock (estimated drive reception clock) is greater than the pending queue
              * min clock, i.e. the first message in the ordered upcoming queue is still too far
@@ -459,11 +448,11 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     }
     
     /* 
-     * Early stop check (step space in domain is full). A drive specific
-     * check is performed in build_and_send_command(), but this avoids
-     * having an undefinitely growing ready queue.
+     * Early stop check for one of the following reasons:
+     *  - timing, ext command event time is too late
+     *  - buffer full to avoid having an undefinitely growing ready queue.
      */
-    if (sq->ready_bytes >= master->frame_segment_size)
+    if ((min_ready_clock <= ack_clock + reqclock_delta) || (sq->ready_bytes >= master->frame_segment_size))
     {
         /* 
          * Cannot add more bytes, data has to be transmitted in the current cycle.
@@ -472,33 +461,13 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         return PR_NOW;
     }
     /* check clock estimate */
-    if (!sq->ce.est_freq)
+    if ((!sq->ce.est_freq) && (sq->ready_bytes))
     {
         /* no clock estimate specified (initialization, reset, error) */
-        if (sq->ready_bytes)
-        {
-            /* 
-             * Something to send, add to transmission buffer. This may
-             * happen in configuration phase where drive parameters
-             * can be tuned also asynchronously but shouldn't happen.
-             */
-            return PR_NOW;
-        }
-        /* disable timer and stop (error or stopped) */
-        return PR_NEVER;
-    }
-
-    /* check ready queue timing requirements */
-    if (min_ready_clock <= ack_clock + reqclock_delta)
-    {
-        /* 
-         * Next command event time is too late to send ready queue 
-         * messages, add them to the transmission buffer and send 
-         * them in the current command event.
-         */
         return PR_NOW;
     }
 
+    /* send frame (no need to fill buffer) */
     return PR_NEVER;
 }
 
