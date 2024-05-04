@@ -825,7 +825,7 @@ process_frame(struct ethercatqueue *sq)
                     cw->signal = 1;
                     if (!dbg_move && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
                     {
-                        //errorf("--> start move: p = %i, v = %i, t = %u", move->position, move->velocity, move->time);
+                        errorf("--> start move: p = %i, v = %i, t = %u", move->position, move->velocity, move->time);
                     }
                     dbg_move = 1;
                 }
@@ -835,7 +835,7 @@ process_frame(struct ethercatqueue *sq)
                     cw->signal = 0;
                     if (dbg_move && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
                     {
-                        //errorf("--> stop move: p = %i, v = %i, t = %u", move->position, move->velocity, move->time);
+                        errorf("--> stop move: p = %i, v = %i, t = %u", move->position, move->velocity, move->time);
                     }
                     dbg_move = 0;
                 }
