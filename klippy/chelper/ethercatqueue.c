@@ -760,7 +760,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                if (slave->slave_window <= slave->interpolation_window)
+                if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     if (cw->signal)
@@ -777,7 +777,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                         uint8_t last_id = (next_id - slave->slave_window + BUFFER_SIZE) % BUFFER_SIZE;
                         double delta_time = slave->time_track[last_id] - eventtime;
 
-                        if (delta_time <= master->sync0_ct)
+                        if (delta_time < master->sync0_ct)
                         {
                             errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
                                 slave->seq_num % BUFFER_SIZE, next_id, last_id, delta_time,
