@@ -106,7 +106,7 @@ struct slavemonitor
     ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS]; //slave pdos
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
     uint8_t *movedata[ETHERCAT_DOMAINS]; //ip segment move offset (support for multiple domains)
-    double time_track[SEQ_NUM_MASK + 1];
+    double time_track[32];
 };
 
 /* ethecat master wrapper */

@@ -381,6 +381,11 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
     /* data */
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
     struct slavemonitor *slave; //ethercat slave interface
+    double idletime = eventtime + master->sync0_st; //current transmission estimated drive reception time (frame is back to master).
+    uint64_t ack_clock = clock_from_time(&sq->ce, idletime); //current transmission estimated drive reception clock
+    uint64_t min_stalled_clock = MAX_CLOCK; //min clock among stalled messages (for next cycle)
+    uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
+    uint64_t reqclock_delta = (master->sync0_ct + MIN_REQTIME_DELTA) * sq->ce.est_freq; //time safe margin
 
     /* 
      * Check for free buffer slots on slave side only. There is no need to check tx side
@@ -400,15 +405,8 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         }
     }
 
-    /* time parameters */
-    double idletime = eventtime + master->sync0_st; //current transmission estimated drive reception time (frame is back to master).
-    uint64_t ack_clock = clock_from_time(&sq->ce, idletime); //current transmission estimated drive reception clock
-    uint64_t min_stalled_clock = MAX_CLOCK; //min clock among stalled messages (for next cycle)
-    uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
-
     /* move messages from the upcoming queue to the ready queue */
-    int moved_segments = 0;
-    while (!list_empty(&sq->upcoming_queue) && (moved_segments < MAX_CYCLE_SEGMENTS))
+    while (!list_empty(&sq->upcoming_queue))
     {
         /* get first message in queue */
         struct move_segment_msg *qm = list_first_entry(&sq->upcoming_queue, struct move_segment_msg, node);
@@ -419,7 +417,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
          * message can be sent, if it is greater than the estimated frame reception time
          * (ack_clock) stop immediately.
          */
-        if (ack_clock < qm->min_clock)
+        if ((ack_clock + reqclock_delta < qm->req_clock) || (ack_clock < qm->min_clock))
         {
             if (qm->min_clock < min_stalled_clock)
             {
@@ -444,7 +442,6 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* update stats */
         sq->upcoming_bytes -= qm->len;
         sq->ready_bytes += qm->len;
-        moved_segments++;
     }
 
     /* check updated ready queue */
@@ -491,16 +488,6 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         return PR_NEVER;
     }
 
-    /**
-     * Calculate the amount of time in advance a command has to be sent to the
-     * drive before being executed: higher it is, safer the operation is,
-     * but fuller the drive buffer will be (potentially completely full).
-     * By taking into account also the synch cycle time we ensure that the
-     * next cyclic_event() is at least MIN_REQTIME_DELTA in advance with
-     * respect to the earliest schedulable step.
-     */
-    uint64_t reqclock_delta = (master->sync0_ct + MIN_REQTIME_DELTA) * sq->ce.est_freq;
-
     /* check ready queue timing requirements */
     if (min_ready_clock <= ack_clock + reqclock_delta)
     {
@@ -512,29 +499,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         return PR_NOW;
     }
 
-    /*
-     * Min requested clock for scheduling next command event without
-     * taking into account the synch cycle time.
-     */
-    uint64_t wantclock = min_ready_clock - (MIN_REQTIME_DELTA * sq->ce.est_freq);
-
-    /* take into account min clock of stalled messages */
-    if (min_stalled_clock < wantclock)
-    {
-        /* 
-         * This condition should not happen (upcoming_queue should be
-         * ordered), however if it is not the case, update wantclock
-         * so that it takes into account the first non scheduled
-         * message in the pending queues.
-         */
-        wantclock = min_stalled_clock;
-    }
-
-    /* 
-     * Ideal walue of next cyclic_event(), unused since the ethercat
-     * synch cycle time has to be constant.
-     */
-    return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
+    return PR_NEVER;
 }
 
 static inline void
