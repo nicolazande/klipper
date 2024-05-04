@@ -17,6 +17,8 @@
         "deque": "c",
         "unordered_map": "c",
         "vector": "c",
-        "initializer_list": "c"
+        "initializer_list": "c",
+        "stepcompress.h": "c",
+        "serialqueue.h": "c"
     }
 }

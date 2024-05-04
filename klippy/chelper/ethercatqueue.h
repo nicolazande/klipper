@@ -33,6 +33,7 @@
 #define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
 #define ETHERCAT_MAX_PDO_ENTRIES 20 //max number of pdo enries per slave
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
+#define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
 
 
 /****************************************************************
@@ -105,6 +106,7 @@ struct slavemonitor
     ec_pdo_info_t pdos[ETHERCAT_MAX_PDOS]; //slave pdos
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
     uint8_t *movedata[ETHERCAT_DOMAINS]; //ip segment move offset (support for multiple domains)
+    double time_track[SEQ_NUM_MASK + 1];
 };
 
 /* ethecat master wrapper */

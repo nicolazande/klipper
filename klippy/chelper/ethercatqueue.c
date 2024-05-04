@@ -50,7 +50,6 @@
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
-#define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
 #define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
 
 
@@ -332,7 +331,13 @@ build_and_send_command(struct ethercatqueue *sq)
             *move = *((struct coe_ip_move *)qm->msg);
 
             /* update step sequence number (avoid overflow) */
-            move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
+            uint8_t nseq = slave->seq_num & SEQ_NUM_MASK;
+            move->header.seq_num = nseq; //step sequence number
+
+            slave->time_track[nseq] = clock_to_time(&sq->ce, qm->req_clock);
+            errorf("time track = %lf", time_track[nseq]);
+
+            /* update step sequence number (avoid overflow) */
             slave->seq_num++;
 
             // struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
