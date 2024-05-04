@@ -51,6 +51,7 @@
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
 #define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_SIZE (32U)
 
 
 /****************************************************************
@@ -333,7 +334,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             /* update step sequence number (avoid overflow) */
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK;; //step sequence number
 
-            uint8_t nseq = slave->seq_num % 32;
+            uint8_t nseq = slave->seq_num % BUFFER_SIZE;
             slave->time_track[nseq] = clock_to_time(&sq->ce, qm->req_clock);
             double tmp_min_time = clock_to_time(&sq->ce, qm->min_clock);
             errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_track[nseq], tmp_min_time, eventtime);
@@ -763,13 +764,15 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 {
                     if (!cw->signal)
                     {
-                        uint8_t next_id = (status->next_id - slave->slave_window) % 32;
-                        errorf("--> start move: (seq = %u, nex_id = %u, time = %lf) - (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u",
-                                slave->seq_num % 32, next_id, slave->time_track[next_id],
-                                slave->oid, eventtime, slave->slave_window,
-                                move->position, move->velocity, move->time);
+                        uint8_t next_id = (status->next_id - slave->slave_window) % BUFFER_SIZE;
+                        double delta_time = slave->time_track[next_id] - eventtime;
+                        errorf("--> start move: (seq = %u, nex_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
+                                slave->seq_num % BUFFER_SIZE, next_id, delta_time,
+                                slave->oid, slave->slave_window);
+su
+                        cw->signal = 1;
                     }
-                    cw->signal = 1;
+                    
                 }
                 else if (slave->slave_window <= slave->interpolation_window)
                 {
