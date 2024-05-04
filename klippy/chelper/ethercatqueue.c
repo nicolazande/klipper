@@ -819,11 +819,11 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
-                static uint8_t dbg_move = 0;
+                static uint8_t dbg_move;
                 if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
                 {
                     cw->signal = 1;
-                    if (!dbg_move && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
+                    if (!dbg_move)
                     {
                         errorf("--> start move (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
                     }
@@ -833,7 +833,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     cw->signal = 0;
-                    if (dbg_move && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
+                    if (dbg_move)
                     {
                         errorf("--> stop move (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
                     }
