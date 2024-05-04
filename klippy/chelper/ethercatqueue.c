@@ -335,7 +335,7 @@ build_and_send_command(struct ethercatqueue *sq)
             move->header.seq_num = nseq; //step sequence number
 
             slave->time_track[nseq] = clock_to_time(&sq->ce, qm->req_clock);
-            errorf("time track = %lf", time_track[nseq]);
+            errorf("time track = %lf", slave->time_track[nseq]);
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
