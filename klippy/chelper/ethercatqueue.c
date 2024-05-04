@@ -758,26 +758,27 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                  * of enable operation command, i.e. automatic start when there
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
-                 */
-                static uint8_t dbg_move[ETHERCAT_DRIVES];
+                 */            
                 if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
                 {
-                    cw->signal = 1;
-                    if (!dbg_move[slave->oid])
+                    if (!cw->signal)
                     {
-                        errorf("--> start move (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
+                        uint8_t next_id = (status->next_id - slave->slave_window) % 32;
+                        errorf("--> start move: (seq = %u, nex_id = %u, time = %lf) - (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u",
+                                slave->seq_num , next_id, slave->time_track[next_id],
+                                slave->oid, eventtime, slave->slave_window,
+                                move->position, move->velocity, move->time);
                     }
-                    dbg_move[slave->oid] = 1;
+                    cw->signal = 1;
                 }
                 else if (slave->slave_window <= slave->interpolation_window)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
-                    cw->signal = 0;
-                    if (dbg_move[slave->oid])
+                    if (cw->signal)
                     {
                         errorf("--> stop move (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
                     }
-                    dbg_move[slave->oid] = 0;
+                    cw->signal = 0;
                 }
             }
         }
