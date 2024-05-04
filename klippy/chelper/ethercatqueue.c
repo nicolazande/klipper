@@ -85,7 +85,7 @@ static void check_wake_receive(struct ethercatqueue *sq);
 static inline void process_request(struct ethercatqueue *sq, double eventtime);
 
 /** process ethercat frame (reset and configuration check) */
-static inline void process_frame(struct ethercatqueue *sq);
+static inline void process_frame(struct ethercatqueue *sq, double eventtime);
 
 /** 
  * Run canopen DS402 state machine default transition.
@@ -753,7 +753,7 @@ static inline void coe_operational_setup(struct ethercatqueue *sq)
 
 /** process ethercat frame (reset and configuration check) */
 static inline void
-process_frame(struct ethercatqueue *sq)
+process_frame(struct ethercatqueue *sq, double eventtime)
 {
     /* get master */
     struct mastermonitor *master = &sq->masterifc;
@@ -825,7 +825,7 @@ process_frame(struct ethercatqueue *sq)
                     cw->signal = 1;
                     if (!dbg_move && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
                     {
-                        errorf("--> start move: p = %i, v = %i, t = %u", move->position, move->velocity, move->time);
+                        errorf("--> start move (et = %lf): p = %i, v = %i, t = %u", eventtime, move->position, move->velocity, move->time);
                     }
                     dbg_move = 1;
                 }
@@ -835,7 +835,7 @@ process_frame(struct ethercatqueue *sq)
                     cw->signal = 0;
                     if (dbg_move && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
                     {
-                        errorf("--> stop move: p = %i, v = %i, t = %u", move->position, move->velocity, move->time);
+                        errorf("--> stop move (et = %lf): p = %i, v = %i, t = %u", eventtime, move->position, move->velocity, move->time);
                     }
                     dbg_move = 0;
                 }
@@ -923,7 +923,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     }
 
     /* process frame (cleanup and state machine) */
-    process_frame(sq);
+    process_frame(sq, eventtime);
 
     /** 
      * Process a high level thread request.
