@@ -773,13 +773,14 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 {
                     if (!cw->signal)
                     {
-                        uint8_t last_id = (status->next_id - slave->slave_window) % BUFFER_SIZE;
+                        uint8_t next_id = status->next_id % BUFFER_SIZE;
+                        uint8_t last_id = (next_id - slave->slave_window + BUFFER_SIZE) % BUFFER_SIZE;
                         double delta_time = slave->time_track[last_id] - eventtime;
 
                         if (delta_time <= master->sync0_ct)
                         {
                             errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
-                                slave->seq_num % BUFFER_SIZE, status->next_id, last_id, delta_time,
+                                slave->seq_num % BUFFER_SIZE, next_id, last_id, delta_time,
                                 slave->oid, slave->slave_window);
 
                             cw->signal = 1;
