@@ -756,8 +756,8 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                  * low limit of segments in the drive budder is reached.
                  */
                 uint8_t next_id = status->next_id % ETHERCAT_PVT_BUFFER_SIZE;
-                uint8_t last_id = (next_id - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-                uint8_t last_buffered_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+                //uint8_t last_id = (next_id - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+                uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
                 double delta_time = slave->time_table[last_id] - eventtime;
 
                 if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
@@ -767,15 +767,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     {
                         errorf("--> stop move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id]);
+                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                         
                         cw->signal = 0;
-                        errorf("======");
-                        for (uint8_t k = 0; k < 32; k++)
-                        {
-                            errorf("%lf = %u", slave->time_table[k], k);
-                        }
-                        errorf("======");
                     }
                 }         
                 else
@@ -786,7 +780,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                         {
                             errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id]);
+                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
 
                             cw->signal = 1;
                         }
