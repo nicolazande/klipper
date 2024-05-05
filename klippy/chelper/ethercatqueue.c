@@ -805,6 +805,13 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
             }
             else
             {
+                /** NOTE: this causes hard stop (remove if unwanted) */
+                if (!cw->signal)
+                {
+                    errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                            last_id, delta_time,
+                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+                }
                 cw->signal = 1;
             }
         }
