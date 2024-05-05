@@ -100,7 +100,6 @@ struct slavemonitor
     uint32_t product_code;         //slave product_code
     uint16_t assign_activate;      //bitmask for dc clock channel used for synchronization
     uint16_t oid;                  //compressor object id (position in mastermonitor->monitor)
-    double next_time;
     /* pdo data */
     uint8_t n_pdo_entries;         //number of slave pdo entries
     ec_pdo_entry_info_t pdo_entries[ETHERCAT_MAX_PDO_ENTRIES]; //slave pdo entries
@@ -149,6 +148,7 @@ struct ethercatqueue
     /* baud and clock tracking */
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
     uint32_t last_clock; //last input event (read operation) clock time
+    double next_time;
     /* message queues */
     struct list_head ready_queue; //list of messages ready to be sent
     struct list_head upcoming_queue; //list of upcoming messages
