@@ -51,7 +51,6 @@
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
 #define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
-#define BUFFER_SIZE (32U)
 
 
 /****************************************************************
@@ -334,10 +333,12 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             /* update step sequence number (avoid overflow) */
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK;; //step sequence number
 
-            uint8_t nseq = slave->seq_num % BUFFER_SIZE;
-            slave->time_track[nseq] = clock_to_time(&sq->ce, qm->req_clock);
+            /* update step timing table */
+            uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
+            slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock);
+
             double tmp_min_time = clock_to_time(&sq->ce, qm->min_clock);
-            //errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_track[nseq], tmp_min_time, eventtime);
+            //errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_table[nseq], tmp_min_time, eventtime);
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
@@ -773,14 +774,14 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 {
                     if (!cw->signal)
                     {
-                        uint8_t next_id = status->next_id % BUFFER_SIZE;
-                        uint8_t last_id = (next_id - slave->slave_window + BUFFER_SIZE) % BUFFER_SIZE;
-                        double delta_time = slave->time_track[last_id] - eventtime;
+                        uint8_t next_id = status->next_id % ETHERCAT_PVT_BUFFER_SIZE;
+                        uint8_t last_id = (next_id - slave->slave_window - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+                        double delta_time = slave->time_table[last_id] - eventtime;
 
                         if (delta_time < master->sync0_ct)
                         {
                             errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
-                                slave->seq_num % BUFFER_SIZE, next_id, last_id, delta_time,
+                                slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
                                 slave->oid, slave->slave_window);
 
                             cw->signal = 1;
