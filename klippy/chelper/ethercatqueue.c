@@ -755,13 +755,19 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                  * are enough samples in the buffer and automatic stop when the
                  * low limit of segments in the drive budder is reached.
                  */
+                uint8_t next_id = status->next_id % ETHERCAT_PVT_BUFFER_SIZE;
+                uint8_t last_id = (next_id - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+                uint8_t last_buffered_id = (next_id - slave->slave_window -1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+                double delta_time = slave->time_table[last_id] - eventtime;
+
                 if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
                 {
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     if (cw->signal)
                     {
-                        errorf("--> stop move: (oid = %u, event_time = %lf, slave_window = %u, next_time = %lf)",
-                                slave->oid, eventtime, slave->slave_window, sq->next_time);
+                        errorf("--> stop move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_buffered = %lf)",
+                                slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
+                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id]);
                         
                         cw->signal = 0;
                     }
@@ -770,15 +776,11 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 {
                     if (!cw->signal)
                     {
-                        uint8_t next_id = status->next_id % ETHERCAT_PVT_BUFFER_SIZE;
-                        uint8_t last_id = (next_id - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-                        double delta_time = slave->time_table[last_id] - eventtime;
-
                         if (delta_time < master->sync0_ct)
                         {
-                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf)",
+                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_buffered = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time);
+                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id]);
 
                             cw->signal = 1;
                         }
