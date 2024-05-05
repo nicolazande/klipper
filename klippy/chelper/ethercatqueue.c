@@ -86,6 +86,8 @@ static inline void process_request(struct ethercatqueue *sq, double eventtime);
 /** process ethercat frame (reset and configuration check) */
 static inline void process_frame(struct ethercatqueue *sq, double eventtime);
 
+static inline void gigibagigi(struct ethercatqueue *sq, double eventtime);
+
 /** 
  * Run canopen DS402 state machine default transition.
  * NOTE: to force specifica actions modify the control
@@ -730,63 +732,59 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     /* common fields */
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
-
-                    errorf("--> error: sequence = %u, overflow = %u, underflow = %u",
+                    /* notify buffer problem */
+                    errorf("Error: sequence = %u, overflow = %u, underflow = %u",
                             status->seq_error, status->overflow,  status->underflow);
                 }
-
-                /** 
-                 * NOTE: uncomment the following block in case a dummy command
-                 *       needs to be sent every cycle.
-                 */
-                // else
-                // {
-                //     /* disable command (discarded by drive) */
-                //     move->command.code = COE_CMD_NO_OPERATION;
-                // }
-
-                // /* common fields */
-                // move->error_mask = 0xFF;
-                // move->command.type = COE_SEGMENT_MODE_CMD;
-
-                /**
-                 * Check receive buffer status and perform automatic transition
-                 * of enable operation command, i.e. automatic start when there
-                 * are enough samples in the buffer and automatic stop when the
-                 * low limit of segments in the drive budder is reached.
-                 */
-                uint8_t next_id = status->next_id % ETHERCAT_PVT_BUFFER_SIZE;
-                //uint8_t last_id = (next_id - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-                uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-                double delta_time = slave->time_table[last_id] - eventtime;
-
-                if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
-                {
-                    /** NOTE: this causes hard stop (remove if unwanted) */
-                    if (cw->signal)
-                    {
-                        errorf("--> stop move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                                slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
-                        
-                        cw->signal = 0;
-                    }
-                }         
-                else
-                {
-                    if (!cw->signal)
-                    {
-                        if (delta_time < master->sync0_ct)
-                        {
-                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                                slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
-
-                            cw->signal = 1;
-                        }
-                    }
-                }
             }
+        }
+    }
+}
+
+static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
+{
+    /* get master */
+    struct mastermonitor *master = &sq->masterifc;
+
+    /* loop over domain associated drives */
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        /* get slave */
+        struct slavemonitor *slave = &master->monitor[i];
+
+        /* get control word */
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+
+        /* get slave segment buffer data */
+        struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[0];
+
+        /**
+         * Check receive buffer status and perform automatic transition
+         * of enable operation command, i.e. automatic start when there
+         * are enough samples in the buffer and automatic stop when the
+         * low limit of segments in the drive budder is reached.
+         */
+        uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+        double delta_time = slave->time_table[last_id] - eventtime;
+
+        if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
+        {
+            /** NOTE: this causes hard stop (remove if unwanted) */
+            if (cw->signal)
+            {
+                errorf("--> stop move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                        last_id, delta_time,
+                        slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+            }
+            cw->signal = 0;
+        }         
+        else
+        {
+            if ((delta_time > master->sync0_ct) && (!slave->master_window))
+            {
+                move->time = master->sync0_ct;
+            }
+            cw->signal = 1;
         }
     }
 }
@@ -932,6 +930,8 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
              * synchronized with the reference clock (first DC capable slave).
              */
             ecrt_master_sync_slave_clocks(master->master);
+
+            gigibagigi(sq, eventtime);
 
             /* loop over domains */
             for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
