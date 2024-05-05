@@ -78,8 +78,10 @@ struct slavemonitor
     int8_t operation_mode;         //local copy of operation mode
     uint8_t *off_position_actual;  //actual position offset
     int32_t position_actual;       //local copy of actual position
+    int32_t position_target;       //target position
     uint8_t *off_velocity_actual;  //actual velocity offset
     int32_t velocity_actual;       //local copy of actual velocity
+    int32_t velocity_target;       //target velocity
     uint8_t *off_buffer_status;    //segment buffer status
     uint32_t buffer_status;        //local copy of segment buffer status
     /* sdo */

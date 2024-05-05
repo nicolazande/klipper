@@ -332,6 +332,9 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
             *move = *((struct coe_ip_move *)qm->msg);
 
+            slave->position_target = move->position;
+            slave->velocity_target = move->velocity;
+
             /* update step sequence number (avoid overflow) */
             move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
 
@@ -788,8 +791,8 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
 
-                    move->position = slave->position_actual;
-                    move->velocity = slave->velocity_actual;
+                    move->position = slave->position_target;
+                    move->velocity = slave->velocity_target;
                     move->time = master->sync0_ct;
 
                     /* update step timing table */
