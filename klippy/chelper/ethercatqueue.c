@@ -337,6 +337,19 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
             slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock);
 
+            /* get next queue message */
+            struct move_segment_msg * nqm = list_next_entry(qm, node);
+            if (nqm)
+            {
+                double next_time = clock_to_time(&sq->ce, nqm->req_clock);
+                errorf("current: (oid = %u, req_time = %lf), next = (oid = %u, req_time = %lf)",
+                    qm->oid, slave->time_table[nseq], nqm->oid, next_time);
+            }
+            else
+            {
+                errorf("NO DATA");
+            }
+
             double tmp_min_time = clock_to_time(&sq->ce, qm->min_clock);
             //errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_table[nseq], tmp_min_time, eventtime);
 
