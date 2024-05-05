@@ -39,7 +39,7 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time limits */
-#define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
+#define MIN_REQTIME_DELTA 0.500     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
 #define MAX_CYCLE_SEGMENTS (ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
@@ -337,28 +337,8 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
             slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock);
 
-            /* get next queue message */
-            struct move_segment_msg * nqm = list_next_entry(qm, node);
-            if (nqm)
-            {
-                double next_time = clock_to_time(&sq->ce, nqm->req_clock);
-                errorf("current: (oid = %u, req_time = %lf), next = (oid = %u, req_time = %lf)",
-                    qm->oid, slave->time_table[nseq], nqm->oid, next_time);
-            }
-            else
-            {
-                errorf("NO DATA");
-            }
-
-            double tmp_min_time = clock_to_time(&sq->ce, qm->min_clock);
-            //errorf("time track: (oid = %u, seq = %u, req_time = %lf, min_time = %lf, event_time = %lf)", slave->oid, nseq, slave->time_table[nseq], tmp_min_time, eventtime);
-
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
-
-            // struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
-            // errorf("--> step: oid = %u, next_id = %u, id = %u, free_slot = %u, seq_error = %u, overflow = %u, underflow = %u, p = %d, v = %d, t = %u",
-            //         slave->oid, status->next_id, move->header.seq_num, status->free_slot, status->seq_error, status->overflow, status->underflow, move->position, move->velocity, move->time);
 
             /* increase master tx index */
             slave->master_window++;
@@ -437,6 +417,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
              * min clock, i.e. the first message in the ordered upcoming queue is still too far
              * in the future, skip the entire queue and move to next command queue.
              */
+            sq->next_time = clock_to_time(&sq->ce, qm->req_clock);
             break;
         }
         /* remove message from upcoming queue */
@@ -779,7 +760,8 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     if (cw->signal)
                     {
-                        errorf("--> stop move: (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
+                        errorf("--> stop move: (oid = %u, event_time = %lf, slave_window = %u, next_time = %lf)",
+                                slave->oid, eventtime, slave->slave_window, sq->next_time);
                         
                         cw->signal = 0;
                     }
@@ -794,9 +776,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
 
                         if (delta_time < master->sync0_ct)
                         {
-                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
+                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window);
+                                slave->oid, slave->slave_window, sq->next_time);
 
                             cw->signal = 1;
                         }

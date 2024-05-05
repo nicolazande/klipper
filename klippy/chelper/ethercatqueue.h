@@ -148,6 +148,7 @@ struct ethercatqueue
     /* baud and clock tracking */
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
     uint32_t last_clock; //last input event (read operation) clock time
+    double next_time;
     /* message queues */
     struct list_head ready_queue; //list of messages ready to be sent
     struct list_head upcoming_queue; //list of upcoming messages
