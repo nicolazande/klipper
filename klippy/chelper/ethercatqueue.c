@@ -788,14 +788,16 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
 
+                    move->position = slave->position_actual;
+                    move->velocity = slave->velocity_actual;
+                    move->time = master->sync0_ct;
+
                     /* update step timing table */
                     uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
                     slave->time_table[nseq] += master->sync0_ct;
 
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
-
-                    move->time = master->sync0_ct;
                 }
             }
             else
