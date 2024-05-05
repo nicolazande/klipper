@@ -786,9 +786,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                                 slave->oid, slave->slave_window);
 
                             errorf("[");
-                            for (int k = 0; k < 32; k++)
+                            for (uint8_t k = 0; k < 32; k++)
                             {
-                                errorf("%lf  ", slave->time_table[k]);
+                                errorf("%lf  : %u", slave->time_table[k], k);
                             }
                             errorf("]");
 
