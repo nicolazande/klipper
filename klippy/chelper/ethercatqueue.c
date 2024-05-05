@@ -803,6 +803,8 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
 
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
+
+                    errorf("LLLLLLLLLLLLL");
                 }
                 cw->signal = 1;
             }
