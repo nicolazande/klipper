@@ -770,6 +770,12 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                                 slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id], slave->time_table[slave->seq_num % 32]);
                         
                         cw->signal = 0;
+                        errorf("======");
+                        for (uint8_t k = 0; k < 32; k++)
+                        {
+                            errorf("%lf", slave->time_table[k]);
+                        }
+                        errorf("======");
                     }
                 }         
                 else
