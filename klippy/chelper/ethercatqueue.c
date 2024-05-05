@@ -804,7 +804,8 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
 
-                    errorf("LLLLLLLLLLLLL");
+                    errorf("OVERSAMPLING: (oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
                 cw->signal = 1;
             }
