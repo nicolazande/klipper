@@ -770,7 +770,7 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             double delta_time = slave->time_table[last_id] - eventtime;
 
-            if (slave->slave_window <= slave->interpolation_window)
+            if (slave->slave_window < slave->interpolation_window)
             {
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
@@ -781,7 +781,7 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
                 }
                 cw->signal = 0;
             }         
-            else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
+            else if (slave->slave_window < slave->interpolation_window + BUFFER_MARGIN)
             {
                 if ((delta_time > master->sync0_ct) && (!slave->master_window))
                 {
@@ -797,6 +797,9 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
 
                     move->time = master->sync0_ct;
                 }
+            }
+            else
+            {
                 cw->signal = 1;
             }
         }
