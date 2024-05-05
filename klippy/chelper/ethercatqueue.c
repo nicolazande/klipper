@@ -765,9 +765,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     /** NOTE: this causes hard stop (remove if unwanted) */
                     if (cw->signal)
                     {
-                        errorf("--> stop move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_buffered = %lf)",
+                        errorf("--> stop move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_buffered = %lf, last_seq = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id]);
+                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id], slave->time_table[slave->seq_num % 32]);
                         
                         cw->signal = 0;
                     }
@@ -778,9 +778,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     {
                         if (delta_time < master->sync0_ct)
                         {
-                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_buffered = %lf)",
+                            errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_buffered = %lf, last_seq = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id]);
+                                slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_buffered_id], slave->time_table[slave->seq_num % 32]);
 
                             cw->signal = 1;
                         }
