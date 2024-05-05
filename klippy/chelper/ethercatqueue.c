@@ -785,13 +785,6 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
                                 slave->oid, slave->slave_window);
 
-                            errorf("[");
-                            for (uint8_t k = 0; k < 32; k++)
-                            {
-                                errorf("%lf  : %u", slave->time_table[k], k);
-                            }
-                            errorf("]");
-
                             cw->signal = 1;
                         }
                     }
