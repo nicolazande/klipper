@@ -746,6 +746,7 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
     /* get master */
     struct mastermonitor *master = &sq->masterifc;
 
+
     /* loop over domain associated drives */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
@@ -758,33 +759,36 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
         /* get slave segment buffer data */
         struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[0];
 
-        /**
-         * Check receive buffer status and perform automatic transition
-         * of enable operation command, i.e. automatic start when there
-         * are enough samples in the buffer and automatic stop when the
-         * low limit of segments in the drive budder is reached.
-         */
-        uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-        double delta_time = slave->time_table[last_id] - eventtime;
+        if (cw && move && (slave->operation_mode == COE_OPERATION_MODE_INTERPOLATION))
+        {
+            /**
+             * Check receive buffer status and perform automatic transition
+             * of enable operation command, i.e. automatic start when there
+             * are enough samples in the buffer and automatic stop when the
+             * low limit of segments in the drive budder is reached.
+             */
+            uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+            double delta_time = slave->time_table[last_id] - eventtime;
 
-        if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
-        {
-            /** NOTE: this causes hard stop (remove if unwanted) */
-            if (cw->signal)
+            if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
             {
-                errorf("--> stop move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                        last_id, delta_time,
-                        slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
-            }
-            cw->signal = 0;
-        }         
-        else
-        {
-            if ((delta_time > master->sync0_ct) && (!slave->master_window))
+                /** NOTE: this causes hard stop (remove if unwanted) */
+                if (cw->signal)
+                {
+                    errorf("--> stop move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                            last_id, delta_time,
+                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+                }
+                cw->signal = 0;
+            }         
+            else
             {
-                move->time = master->sync0_ct;
+                if ((delta_time > master->sync0_ct) && (!slave->master_window))
+                {
+                    move->time = master->sync0_ct;
+                }
+                cw->signal = 1;
             }
-            cw->signal = 1;
         }
     }
 }
