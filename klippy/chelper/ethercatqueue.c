@@ -767,15 +767,16 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     if (cw->signal)
                     {
                         errorf("--> stop move: (oid = %u, et = %lf, n = %u): p = %i, v = %i, t = %u", slave->oid, eventtime, slave->slave_window, move->position, move->velocity, move->time);
+                        
+                        cw->signal = 0;
                     }
-                    cw->signal = 0;
                 }         
                 else
                 {
                     if (!cw->signal)
                     {
                         uint8_t next_id = status->next_id % ETHERCAT_PVT_BUFFER_SIZE;
-                        uint8_t last_id = (next_id - slave->slave_window - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+                        uint8_t last_id = (next_id - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
                         double delta_time = slave->time_table[last_id] - eventtime;
 
                         if (delta_time < master->sync0_ct)
@@ -783,6 +784,13 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                             errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
                                 slave->oid, slave->slave_window);
+
+                            errorf("[");
+                            for (int k = 0; k < 32; k++)
+                            {
+                                errorf("%lf  ", slave->time_table[k]);
+                            }
+                            errorf("]");
 
                             cw->signal = 1;
                         }
