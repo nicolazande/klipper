@@ -773,7 +773,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                         errorf("======");
                         for (uint8_t k = 0; k < 32; k++)
                         {
-                            errorf("%lf", slave->time_table[k]);
+                            errorf("%lf = %u", slave->time_table[k], k);
                         }
                         errorf("======");
                     }
