@@ -338,8 +338,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock);
 
             /* get next queue message */
-            struct move_segment_msg *nqm = NULL;
-            while ((nqm = list_next_entry(qm, node)) != NULL && nqm->oid != qm->oid);
+            struct move_segment_msg * nqm = list_next_entry(qm, node);
             if (nqm)
             {
                 double next_time = clock_to_time(&sq->ce, nqm->req_clock);
