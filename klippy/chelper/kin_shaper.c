@@ -180,7 +180,7 @@ input_shaper_set_sk(struct stepper_kinematics *sk
 static void
 shaper_note_generation_time(struct input_shaper *is)
 {
-    double pre_active = 0., post_active = 0.;
+    double pre_active = 0.005, post_active = 0.005;
     if ((is->sk.active_flags & AF_X) && is->sx.num_pulses) {
         pre_active = is->sx.pulses[is->sx.num_pulses-1].t;
         post_active = -is->sx.pulses[0].t;
