@@ -786,7 +786,7 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
             }         
             else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
             {
-                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (delta_time > 0) && (!slave->master_window))
+                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (delta_time >= 0.001) && (!slave->master_window))
                 {
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
@@ -801,9 +801,6 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
 
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
-
-                    errorf("OVERSAMPLING: (oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
                 cw->signal = 1;
             }
