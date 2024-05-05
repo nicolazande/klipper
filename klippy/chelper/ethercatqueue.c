@@ -793,7 +793,7 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
 
                     move->position = slave->position_target;
                     move->velocity = slave->velocity_target;
-                    move->time = master->sync0_ct;
+                    move->time = 1000 * master->sync0_ct;
 
                     /* update step timing table */
                     uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
