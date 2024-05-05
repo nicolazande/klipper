@@ -404,6 +404,14 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* get first message in queue */
         struct move_segment_msg *qm = list_first_entry(&sq->upcoming_queue, struct move_segment_msg, node);
 
+        /* update slave next time */
+        slave = &master->monitor[qm->oid];
+        double next_time = clock_to_time(&sq->ce, qm->req_clock);
+        if (next_time > slave->next_time)
+        {
+            slave->next_time = next_time;
+        }
+
         /**
          * Select only the pending messages that can be sent before the current estimated drive
          * reception clock. In this case qm->min_clock represents the earliest time when the
@@ -417,7 +425,6 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
              * min clock, i.e. the first message in the ordered upcoming queue is still too far
              * in the future, skip the entire queue and move to next command queue.
              */
-            sq->next_time = clock_to_time(&sq->ce, qm->req_clock);
             break;
         }
         /* remove message from upcoming queue */
@@ -761,7 +768,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     if (cw->signal)
                     {
                         errorf("--> stop move: (oid = %u, event_time = %lf, slave_window = %u, next_time = %lf)",
-                                slave->oid, eventtime, slave->slave_window, sq->next_time);
+                                slave->oid, eventtime, slave->slave_window, slave->next_time);
                         
                         cw->signal = 0;
                     }
@@ -778,7 +785,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                         {
                             errorf("--> start move: (seq = %u, next_id = %u, last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf)",
                                 slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE, next_id, last_id, delta_time,
-                                slave->oid, slave->slave_window, sq->next_time);
+                                slave->oid, slave->slave_window, slave->next_time);
 
                             cw->signal = 1;
                         }
