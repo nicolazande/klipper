@@ -806,7 +806,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 {
                     cw->signal = 1;
                     errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                            last_id, delta_time,
+                            last_id, restart_time,
                             slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
             }
