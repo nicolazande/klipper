@@ -140,6 +140,8 @@ class Move:
             self.cruise_v -= 2*(move_d - self.move_d)/move_t
         else:
             logging.info("null move removed")
+        if self.cruise_t <= 0:
+            logging.info("no cruise time = %s" % self.cruise_t)
 
 
 #NOTE: reduced to have smaller queues (needs to match ethercatqueue.c:MIN_REQTIME_DELTA)
