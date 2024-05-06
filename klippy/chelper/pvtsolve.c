@@ -21,7 +21,7 @@
 /****************************************************************
  * Defines
  ****************************************************************/
-#define MIN_MOVE_TIME (0.001)
+#define MIN_MOVE_TIME (0.00)
 
 
 /****************************************************************
@@ -73,7 +73,7 @@ gen_steps_range(struct drive_kinematics *sk, struct move *m, double abs_start, d
     };
 
     /* run simulation */
-    while (start + MIN_MOVE_TIME <= end)
+    while (start + MIN_MOVE_TIME < end)
     {
         /**
          * Smooth stop check. NOTE: the delta time needs to be a positive
