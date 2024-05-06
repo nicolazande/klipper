@@ -141,7 +141,7 @@ class Move:
         else:
             logging.info("null move removed")
         if self.cruise_t <= 0:
-            logging.info("no cruise time = %s" % self.cruise_t)
+            logging.info("no cruise time = (acc_t = %s, cruise_t = %s, decel_t = %s)" % (self.accel_t, self.cruise_t, self.decel_t))
 
 
 #NOTE: reduced to have smaller queues (needs to match ethercatqueue.c:MIN_REQTIME_DELTA)
