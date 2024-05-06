@@ -784,7 +784,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 }
                 cw->signal = 0;
             }         
-            else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
+            else if (slave->slave_window > slave->interpolation_window)
             {               
                 /** restart move (TODO: control shift time) */
                 if ((restart_time < master->sync0_ct) && (!cw->signal))
