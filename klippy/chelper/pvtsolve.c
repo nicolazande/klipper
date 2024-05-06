@@ -72,7 +72,7 @@ gen_steps_range(struct drive_kinematics *sk, struct move *m, double abs_start, d
         .time = sk->last_move_time
     };
 
-    /* run simulation */
+    /* run simulation (avoid zero moves) */
     while (start + MIN_MOVE_TIME <= end)
     {
         /**

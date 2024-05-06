@@ -138,6 +138,8 @@ class Move:
         move_t = self.accel_t + 2*self.cruise_t + self.decel_t
         if move_t > 0:
             self.cruise_v -= 2*(move_d - self.move_d)/move_t
+        else:
+            logging.info("null move removed")
 
 
 #NOTE: reduced to have smaller queues (needs to match ethercatqueue.c:MIN_REQTIME_DELTA)
