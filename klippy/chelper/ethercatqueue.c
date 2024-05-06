@@ -772,7 +772,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             uint8_t current_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double delta_time = sq->next_time - eventtime;
+            double delta_time = slave->time_table[last_id] - eventtime;
             double restart_time = slave->time_table[current_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
@@ -780,20 +780,20 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
                 {
-                    cw->signal = 0;
                     errorf("--> stop move");
                 }
+                cw->signal = 0;
             }         
-            else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
+            else if (!cw->signal &&
+                    (slave->slave_window <= slave->interpolation_window) &&
+                    (restart_time < master->sync0_ct))
             {
-                if ((restart_time < master->sync0_ct) && (!cw->signal))
-                {
-                    cw->signal = 1;
+                cw->signal = 1;
 
-                    errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                            last_id, restart_time,
-                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
-                }
+                errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                        last_id, restart_time,
+                        slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+                
             }
 
             if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (!slave->master_window))
