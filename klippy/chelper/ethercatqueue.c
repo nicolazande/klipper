@@ -780,9 +780,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
                 {
-                    errorf("--> stop move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                            last_id, delta_time,
-                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+                    errorf("--> stop move");
                 }
                 cw->signal = 0;
             }         
@@ -807,6 +805,9 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 if (!cw->signal && (restart_time < master->sync0_ct))
                 {
                     cw->signal = 1;
+                    errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                            last_id, delta_time,
+                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
             }
         }
