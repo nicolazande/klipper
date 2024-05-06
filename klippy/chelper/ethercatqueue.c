@@ -50,7 +50,7 @@
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
-#define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_MARGIN (6U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
@@ -333,6 +333,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             struct coe_ip_move *move = (struct coe_ip_move *)slave->movedata[slave->master_window];
             *move = *((struct coe_ip_move *)qm->msg);
 
+            /* update setpoint */
             slave->position_target = move->position;
             slave->velocity_target = move->velocity;
 
