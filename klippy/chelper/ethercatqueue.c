@@ -86,7 +86,8 @@ static inline void process_request(struct ethercatqueue *sq, double eventtime);
 /** process ethercat frame (reset and configuration check) */
 static inline void process_frame(struct ethercatqueue *sq, double eventtime);
 
-static inline void gigibagigi(struct ethercatqueue *sq, double eventtime);
+/** control and manage interpolation buffer */
+static inline void process_buffer(struct ethercatqueue *sq, double eventtime);
 
 /** 
  * Run canopen DS402 state machine default transition.
@@ -744,11 +745,10 @@ process_frame(struct ethercatqueue *sq, double eventtime)
     }
 }
 
-static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
+static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
 {
     /* get master */
     struct mastermonitor *master = &sq->masterifc;
-
 
     /* loop over domain associated drives */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
@@ -771,9 +771,11 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
              * low limit of segments in the drive budder is reached.
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+            uint8_t current_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             double delta_time = slave->time_table[last_id] - eventtime;
+            double restart_time = slave->time_table[current_id] - eventtime;
 
-            if (slave->slave_window <= slave->interpolation_window + BUFFER_MARGIN)
+            if (slave->slave_window <= slave->interpolation_window)
             {
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
@@ -784,7 +786,7 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
                 }
                 cw->signal = 0;
             }         
-            else
+            else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
             {
                 if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (delta_time >= 0.001) && (!slave->master_window))
                 {
@@ -802,7 +804,10 @@ static inline void gigibagigi(struct ethercatqueue *sq, double eventtime)
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
                 }
-                cw->signal = 1;
+                if (!cw->signal && (restart_time < master->sync0_ct))
+                {
+                    cw->signal = 1;
+                }
             }
         }
     }
@@ -950,7 +955,8 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
              */
             ecrt_master_sync_slave_clocks(master->master);
 
-            gigibagigi(sq, eventtime);
+            /** interpolation buffer management */
+            process_buffer(sq, eventtime);
 
             /* loop over domains */
             for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
