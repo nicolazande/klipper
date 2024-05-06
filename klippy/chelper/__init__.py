@@ -48,7 +48,7 @@ defs_pvtcompress = """
     uint32_t pvtcompress_get_oid(struct pvtcompress *sc);
     void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time);
     int pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock);
-    int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, uint32_t last_position);
+    int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t last_position);
     double pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock);
     int pvtcompress_extract_old(struct pvtcompress *sc,
                                 struct pull_history_pvt_steps *p,

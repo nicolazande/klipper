@@ -235,7 +235,7 @@ pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock)
 
 /** set last_position in the pvtcompress object */
 int __visible
-pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, uint32_t last_position)
+pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t last_position)
 {
     /* update last position */
     sc->last_position = last_position;
