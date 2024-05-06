@@ -738,7 +738,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     move->command.type = COE_SEGMENT_MODE_CMD;
                     /* notify buffer problem */
                     errorf("ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
-                            slave->oid, tatus->seq_error, status->overflow,  status->underflow);
+                            slave->oid, status->seq_error, status->overflow,  status->underflow);
                 }
             }
         }
