@@ -126,9 +126,9 @@ class Move:
         self.cruise_v = cruise_v = math.sqrt(cruise_v2)
         self.end_v = end_v = math.sqrt(end_v2)
         # determine time spent in each portion of move
-        self.accel_t = round(accel_d / ((start_v + cruise_v) * 0.5), TIME_DECIMALS)
-        self.cruise_t = round(cruise_d / cruise_v, TIME_DECIMALS)
-        self.decel_t = round(decel_d / ((end_v + cruise_v) * 0.5), TIME_DECIMALS)        
+        self.accel_t = max(round(accel_d / ((start_v + cruise_v) * 0.5), TIME_DECIMALS), 0.)
+        self.cruise_t = max(round(cruise_d / cruise_v, TIME_DECIMALS), 0.)
+        self.decel_t = max(round(decel_d / ((end_v + cruise_v) * 0.5), TIME_DECIMALS), 0.)
         # recalculate distance covered after time approximation.
         accel_d = (start_v + cruise_v) * 0.5 * self.accel_t
         cruise_d = cruise_v * self.cruise_t

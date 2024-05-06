@@ -50,7 +50,7 @@
 #define MESSAGE_CHECK_FORMAT (0U)  //check internal protocol message format
 #define CHECK_MASTER_STATE (0U)    //check ethercat master state
 /* local parameters */
-#define BUFFER_MARGIN (6U)         //buffer margin (avoid overflow risk) 
+#define BUFFER_MARGIN (3U)         //buffer margin (avoid overflow risk) 
 
 
 /****************************************************************
