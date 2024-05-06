@@ -784,16 +784,15 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 }
                 cw->signal = 0;
             }         
-            else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
+            else
             {
-                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (delta_time >= 0.001) && (!slave->master_window))
+                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (!slave->master_window))
                 {
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
-                    double time_offset = delta_time > master->sync0_ct ? master->sync0_ct : delta_time;
                     move->position = slave->position_target;
                     move->velocity = slave->velocity_target;
-                    move->time = 1000 * time_offset;
+                    move->time = 1000 * master->sync0_ct;
 
                     /* update step timing table */
                     uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
@@ -805,6 +804,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 if (!cw->signal && (restart_time < master->sync0_ct))
                 {
                     cw->signal = 1;
+                    
                     errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
                             last_id, restart_time,
                             slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);

@@ -8,7 +8,7 @@
 			"product_code": 4176,
 			"assign_activate" : 0,
 			"rx_size" : 32,
-			"interpolation_window" : 3,
+			"interpolation_window" : 4,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -159,7 +159,7 @@
 			"product_code": 4176,
 			"assign_activate" : 0,
 			"rx_size" : 32,
-			"interpolation_window" : 3,
+			"interpolation_window" : 4,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -305,11 +305,11 @@
     ],
 	"master" :
 	{
-		"sync0_ct" : 0.002,
-		"sync0_st" : 0.0005,
+		"sync0_ct" : 0.005,
+		"sync0_st" : 0.0015,
 		"sync1_ct" : 0,
 		"sync1_st" : 0,
-		"frame_time" : 0.0001,
+		"frame_time" : 0.001,
 		"domains" : [
 			{
 				"type" : "base",
