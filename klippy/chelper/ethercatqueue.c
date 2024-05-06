@@ -858,6 +858,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     {
         errorf("DELAY = %lf", ptr);
     }
+    old_eventtime = eventtime;
 
     /* loop over domains */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
