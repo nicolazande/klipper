@@ -79,8 +79,6 @@ class IdleTimeout:
         print_time, est_print_time, lookahead_empty = self.toolhead.check_busy(
             eventtime)
         buffer_time = min(2., print_time - est_print_time)
-        logging.info("TIMEOUT = %s --> (pt = %s, ept = %s, le = %s)" %
-                     (buffer_time, print_time, est_print_time, lookahead_empty))
         if not lookahead_empty:
             # Toolhead is busy
             return eventtime + READY_TIMEOUT + max(0., buffer_time)

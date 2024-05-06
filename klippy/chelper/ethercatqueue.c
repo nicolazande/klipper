@@ -795,7 +795,11 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                             last_id, restart_time,
                             slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
-                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (!slave->master_window))
+            }
+
+            if (cw->signal && !slave->master_window)
+            {
+                if (slave->slave_window + BUFFER_MARGIN < slave->rx_size)
                 {
                     /* clamp margin time */
                     buffer_time = (buffer_time <= 0. || buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
