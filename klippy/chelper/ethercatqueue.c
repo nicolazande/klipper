@@ -737,8 +737,8 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
                     /* notify buffer problem */
-                    errorf("Error: sequence = %u, overflow = %u, underflow = %u",
-                            status->seq_error, status->overflow,  status->underflow);
+                    errorf("ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
+                            slave->oid, tatus->seq_error, status->overflow,  status->underflow);
                 }
             }
         }
@@ -852,13 +852,16 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     /* receive process data */
     ecrt_master_receive(master->master);
 
-    static double old_eventtime;
-    double ptr = eventtime - old_eventtime;
-    if (ptr > 1.05 * master->sync0_ct)
     {
-        errorf("DELAY = %lf", ptr);
+        /** TODO: remove debug scope */
+        static double old_eventtime;
+        double ptr = eventtime - old_eventtime;
+        if (ptr > 1.01 * master->sync0_ct)
+        {
+            errorf("DELAY = %lf", ptr);
+        }
+        old_eventtime = eventtime;
     }
-    old_eventtime = eventtime;
 
     /* loop over domains */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
