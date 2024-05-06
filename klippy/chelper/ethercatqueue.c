@@ -771,22 +771,21 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              * low limit of segments in the drive budder is reached.
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            uint8_t first_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double buffer_time = sq->next_time - eventtime;
-            double restart_time = slave->time_table[first_id] - eventtime;
+            uint8_t current_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
+            double delta_time = sq->next_time - eventtime;
+            double restart_time = slave->time_table[current_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
             {
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
                 {
+                    cw->signal = 0;
                     errorf("--> stop move");
                 }
-                cw->signal = 0;
             }         
             else if (slave->slave_window > slave->interpolation_window + BUFFER_MARGIN)
-            {               
-                /** restart move (TODO: control shift time) */
+            {
                 if ((restart_time < master->sync0_ct) && (!cw->signal))
                 {
                     cw->signal = 1;
@@ -799,18 +798,15 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
 
             if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (!slave->master_window))
             {
-                /* clamp margin time */
-                //buffer_time = (buffer_time <= 0. || buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
-                buffer_time = master->sync0_ct;
                 /* update step sequence number (avoid overflow) */
                 move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
                 move->position = slave->position_target;
                 move->velocity = slave->velocity_target;
-                move->time = 1000 * buffer_time;
+                move->time = 1000 * master->sync0_ct;
 
                 /* update step timing table */
                 uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-                slave->time_table[nseq] += buffer_time;
+                slave->time_table[nseq] += master->sync0_ct;
 
                 /* update step sequence number (avoid overflow) */
                 slave->seq_num++;
