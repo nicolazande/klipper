@@ -854,7 +854,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     static double old_eventtime;
     double ptr = eventtime - old_eventtime;
-    if (ptr > 0.1 * master->sync0_ct)
+    if (ptr > 1.05 * master->sync0_ct)
     {
         errorf("DELAY = %lf", ptr);
     }
