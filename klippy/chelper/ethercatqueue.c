@@ -791,9 +791,9 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 {
                     cw->signal = 1;
 
-                    errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                            last_id, restart_time,
-                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+                    // errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                    //         last_id, restart_time,
+                    //         slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
             }
 
@@ -851,6 +851,13 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
     
     /* receive process data */
     ecrt_master_receive(master->master);
+
+    static double old_eventtime;
+    double ptr = eventtime - old_eventtime;
+    if (ptr > 0.1 * master->sync0_ct)
+    {
+        errorf("DELAY = %lf", ptr);
+    }
 
     /* loop over domains */
     for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
