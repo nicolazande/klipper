@@ -795,24 +795,23 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                             last_id, restart_time,
                             slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
-            }
+                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (!slave->master_window))
+                {
+                    /* clamp margin time */
+                    buffer_time = (buffer_time <= 0. || buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
+                    /* update step sequence number (avoid overflow) */
+                    move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
+                    move->position = slave->position_target;
+                    move->velocity = slave->velocity_target;
+                    move->time = 1000 * buffer_time;
 
-            if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (!slave->master_window))
-            {
-                /* clamp margin time */
-                buffer_time = (buffer_time <= 0. || buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
-                /* update step sequence number (avoid overflow) */
-                move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
-                move->position = slave->position_target;
-                move->velocity = slave->velocity_target;
-                move->time = 1000 * buffer_time;
+                    /* update step timing table */
+                    uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
+                    slave->time_table[nseq] += buffer_time;
 
-                /* update step timing table */
-                uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-                slave->time_table[nseq] += buffer_time;
-
-                /* update step sequence number (avoid overflow) */
-                slave->seq_num++;
+                    /* update step sequence number (avoid overflow) */
+                    slave->seq_num++;
+                }
             }
         }
     }
