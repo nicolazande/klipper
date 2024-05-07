@@ -773,7 +773,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             uint8_t first_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double buffer_time = sq->next_time - eventtime;
+            double buffer_time = sq->next_time - slave->time_table[last_id]; //sq->next_time - eventtime;
             double restart_time = slave->time_table[first_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
@@ -785,17 +785,15 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 }
                 cw->signal = 0;
             }         
-            else
-            {               
-                /** restart move (TODO: control shift time) */
-                if ((restart_time < master->sync0_ct) && (!cw->signal))
+            else if (restart_time < 2*master->sync0_ct)
+            {
+                if (!cw->signal)
                 {
-                    cw->signal = 1;
-
-                    // errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
-                    //         last_id, restart_time,
-                    //         slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
+                    errorf("--> start move: (last_id = %u, delta_time = %lf, oid = %u, buffer_len = %u, next_time = %lf, last_sequence = %lf)",
+                            last_id, restart_time,
+                            slave->oid, slave->slave_window, sq->next_time, slave->time_table[last_id]);
                 }
+                cw->signal = 1;
             }
 
             if (cw->signal && !slave->master_window)
