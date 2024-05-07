@@ -785,7 +785,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 }
                 cw->signal = 0;
             }         
-            else if (restart_time < 2*master->sync0_ct)
+            else if (restart_time < master->sync0_ct)
             {
                 if (!cw->signal)
                 {
