@@ -960,6 +960,9 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
          */
         if ((waketime != PR_NOW) || (master->full_counter))
         {
+            /** interpolation buffer management */
+            process_buffer(sq, eventtime);
+            
             /* update sync clock (compensate for read and process jitter) */
             sync_clock = TIMES2NS(get_monotonic());
 
@@ -975,9 +978,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
              * synchronized with the reference clock (first DC capable slave).
              */
             ecrt_master_sync_slave_clocks(master->master);
-
-            /** interpolation buffer management */
-            process_buffer(sq, eventtime);
 
             /* loop over domains */
             for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
