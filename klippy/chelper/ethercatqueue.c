@@ -810,7 +810,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                     move->time = (uint8_t)(1000 * buffer_time);
 
                     /* update step timing table */
-                    uint8_t next_id = (last_id + 1) % ETHERCAT_PVT_BUFFER_SIZE;
+                    uint8_t next_id = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
                     slave->time_table[next_id] = slave->time_table[last_id] + buffer_time;
 
                     /* update step sequence number (avoid overflow) */

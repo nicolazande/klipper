@@ -62,7 +62,7 @@ struct move_segment_msg *emsg_alloc(struct move_msgpool* pool, uint8_t slot)
          */
         move = malloc(sizeof(*move));
         memset(move, 0, sizeof(*move));
-        //errorf("error: dynamic alloc = %d", pool->alloc_idx[slot]);
+        errorf("error: dynamic alloc = %d", pool->alloc_idx[slot]);
     }
     else
     {
@@ -105,7 +105,7 @@ void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg, uint8_t 
              *       times are not deterministic.
              */
             free(msg);
-            //errorf("error: dynamic free = %d", pool->free_idx[slot]);
+            errorf("error: dynamic free = %d", pool->free_idx[slot]);
         }
     }
     else
