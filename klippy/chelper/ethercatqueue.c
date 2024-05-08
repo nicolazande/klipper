@@ -342,7 +342,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
 
             /* update step timing table */
             uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-            slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock) + 0.001*move->time;
+            slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock);
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
