@@ -776,7 +776,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             uint8_t first_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double buffer_time = sq->next_time - (slave->time_table[last_id] + slave->last_move_duration); //sq->next_time - eventtime;
+            double buffer_time = sq->next_time - (slave->time_table[last_id]); //sq->next_time - eventtime;
             double restart_time = slave->time_table[first_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
