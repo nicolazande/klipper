@@ -342,7 +342,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
 
             /* update step timing table */
             uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-            slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock);
+            slave->time_table[nseq] = clock_to_time(&sq->ce, qm->req_clock) + 0.001*move->time;
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
@@ -798,20 +798,20 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
 
             if (cw->signal && !slave->master_window)
             {
-                if (slave->slave_window + BUFFER_MARGIN < slave->rx_size)
+                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (buffer_time > 0))
                 {
                     /* clamp buffer time */
-                    buffer_time = (buffer_time <= 0. || buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
+                    buffer_time = (buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
                     
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
                     move->position = slave->position_target;
                     move->velocity = slave->velocity_target;
-                    move->time = 1000 * buffer_time;
+                    move->time = (uint8_t)(1000 * buffer_time);
 
                     /* update step timing table */
-                    uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-                    slave->time_table[nseq] += buffer_time;
+                    uint8_t next_id = (last_id + 1) % ETHERCAT_PVT_BUFFER_SIZE;
+                    slave->time_table[next_id] = slave->time_table[last_id] + buffer_time;
 
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
