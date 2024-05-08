@@ -244,7 +244,7 @@ pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t la
     struct pvthistory *hs = malloc(sizeof(*hs));
     memset(hs, 0, sizeof(*hs));
     hs->first_clock = hs->last_clock = clock;
-    hs->start_position = sc->last_position
+    hs->start_position = sc->last_position;
     list_add_head(&hs->node, &sc->history_list);
     return 0;
 }
