@@ -316,6 +316,7 @@ class PVT_drive:
         '''
         Query mcu position.
         '''
+        logging.info("GGGGGGGGGGGGGGGGGGG")
         if self._mcu.is_fileoutput():
             return
         # send request
