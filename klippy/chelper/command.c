@@ -501,9 +501,6 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-
-    errorf("cp_f_stepper_get_position = %u", oid);
-
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
     {
