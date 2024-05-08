@@ -326,9 +326,7 @@ class PVT_drive:
         clock = self._mcu.print_time_to_clock(print_time)
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
-        ret = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
-        if ret:
-            raise error("Internal error in pvtcompress")
+        last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
         self._set_mcu_position(last_pos)
         '''
         Send drive synch event for angle and extruder module.

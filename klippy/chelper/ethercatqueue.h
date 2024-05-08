@@ -68,7 +68,6 @@ struct slavemonitor
     /* etherlab master */
     ec_slave_config_t *slave;      //ethercat slave
     /* objects */
-    uint8_t active;
     uint8_t *off_slave_window;     //offset for slave window in the domain.
     uint16_t slave_window;          //number of commands currently in drive buffer (local copy).
     uint8_t *off_control_word;     //control word image offset

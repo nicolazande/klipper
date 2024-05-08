@@ -234,7 +234,7 @@ pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock)
 }
 
 /** set last_position in the pvtcompress object */
-int __visible
+double __visible
 pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t last_position)
 {
     /* update last position */
@@ -247,7 +247,7 @@ pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t la
     hs->first_clock = hs->last_clock = clock;
     hs->start_position = sc->last_position;
     list_add_head(&hs->node, &sc->history_list);
-    return 0;
+    return sc->last_position;
 }
 
 /** search history of moves to find a past position at a given clock */
