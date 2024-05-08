@@ -614,6 +614,9 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
                 ecrt_sdo_request_write(slave->clear_buffer_sdo);
             }
         }
+
+        /* get actual position */
+        slave->get_position_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_GET_POSITION(i));
     }
 }
 
@@ -861,7 +864,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         double ptr = eventtime - old_eventtime;
         if (ptr > 1.001 * master->sync0_ct)
         {
-            errorf("DELAY = %lf", ptr);
+            errorf("DELAY = %lf (%lf percent)", ptr, 100*(ptr - master->sync0_ct) / master->sync0_ct);
         }
         old_eventtime = eventtime;
     }

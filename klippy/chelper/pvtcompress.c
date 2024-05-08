@@ -238,13 +238,13 @@ int __visible
 pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t last_position)
 {
     /* update last position */
-    sc->last_position = last_position;
+    sc->last_position = (double)last_position / sc->position_scaling;
 
     /* add a marker to the history list */
     struct pvthistory *hs = malloc(sizeof(*hs));
     memset(hs, 0, sizeof(*hs));
     hs->first_clock = hs->last_clock = clock;
-    hs->start_position = (double)last_position / sc->position_scaling;
+    hs->start_position = sc->last_position
     list_add_head(&hs->node, &sc->history_list);
     return 0;
 }

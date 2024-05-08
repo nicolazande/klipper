@@ -78,6 +78,7 @@ enum
 #define COE_SDO_INTERPOLATION_MODE(axis) 0x60C0 + axis*0x800, 0, 2
 #define COE_SDO_HOMING_METHOD(axis) 0x6098 + axis*0x800, 0, 1
 #define COE_SDO_CLEAR_BUFFER(axis) 0x60C4 + axis*0x800, 6, 1
+#define COE_SDO_GET_POSITION(axis) 0x6064 + axis*0x800, 0, 4
 
 
 /****************************************************************
