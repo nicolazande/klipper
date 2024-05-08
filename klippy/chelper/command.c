@@ -506,17 +506,16 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
     {
         /* get slave */
         struct slavemonitor *slave = &sq->masterifc.monitor[oid];
+        /* control word */
+        struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
+        /* status word */
+        struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
+
+        PRINT_CONTROL_WORD(cw);
+        PRINT_STATUS_WORD(sw);
+
         /* get actual position */
         int32_t position = slave->position_actual;
-
-        uint8_t *data = ecrt_sdo_request_data(slave->get_position_sdo);
-        if (data)
-        {
-            
-            ecrt_sdo_request_read(slave->get_position_sdo);
-            position = EC_READ_S32(data);
-        }
-
         /* get response command parser */
         struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
         /* create response  */

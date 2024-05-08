@@ -614,9 +614,6 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
                 ecrt_sdo_request_write(slave->clear_buffer_sdo);
             }
         }
-
-        /* get actual position */
-        slave->get_position_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_GET_POSITION(i));
     }
 }
 
