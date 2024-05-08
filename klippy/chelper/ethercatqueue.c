@@ -889,6 +889,8 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         /* get slave */
         struct slavemonitor *slave = &master->monitor[i];
 
+        slave->active = 0xFF;
+
         /* update slave window */
         if (slave->off_slave_window)
         {
@@ -1229,6 +1231,8 @@ ethercatqueue_init(struct ethercatqueue *sq)
     {
         /* get slave monitor */
         struct slavemonitor *slave = &master->monitor[i];
+
+        slave->active = 0;
 
         /* create slave configuration */
         ec_slave_config_t *sc = ecrt_master_slave_config(master->master,

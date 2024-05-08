@@ -511,8 +511,7 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
 
-        PRINT_CONTROL_WORD(cw);
-        PRINT_STATUS_WORD(sw);
+        errorf("SLAVE STATUS = %u", slave->active);
 
         /* get actual position */
         int32_t position = slave->position_actual;
