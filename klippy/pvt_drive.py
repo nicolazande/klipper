@@ -300,7 +300,6 @@ class PVT_drive:
         '''
         Note homing end.
         '''
-        logging.info("HHHHHHHHHHHHHHHHHHH")
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ret = ffi_lib.pvtcompress_reset(self._stepqueue, 0)
@@ -317,7 +316,6 @@ class PVT_drive:
         '''
         Query mcu position.
         '''
-        logging.info("GGGGGGGGGGGGGGGGGGG")
         if self._mcu.is_fileoutput():
             return
         # send request
