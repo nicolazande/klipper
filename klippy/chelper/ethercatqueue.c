@@ -804,7 +804,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (buffer_time >= 0.001))
                 {
                     /* clamp buffer time */
-                    buffer_time = (buffer_time > master->sync0_ct) ? master->sync0_ct : buffer_time;
+                    buffer_time = (buffer_time > 2*master->sync0_ct) ? master->sync0_ct : buffer_time;
                     
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
