@@ -39,7 +39,7 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time limits */
-#define MIN_REQTIME_DELTA 0.500     //min delta time (in advance) to send a command
+#define MIN_REQTIME_DELTA 0.100     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
 #define MAX_CYCLE_SEGMENTS (ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
@@ -776,7 +776,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             uint8_t first_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double buffer_time = sq->next_time - (slave->time_table[last_id]); //sq->next_time - eventtime;
+            double buffer_time = sq->next_time - (slave->time_table[last_id] + slave->last_move_duration); //sq->next_time - eventtime;
             double restart_time = slave->time_table[first_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
