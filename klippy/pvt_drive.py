@@ -300,6 +300,7 @@ class PVT_drive:
         '''
         Note homing end.
         '''
+        logging.info("HHHHHHHHHHHHHHHHHHH")
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ret = ffi_lib.pvtcompress_reset(self._stepqueue, 0)
