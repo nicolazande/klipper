@@ -39,7 +39,7 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time limits */
-#define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
+#define MIN_REQTIME_DELTA 1.000     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
 #define MAX_CYCLE_SEGMENTS (ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
