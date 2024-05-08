@@ -509,14 +509,13 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
         /* get actual position */
         int32_t position = slave->position_actual;
 
-        // int32_t *data = ecrt_sdo_request_data(slave->get_position_sdo);
-        // if (data)
-        // {
+        int32_t *data = ecrt_sdo_request_data(slave->get_position_sdo);
+        if (data)
+        {
             
-        //     ecrt_sdo_request_write(slave->get_position_sdo);
-        //     EC_READ_S32(data);
-        //     position = *data;
-        // }
+            ecrt_sdo_request_read(slave->get_position_sdo);
+            position = EC_READ_S32(data);
+        }
 
         /* get response command parser */
         struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
