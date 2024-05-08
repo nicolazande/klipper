@@ -266,7 +266,6 @@ class MCU_trsync:
         '''
         Stop synchronization.
         '''
-        logging.info("LUCA LUCA TANTA LEGNA")
         self._mcu.register_response(None, "trsync_state", self._oid)
         self._trigger_completion = None
         if self._mcu.is_fileoutput():

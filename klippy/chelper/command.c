@@ -509,7 +509,7 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
         /* get actual position */
         int32_t position = slave->position_actual;
 
-        int32_t *data = ecrt_sdo_request_data(slave->get_position_sdo);
+        uint8_t *data = ecrt_sdo_request_data(slave->get_position_sdo);
         if (data)
         {
             
