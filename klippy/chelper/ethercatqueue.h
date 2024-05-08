@@ -110,6 +110,8 @@ struct slavemonitor
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
     uint8_t *movedata[ETHERCAT_DOMAINS]; //ip segment move offset (support for multiple domains)
     double time_table[ETHERCAT_PVT_BUFFER_SIZE]; //max ethercat slave buffer size
+    double last_move_time;
+    double last_move_duration;
 };
 
 /* ethecat master wrapper */
