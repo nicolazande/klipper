@@ -239,6 +239,7 @@ pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, int32_t la
 {
     /* update last position */
     sc->last_position = (double)last_position / sc->position_scaling;
+    errorf("--> pos = %i / pos = %lf / position scaling = %lf", last_position, sc->last_position, sc->position_scaling);
 
     /* add a marker to the history list */
     struct pvthistory *hs = malloc(sizeof(*hs));
