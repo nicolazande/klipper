@@ -501,6 +501,9 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
     /* get drive oid and target buffer */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
+
+    errorf("cp_f_stepper_get_position = %u", oid);
+
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
     {
@@ -589,8 +592,6 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
     /* get endstop oid (corresponds to drive oid) */
     uint8_t oid = args[0];
     uint8_t *buf = (uint8_t *)out;
-
-    errorf("cp_f_endstop_query_state: %u", oid);
     
     /* check oid */
     if (oid < ETHERCAT_DRIVES)
@@ -615,8 +616,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
 
             /* check if homing finished */
             if (finished && slave->off_operation_mode)
-            {
-                errorf("homed: %u", oid);
+            {                
                 /** NOTE: uncomment to use sdo */
                 // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
                 // if (data)
