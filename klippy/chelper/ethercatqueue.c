@@ -679,6 +679,11 @@ static inline void coe_operational_setup(struct ethercatqueue *sq)
             offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_VELOCITY_ACTUAL;
             offset = dm->offsets[offset_idx];
             slave->off_velocity_actual = (uint8_t *)(dm->domain_pd + offset);
+        
+            /* setup slave velocity actual offset */
+            offset_idx = j * COE_OFFSET_MAX + COE_OFFSET_BUFFER_CLEAR;
+            offset = dm->offsets[offset_idx];
+            slave->off_clear_buffer = (uint8_t *)(dm->domain_pd + offset);
         }
     }
 }

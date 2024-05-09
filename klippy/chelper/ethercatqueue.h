@@ -84,6 +84,8 @@ struct slavemonitor
     int32_t velocity_target;       //target velocity
     uint8_t *off_buffer_status;    //segment buffer status
     uint32_t buffer_status;        //local copy of segment buffer status
+    uint8_t *off_clear_buffer;
+    uint8_t clear_buffer;
     /* sdo */
     ec_sdo_request_t *interpolation_mode_sdo; //sdo for setting interpolation mode
     ec_sdo_request_t *operation_mode_sdo; //sdo for setting operation mode
