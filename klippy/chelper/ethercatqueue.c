@@ -339,16 +339,15 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             /* update setpoint */
             slave->position_target = move->position;
             slave->velocity_target = move->velocity;
+            slave->time_target = (double)(0.001 * move->time);
 
             /* update step sequence number (avoid overflow) */
-            move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
+            move->header.seq_num = slave->seq_num % ETHERCAT_SEQ_MASK;
 
             /* update step timing table */
             uint8_t nseq = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
             double req_time = clock_to_time(&sq->ce, qm->req_clock);
             slave->time_table[nseq] = req_time;
-            slave->last_move_time = req_time;
-            slave->last_move_duration = (double)(0.001 * move->time);
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
@@ -386,30 +385,14 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
 static inline double
 check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
 {
+    /* get master and slave */
+    struct mastermonitor *master = &sq->masterifc;
+    struct slavemonitor *slave;
+
     /* data */
-    struct mastermonitor *master = &sq->masterifc; //ethercat master interface
-    struct slavemonitor *slave; //ethercat slave interface
     uint64_t ack_clock = clock_from_time(&sq->ce, eventtime + master->sync0_st); //current transmission estimated drive reception clock
     uint64_t min_ready_clock = MAX_CLOCK; //min required clock among pending messages
     uint64_t reqclock_delta = (master->sync0_ct + MIN_REQTIME_DELTA) * sq->ce.est_freq; //time margin
-
-    /* 
-     * Check for free buffer slots on slave side only. There is no need to check tx side
-     * since when this function is called it is guaranteed to have all pdo slots free.
-     * Stop as soon as one drive receive buffer is full, even if the others are not, this
-     * allows to keep better drive synchronization (common steps in the same frame).
-     */
-    // for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    // {
-    //     /* get slave */
-    //     slave = &master->monitor[i];
-
-    //     if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
-    //     {
-    //         /* stop and send frame (drive buffer is full) */
-    //         return PR_NEVER;
-    //     }
-    // }
 
     /* move messages from the upcoming queue to the ready queue */
     while (!list_empty(&sq->upcoming_queue))
@@ -430,7 +413,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
              * min clock, i.e. the first message in the ordered upcoming queue is still too far
              * in the future, skip the entire queue and move to next command queue.
              */
-            sq->next_time = clock_to_time(&sq->ce, qm->req_clock);
+            sq->upcoming_time = clock_to_time(&sq->ce, qm->req_clock);
             break;
         }
         /* remove message from upcoming queue */
@@ -544,11 +527,11 @@ coe_state_machine(struct slavemonitor *slave)
         else
         {
             /* check quick stop */
-            // if (!sw->quick_stop)
-            // {
-            //     /* disable switch */
-            //     *cw = (struct coe_control_word){};
-            // }
+            if (!sw->quick_stop)
+            {
+                /* disable switch */
+                *cw = (struct coe_control_word){};
+            }
         }
 
         /* update local copy of status word */
@@ -589,7 +572,7 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
             uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
             if (data)
             {
-                EC_WRITE_S16(data, COE_SEGMENT_LINEAR_INTERPOLATION_VT);
+                EC_WRITE_S16(data, COE_SEGMENT_CUBIC_INTERPOLATION);
                 ecrt_sdo_request_write(slave->interpolation_mode_sdo);
             }
         }
@@ -737,14 +720,14 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 /* check error */
                 if (status->seq_error || status->overflow || status->underflow)
                 {
-                    /* clear error and update slave sequence */
+                    /* clear error */
                     move->command.code = COE_CMD_CLEAR_ERRORS;
-                    slave->seq_num = status->next_id;
-                    /* common fields */
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
+                    /* update slave sequence */
+                    slave->seq_num = status->next_id;                    
                     /* notify buffer problem */
-                    errorf("ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
+                    errorf("Ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
                             slave->oid, status->seq_error, status->overflow,  status->underflow);
                 }
             }
@@ -779,7 +762,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             uint8_t first_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double stop_delta = sq->next_time - (slave->time_table[last_id] + slave->last_move_duration);
+            double stop_delta = sq->upcoming_time - (slave->time_table[last_id] + slave->time_target);
             double start_delta = slave->time_table[first_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
@@ -787,9 +770,9 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
                 {
-                    errorf("--> stop move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, next_time = %lf, last_step_duration = %lf)",
+                    errorf("--> stop move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, upcoming_time = %lf, time_target = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_delta, stop_delta, sq->next_time, slave->last_move_duration);
+                            start_delta, stop_delta, sq->upcoming_time, slave->time_target);
                 }
                 cw->signal = 0;
             }         
@@ -797,9 +780,9 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
             {
                 if (!cw->signal)
                 {
-                    errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, next_time = %lf, last_step_duration = %lf)",
+                    errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, upcoming_time = %lf, time_target = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_delta, stop_delta, sq->next_time, slave->last_move_duration);
+                            start_delta, stop_delta, sq->upcoming_time, slave->time_target);
                 }
                 cw->signal = 1;
             }
@@ -815,7 +798,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                     }
                     
                     /* update step sequence number (avoid overflow) */
-                    move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
+                    move->header.seq_num = slave->seq_num % ETHERCAT_SEQ_MASK; //step sequence number
                     move->position = slave->position_target;
                     move->velocity = slave->velocity_target;
                     move->time = (uint8_t)(1000 * stop_delta);

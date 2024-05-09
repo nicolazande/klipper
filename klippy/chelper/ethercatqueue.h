@@ -33,7 +33,7 @@
 #define ETHERCAT_MAX_PDOS 10 //max number of slave pdos (per slave)
 #define ETHERCAT_MAX_PDO_ENTRIES 20 //max number of pdo enries per slave
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
-#define SEQ_NUM_MASK (0b00000111)  //buffer segment sequence number mask
+#define ETHERCAT_SEQ_MASK (8U)  //buffer segment sequence number mask
 #define ETHERCAT_PVT_BUFFER_SIZE (32U)
 
 
@@ -91,6 +91,7 @@ struct slavemonitor
     ec_sdo_request_t *clear_buffer_sdo; //sdo for clearing the buffer
     /* monitoring */
     uint16_t seq_num;
+    double time_target;
     uint16_t tx_size;              //number tx pdo instances in the frame
     uint16_t rx_size;              //size of pvt buffer on slave side
     uint8_t interpolation_window;  //slave windom minimum active size for interpolation
@@ -110,8 +111,6 @@ struct slavemonitor
     ec_sync_info_t syncs[ETHERCAT_MAX_SYNCS]; //pdo sync manager configuration
     uint8_t *movedata[ETHERCAT_DOMAINS]; //ip segment move offset (support for multiple domains)
     double time_table[ETHERCAT_PVT_BUFFER_SIZE]; //max ethercat slave buffer size
-    double last_move_time;
-    double last_move_duration;
 };
 
 /* ethecat master wrapper */
@@ -152,7 +151,7 @@ struct ethercatqueue
     /* baud and clock tracking */
     struct clock_estimate ce; //mcu clock estimate (same as serialqueue)
     uint32_t last_clock; //last input event (read operation) clock time
-    double next_time;
+    double upcoming_time; //time of first non ready step
     /* message queues */
     struct list_head ready_queue; //list of messages ready to be sent
     struct list_head upcoming_queue; //list of upcoming messages
