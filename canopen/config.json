@@ -8,7 +8,7 @@
 			"product_code": 4176,
 			"assign_activate" : 0,
 			"rx_size" : 32,
-			"interpolation_window" : 3,
+			"interpolation_window" : 4,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -51,12 +51,6 @@
 							"subindex": 0,
 							"bit_length": 8
 						},
-						{
-							"name" : "buffer clear",
-							"index": 24772,
-							"subindex": 6,
-							"bit_length": 8
-						},
 						{ 
 							"name" : "ip move segment command",
 							"index": 10256,
@@ -73,12 +67,6 @@
 							"name" : "mode of operation",
 							"index": 26720,
 							"subindex": 0,
-							"bit_length": 8
-						},
-						{
-							"name" : "buffer clear",
-							"index": 26820,
-							"subindex": 6,
 							"bit_length": 8
 						}
 					]
@@ -171,7 +159,7 @@
 			"product_code": 4176,
 			"assign_activate" : 0,
 			"rx_size" : 32,
-			"interpolation_window" : 3,
+			"interpolation_window" : 4,
 			"syncs" : [
 				{
 					"index" : 0,
@@ -214,12 +202,6 @@
 							"subindex": 0,
 							"bit_length": 8
 						},
-						{
-							"name" : "buffer clear",
-							"index": 24772,
-							"subindex": 6,
-							"bit_length": 8
-						},
 						{ 
 							"name" : "ip move segment command",
 							"index": 10256,
@@ -236,12 +218,6 @@
 							"name" : "mode of operation",
 							"index": 26720,
 							"subindex": 0,
-							"bit_length": 8
-						},
-						{
-							"name" : "buffer clear",
-							"index": 26820,
-							"subindex": 6,
 							"bit_length": 8
 						}
 					]
@@ -427,17 +403,6 @@
 						"bit_position" : 0
 					},
 					{
-						"name" : "buffer clear",
-						"alias": 0,
-						"position": 3,
-						"vendor_id": 171,
-						"product_code": 4176,
-						"index": 24772,
-						"subindex": 6,
-						"offset" : 0,
-						"bit_position": 8
-					},
-					{
 						"name" : "ip move segment command",
 						"alias": 0,
 						"position": 3,
@@ -524,17 +489,6 @@
 						"subindex" : 0,
 						"offset" : 0,
 						"bit_position" : 0
-					},
-					{
-						"name" : "buffer clear",
-						"alias": 0,
-						"position": 3,
-						"vendor_id": 171,
-						"product_code": 4176,
-						"index": 26820,
-						"subindex": 6,
-						"offset" : 0,
-						"bit_position": 8
 					}
 				]
 			}
