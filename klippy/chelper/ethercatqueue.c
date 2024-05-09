@@ -572,7 +572,7 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
             uint8_t *data = ecrt_sdo_request_data(slave->interpolation_mode_sdo);
             if (data)
             {
-                EC_WRITE_S16(data, COE_SEGMENT_CUBIC_INTERPOLATION);
+                EC_WRITE_S16(data, COE_SEGMENT_LINEAR_INTERPOLATION_VT);
                 ecrt_sdo_request_write(slave->interpolation_mode_sdo);
             }
         }
