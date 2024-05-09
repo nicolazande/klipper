@@ -510,7 +510,6 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
-
         /* get actual position */
         int32_t position = slave->position_actual;
         /* get response command parser */
@@ -551,14 +550,6 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         /* set homing mode */
         if (slave->off_operation_mode)
         {
-            /** NOTE: uncomment to use sdo */
-            // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
-            // if (data)
-            // {
-            //     EC_WRITE_S8(data, COE_OPERATION_MODE_HOMING);
-            //     ecrt_sdo_request_write(slave->operation_mode_sdo);
-            // }
-
             /* change operation mode */
             *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_HOMING;
 
@@ -606,18 +597,10 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
             /* create response  */
             uint8_t msglen = command_encode_and_frame(buf, ce, oid, homing, finished, next_clock);
-
+            
             /* check if homing finished */
             if (finished && slave->off_operation_mode)
-            {                
-                /** NOTE: uncomment to use sdo */
-                // uint8_t *data = ecrt_sdo_request_data(slave->operation_mode_sdo);
-                // if (data)
-                // {
-                //     EC_WRITE_S8(data, COE_OPERATION_MODE_INTERPOLATION);
-                //     ecrt_sdo_request_write(slave->operation_mode_sdo);
-                // }
-
+            {
                 /* reset operation mode in frame */
                 *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
 

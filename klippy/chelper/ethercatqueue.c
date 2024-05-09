@@ -239,6 +239,9 @@ process_request(struct ethercatqueue *sq, double eventtime)
                 {
                     /* error (release response) */
                     message_free(response);
+                    /* move request back in the queue and retry later */
+                    list_del(&request->node);
+                    list_add_tail(&request->node, &sq->request_queue);
                     return;
                 }
             }
