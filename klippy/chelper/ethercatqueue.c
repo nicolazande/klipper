@@ -39,7 +39,7 @@
 #define EQT_ETHERCAT    'e'         //id for ethernet transport layer (osi 2)
 #define EQT_DEBUGFILE   'f'         //id for output to debug file (no commnication)
 /* time limits */
-#define MIN_REQTIME_DELTA 0.500     //min delta time (in advance) to send a command
+#define MIN_REQTIME_DELTA 0.250     //min delta time (in advance) to send a command
 #define PR_OFFSET (INT32_MAX)       //poll reactor time offset (disable poll)
 /* memory limits */
 #define MAX_CYCLE_SEGMENTS (ETHERCAT_DRIVES*ETHERCAT_DOMAINS) //max number of segments that can be buffered per cycle
@@ -779,8 +779,8 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
              */
             uint8_t last_id = (slave->seq_num - 1 + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
             uint8_t first_id = (slave->seq_num - slave->slave_window + ETHERCAT_PVT_BUFFER_SIZE) % ETHERCAT_PVT_BUFFER_SIZE;
-            double stop_time = sq->next_time - (slave->time_table[last_id] + slave->last_move_duration);
-            double start_time = slave->time_table[first_id] - eventtime;
+            double stop_delta = sq->next_time - (slave->time_table[last_id] + slave->last_move_duration);
+            double start_delta = slave->time_table[first_id] - eventtime;
 
             if (slave->slave_window <= slave->interpolation_window)
             {
@@ -789,40 +789,40 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 {
                     errorf("--> stop move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_time, stop_time);
+                            start_delta, stop_delta);
                 }
                 cw->signal = 0;
             }         
-            else if (start_time < master->sync0_ct)
+            else if (start_delta < master->sync0_ct)
             {
                 if (!cw->signal)
                 {
                     errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_time, stop_time);
+                            start_delta, stop_delta);
                 }
                 cw->signal = 1;
             }
 
             if (cw->signal && !slave->master_window)
             {
-                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (stop_time >= 0.001))
+                if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (stop_delta >= 0.001))
                 {
                     /* clamp buffer time */
-                    if (stop_time > 2*master->sync0_ct)
+                    if (stop_delta > 2*master->sync0_ct)
                     {
-                        stop_time = master->sync0_ct;
+                        stop_delta = master->sync0_ct;
                     }
                     
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num & SEQ_NUM_MASK; //step sequence number
                     move->position = slave->position_target;
                     move->velocity = slave->velocity_target;
-                    move->time = (uint8_t)(1000 * stop_time);
+                    move->time = (uint8_t)(1000 * stop_delta);
 
                     /* update step timing table */
                     uint8_t next_id = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-                    slave->time_table[next_id] = slave->time_table[last_id] + stop_time;
+                    slave->time_table[next_id] = slave->time_table[last_id] + stop_delta;
 
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;
