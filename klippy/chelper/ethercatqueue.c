@@ -799,7 +799,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 {
                     errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, next_time = %lf, last_step_duration = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_delta, stop_delta, sq->next_time, slave->last_move_duration));
+                            start_delta, stop_delta, sq->next_time, slave->last_move_duration);
                 }
                 cw->signal = 1;
             }
