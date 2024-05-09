@@ -83,6 +83,8 @@ class PVT_endstop:
             # query drive endstop state
             params = self._query_cmd.send([self._oid])
             if params["finished"]:
+                for stepper in self._steppers:
+                    stepper.note_homing_end()
                 # endstop triggered
                 break
         # get homing time
