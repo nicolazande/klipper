@@ -787,9 +787,9 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 /** NOTE: this causes hard stop (remove if unwanted) */
                 if (cw->signal)
                 {
-                    errorf("--> stop move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf)",
+                    errorf("--> stop move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, next_time = %lf, last_step_duration = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_delta, stop_delta);
+                            start_delta, stop_delta, sq->next_time, slave->last_move_duration);
                 }
                 cw->signal = 0;
             }         
@@ -797,9 +797,9 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
             {
                 if (!cw->signal)
                 {
-                    errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf)",
+                    errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, next_time = %lf, last_step_duration = %lf)",
                             slave->oid, first_id, last_id, slave->slave_window,
-                            start_delta, stop_delta);
+                            start_delta, stop_delta, sq->next_time, slave->last_move_duration));
                 }
                 cw->signal = 1;
             }
