@@ -435,7 +435,7 @@
 						"index": 24772,
 						"subindex": 6,
 						"offset" : 0,
-						"bit_length": 8
+						"bit_position": 8
 					},
 					{
 						"name" : "ip move segment command",
@@ -534,7 +534,7 @@
 						"index": 26820,
 						"subindex": 6,
 						"offset" : 0,
-						"bit_length": 8
+						"bit_position": 8
 					}
 				]
 			}
