@@ -323,14 +323,14 @@ class PVT_drive:
             return
         # send request
         params = self._get_position_cmd.send([self._oid])
-        last_pos = self.get_commanded_position() #params['pos']
+        last_pos = params['pos']
         # get time of when the command was received by the drive
         print_time = self._mcu.estimated_print_time(params['#receive_time'])
         clock = self._mcu.print_time_to_clock(print_time)
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
-        self._set_mcu_position(last_pos)
+        #self._set_mcu_position(last_pos)
         '''
         Send drive synch event for angle and extruder module.
         TODO: check for compatibility.
