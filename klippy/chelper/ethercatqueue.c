@@ -423,7 +423,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
          * message can be sent, if it is greater than the estimated frame reception time
          * (ack_clock) stop immediately.
          */
-        if (/* (ack_clock < qm->min_clock) || */ (ack_clock + reqclock_delta < qm->req_clock))
+        if ((ack_clock < qm->min_clock) || (ack_clock + reqclock_delta < qm->req_clock))
         {
             /*
              * The ack clock (estimated drive reception clock) is greater than the pending queue
