@@ -809,7 +809,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                 if ((slave->slave_window + BUFFER_MARGIN < slave->rx_size) && (stop_delta >= 0.001))
                 {
                     /* clamp buffer time */
-                    if (stop_delta > 2*master->sync0_ct)
+                    if (stop_delta > master->sync0_ct)
                     {
                         stop_delta = master->sync0_ct;
                     }
