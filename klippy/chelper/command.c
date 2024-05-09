@@ -546,17 +546,6 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         struct coe_control_word *cw = (struct coe_control_word *)slave->off_control_word;
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
-        
-        /* clear buffer inputs */
-        if (slave->clear_buffer_sdo)
-        {
-            uint8_t *data = ecrt_sdo_request_data(slave->clear_buffer_sdo);
-            if (data)
-            {
-                EC_WRITE_U8(data, 0); //0x0 = clear buffer inputs command
-                ecrt_sdo_request_write(slave->clear_buffer_sdo);
-            }
-        }
 
         /* set homing mode */
         if (slave->off_operation_mode)
@@ -620,6 +609,17 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
 
                 /* disable signal (allow next trigger) */
                 cw->signal = 0;
+
+                /* clear buffer inputs */
+                if (slave->clear_buffer_sdo)
+                {
+                    uint8_t *data = ecrt_sdo_request_data(slave->clear_buffer_sdo);
+                    if (data)
+                    {
+                        EC_WRITE_U8(data, 0); //0x0 = clear buffer inputs command
+                        ecrt_sdo_request_write(slave->clear_buffer_sdo);
+                    }
+                }
             }
         }
     }
