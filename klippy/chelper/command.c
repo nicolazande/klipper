@@ -557,7 +557,7 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
                 ecrt_sdo_request_write(slave->clear_buffer_sdo);
             }
         }
-        
+
         /* set homing mode */
         if (slave->off_operation_mode)
         {
@@ -614,9 +614,6 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             {
                 /* reset operation mode in frame */
                 *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
-
-                /* force actual position to zero */
-                slave->position_actual = 0;
 
                 /* disable signal (allow next trigger) */
                 cw->signal = 0;
