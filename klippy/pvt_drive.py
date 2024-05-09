@@ -323,7 +323,7 @@ class PVT_drive:
             return
         # send request
         params = self._get_position_cmd.send([self._oid])
-        last_pos = 0 #params['pos']
+        last_pos = self.get_commanded_position() #params['pos']
         # get time of when the command was received by the drive
         print_time = self._mcu.estimated_print_time(params['#receive_time'])
         clock = self._mcu.print_time_to_clock(print_time)
