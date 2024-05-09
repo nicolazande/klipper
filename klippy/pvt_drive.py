@@ -306,12 +306,12 @@ class PVT_drive:
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ret = ffi_lib.pvtcompress_reset(self._stepqueue, 0)
-        if ret:
-            raise error("Internal error in pvtcompress")
+        #if ret:
+        #    raise error("Internal error in pvtcompress")
         # send reset command (TODO: add response for timing and error handling)
-        reset_cmd_tag = self._reset_cmd.get_command_tag()
-        data = (reset_cmd_tag, self._oid, 0)
-        self._reset_cmd.send(data)
+        #reset_cmd_tag = self._reset_cmd.get_command_tag()
+        #data = (reset_cmd_tag, self._oid, 0)
+        #self._reset_cmd.send(data)
         # get drive position
         self._query_mcu_position()
         
