@@ -399,17 +399,17 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
      * Stop as soon as one drive receive buffer is full, even if the others are not, this
      * allows to keep better drive synchronization (common steps in the same frame).
      */
-    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
-    {
-        /* get slave */
-        slave = &master->monitor[i];
+    // for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    // {
+    //     /* get slave */
+    //     slave = &master->monitor[i];
 
-        if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
-        {
-            /* stop and send frame (drive buffer is full) */
-            return PR_NEVER;
-        }
-    }
+    //     if ((slave->slave_window > slave->rx_size) /* || (sq->masterifc.full_counter) */)
+    //     {
+    //         /* stop and send frame (drive buffer is full) */
+    //         return PR_NEVER;
+    //     }
+    // }
 
     /* move messages from the upcoming queue to the ready queue */
     while (!list_empty(&sq->upcoming_queue))
