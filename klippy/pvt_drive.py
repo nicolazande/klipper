@@ -330,7 +330,7 @@ class PVT_drive:
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
-        #self._set_mcu_position(last_pos)
+        self._set_mcu_position(self.get_commanded_position())
         '''
         Send drive synch event for angle and extruder module.
         TODO: check for compatibility.
