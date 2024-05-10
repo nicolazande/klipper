@@ -330,7 +330,7 @@ class PVT_drive:
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
         sk = self._stepper_kinematics
         ffi_lib.pvtsolve_set_position(sk, last_pos, last_pos, last_pos)
-        self._set_mcu_position(last_pos)
+        #self._set_mcu_position(last_pos)
         '''
         Send drive synch event for angle and extruder module.
         TODO: check for compatibility.
