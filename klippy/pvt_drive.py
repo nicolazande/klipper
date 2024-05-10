@@ -83,7 +83,7 @@ class PVT_endstop:
         Wait for homing of a PVT drive.
         '''
         if self._mcu.is_fileoutput():
-            self._trigger_completion.complete(True)
+            self._trigger_completion.complete(0)
 
         if self.homed:
             return 1
