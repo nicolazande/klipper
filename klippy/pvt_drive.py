@@ -24,6 +24,7 @@ class PVT_endstop:
         self._trigger_completion = None
         self._rest_ticks = 0
         self._steppers = [] #associated steppers
+        self._mcu.get_printer().register_event_handler('homing:homing_move_wait', self.note_homing_end)
 
     def get_mcu(self):
         return self._mcu
@@ -63,12 +64,13 @@ class PVT_endstop:
         reactor = self._mcu.get_printer().get_reactor()
         # fake completion for compatibility
         self._trigger_completion = reactor.completion()
-        self._trigger_completion.complete(0)
+        #self._trigger_completion.complete(0)
         # homing (can stop steppers)
         for s in self._steppers:
             self._stepper_stop_cmd.send([s.get_oid()])
         # send homing start command to drive endstop
         self._home_cmd.send([self._oid], reqclock=clock)
+        self.printer.send_event("homing:homing_move_wait")
         return self._trigger_completion
 
     def home_wait(self, home_end_time):
@@ -77,14 +79,14 @@ class PVT_endstop:
         '''
         if self._mcu.is_fileoutput():
             self._trigger_completion.complete(True)
-        # wait for fake completion
-        self._trigger_completion.wait()
-        while 1:
-            # query drive endstop state
-            params = self._query_cmd.send([self._oid])
-            if params["finished"]:
-                # endstop triggered
-                break
+
+        params = self._query_cmd.send([self._oid])
+        if params["finished"]:
+            # endstop triggered
+            self._trigger_completion.complete(0)
+        else:
+            self.printer.send_event("homing:homing_move_wait")
+
         # get homing time
         next_clock = self._mcu.clock32_to_clock64(params['next_clock'])
         '''
