@@ -300,7 +300,7 @@ class PVT_drive:
         self._set_mcu_position(mcu_pos) #move back to previous position
         return old_sk
     
-    def note_homing_end(self):
+    def note_homing_end(self, homing):
         '''
         Note homing end.
         '''
