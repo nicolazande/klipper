@@ -226,6 +226,7 @@ class PVT_drive:
         '''
         Set toolhead position.
         '''
+        logging.info("SET POSITION")
         mcu_pos = self.get_mcu_position()
         sk = self._stepper_kinematics
         ffi_main, ffi_lib = chelper.get_ffi()
@@ -304,6 +305,7 @@ class PVT_drive:
         '''
         Note homing end.
         '''
+        logging.info("NOTE HOMING END")
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.pvtcompress_reset(self._stepqueue, 0)
@@ -321,6 +323,7 @@ class PVT_drive:
         if self._mcu.is_fileoutput():
             return
         # send request
+        logging.info("QUERY MCU POSITION")
         params = self._get_position_cmd.send([self._oid])
         last_pos = params['pos']
         # get time of when the command was received by the drive
