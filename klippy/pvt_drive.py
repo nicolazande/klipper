@@ -305,9 +305,7 @@ class PVT_drive:
         logging.info("FFFFFFFFFFFFFF")
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
-        ret = ffi_lib.pvtcompress_reset(self._stepqueue, 0)
-        if ret:
-            raise error("Internal error in pvtcompress")
+        ffi_lib.pvtcompress_reset(self._stepqueue, 0)
         # send reset command (TODO: add response for timing and error handling)
         reset_cmd_tag = self._reset_cmd.get_command_tag()
         data = (reset_cmd_tag, self._oid, 0)
@@ -330,6 +328,7 @@ class PVT_drive:
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
+        self.set_position(last_pos*[4])
         self._set_mcu_position(last_pos)
         '''
         Send drive synch event for angle and extruder module.

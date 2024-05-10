@@ -548,7 +548,7 @@ static int cp_f_endstop_home(struct ethercatqueue *sq, void *out, uint32_t *args
         /* status word */
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
         
-        /* clear buffer inputs */
+        /* clear buffer */
         if (slave->clear_buffer_sdo)
         {
             uint8_t *data = ecrt_sdo_request_data(slave->clear_buffer_sdo);
