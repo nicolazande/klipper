@@ -328,7 +328,6 @@ class PVT_drive:
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
-        self.set_position(last_pos*[4])
         sk = self._stepper_kinematics
         ffi_lib.pvtsolve_set_position(sk, last_pos, last_pos, last_pos)
         self._set_mcu_position(last_pos)
