@@ -24,7 +24,7 @@ class PVT_endstop:
         self._trigger_completion = None
         self._rest_ticks = 0
         self._steppers = [] #associated steppers
-        self._mcu.get_printer().register_event_handler('homing:homing_move_wait', self.home_wait)
+        self._mcu.get_printer().register_event_handler('homing:homing_move_wait', self._home_wait)
 
     def get_mcu(self):
         return self._mcu
@@ -72,8 +72,11 @@ class PVT_endstop:
         self._home_cmd.send([self._oid], reqclock=clock)
         self._mcu.get_printer().send_event("homing:homing_move_wait")
         return self._trigger_completion
+    
+    def _home_wait(self, home_end_time=0.):
+        return 1
 
-    def home_wait(self, home_end_time=0.):
+    def _home_wait(self, home_end_time=0.):
         '''
         Wait for homing of a PVT drive.
         '''
