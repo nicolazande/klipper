@@ -67,6 +67,7 @@ class PVT_endstop:
         # homing (can stop steppers)
         for s in self._steppers:
             self._stepper_stop_cmd.send([s.get_oid()])
+            s.set_position((0., 0., 0.))
         # send homing start command to drive endstop
         self._home_cmd.send([self._oid], reqclock=clock)
         return self._trigger_completion
@@ -327,7 +328,6 @@ class PVT_drive:
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
-        self.set_position((0., 0., 0.))
         self._set_mcu_position(last_pos)
         '''
         Send drive synch event for angle and extruder module.
