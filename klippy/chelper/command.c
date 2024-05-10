@@ -615,6 +615,8 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
                 /* reset operation mode in frame */
                 *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
 
+                slave->position_actual = 0;
+
                 /* disable signal (allow next trigger) */
                 cw->signal = 0;
             }
