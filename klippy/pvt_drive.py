@@ -24,7 +24,7 @@ class PVT_endstop:
         self._trigger_completion = None
         self._rest_ticks = 0
         self._steppers = [] #associated steppers
-        self._mcu.get_printer().register_event_handler('homing:homing_move_wait', self.note_homing_end)
+        self._mcu.get_printer().register_event_handler('homing:homing_move_wait', self.home_wait)
 
     def get_mcu(self):
         return self._mcu
@@ -85,7 +85,7 @@ class PVT_endstop:
             # endstop triggered
             self._trigger_completion.complete(0)
         else:
-            self.printer.send_event("homing:homing_move_wait")
+            self.printer.send_event("homing:homing_move_wait", 0)
 
         # get homing time
         next_clock = self._mcu.clock32_to_clock64(params['next_clock'])
