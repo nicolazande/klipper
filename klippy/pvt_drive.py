@@ -24,8 +24,6 @@ class PVT_endstop:
         self._trigger_completion = None
         self._rest_ticks = 0
         self._steppers = [] #associated steppers
-        self._mcu.get_printer().register_event_handler(f'homing:homing_move_wait:{self._oid}', self._home_wait)
-        self.homed = False
 
     def get_mcu(self):
         return self._mcu
@@ -61,41 +59,32 @@ class PVT_endstop:
         '''
         Start homing procedure for a PVT drive.
         '''
-        self.homed = False
         clock = self._mcu.print_time_to_clock(print_time)
         reactor = self._mcu.get_printer().get_reactor()
         # fake completion for compatibility
         self._trigger_completion = reactor.completion()
-        #self._trigger_completion.complete(0)
+        self._trigger_completion.complete(0)
         # homing (can stop steppers)
         for s in self._steppers:
             self._stepper_stop_cmd.send([s.get_oid()])
         # send homing start command to drive endstop
         self._home_cmd.send([self._oid], reqclock=clock)
-        self._mcu.get_printer().send_event(f'homing:homing_move_wait:{self._oid}')
         return self._trigger_completion
-    
-    def _home_wait(self, home_end_time=0.):
-        return 1
 
-    def _home_wait(self, home_end_time=0.):
+    def home_wait(self, home_end_time):
         '''
         Wait for homing of a PVT drive.
         '''
         if self._mcu.is_fileoutput():
-            self._trigger_completion.complete(0)
-
-        if self.homed:
-            return 1
-
-        params = self._query_cmd.send([self._oid])
-        if params["finished"]:
-            # endstop triggered
             self._trigger_completion.complete(True)
-            self.homed = 1
-        else:
-            self._mcu.get_printer().send_event(f'homing:homing_move_wait:{self._oid}')
-
+        # wait for fake completion
+        self._trigger_completion.wait()
+        while 1:
+            # query drive endstop state
+            params = self._query_cmd.send([self._oid])
+            if params["finished"]:
+                # endstop triggered
+                break
         # get homing time
         next_clock = self._mcu.clock32_to_clock64(params['next_clock'])
         '''
