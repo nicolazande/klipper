@@ -67,7 +67,6 @@ class PVT_endstop:
         # homing (can stop steppers)
         for s in self._steppers:
             self._stepper_stop_cmd.send([s.get_oid()])
-            s.set_position((0., 0., 0.))
         # send homing start command to drive endstop
         self._home_cmd.send([self._oid], reqclock=clock)
         return self._trigger_completion
@@ -303,6 +302,7 @@ class PVT_drive:
         '''
         Note homing end.
         '''
+        self.set_position((0., 0., 0.))
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.pvtcompress_reset(self._stepqueue, 0)
