@@ -83,8 +83,6 @@ class PVT_endstop:
             # query drive endstop state
             params = self._query_cmd.send([self._oid])
             if params["finished"]:
-                for stepper in self._steppers:
-                    stepper.note_homing_end()
                 # endstop triggered
                 break
         # get homing time
@@ -97,6 +95,8 @@ class PVT_endstop:
         if next_clock > home_end_clock:
             return -1.
         '''
+        for stepper in self._steppers:
+            stepper.note_homing_end()
         return self._mcu.clock_to_print_time(next_clock - self._rest_ticks)
     
     def query_endstop(self, print_time):
@@ -250,6 +250,8 @@ class PVT_drive:
         Set drive position in [mm].
         '''
         self._mcu_position_offset = mcu_pos - self.get_commanded_position()
+        logging.info("OFFSET = %s, MCU_POS = %s, COMMANDED  =%s" %
+                     (self._mcu_position_offset, mcu_pos, self.get_commanded_position()))
         
     def get_past_mcu_position(self, print_time):
         '''
