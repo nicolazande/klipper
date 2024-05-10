@@ -512,6 +512,7 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
         struct coe_status_word *sw = (struct coe_status_word *)slave->off_status_word;
         /* get actual position */
         int32_t position = slave->position_actual;
+        errorf("cp_f_stepper_get_position: (oid = %u, val = %i)", oid, position);
         /* get response command parser */
         struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
         /* create response  */
@@ -614,9 +615,7 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             {
                 /* reset operation mode in frame */
                 *slave->off_operation_mode = slave->operation_mode = COE_OPERATION_MODE_INTERPOLATION;
-
-                slave->position_actual = 0;
-
+                
                 /* disable signal (allow next trigger) */
                 cw->signal = 0;
             }
