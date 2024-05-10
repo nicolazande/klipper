@@ -95,8 +95,6 @@ class PVT_endstop:
         if next_clock > home_end_clock:
             return -1.
         '''
-        for stepper in self._steppers:
-            stepper.note_homing_end()
         return self._mcu.clock_to_print_time(next_clock - self._rest_ticks)
     
     def query_endstop(self, print_time):
@@ -144,7 +142,8 @@ class PVT_drive:
         self._trapq = ffi_main.NULL
         # register connection callback (query position during printer initialization)
         self._mcu.get_printer().register_event_handler('klippy:connect', self._query_mcu_position)
-        
+        self._mcu.get_printer().register_event_handler('homing:homing_move_end', self.note_homing_end)
+
     def get_mcu(self):
         '''
         Get associated mcu.
