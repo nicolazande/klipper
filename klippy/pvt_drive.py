@@ -83,8 +83,8 @@ class PVT_endstop:
             # query drive endstop state
             params = self._query_cmd.send([self._oid])
             if params["finished"]:
-                #for stepper in self._steppers:
-                #    stepper.note_homing_end()
+                for stepper in self._steppers:
+                    stepper.note_homing_end()
                 # endstop triggered
                 break
         # get homing time
@@ -302,7 +302,6 @@ class PVT_drive:
         '''
         Note homing end.
         '''
-        logging.info("FFFFFFFFFFFFFF")
         # reset the internal state of the pvtcompress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.pvtcompress_reset(self._stepqueue, 0)
