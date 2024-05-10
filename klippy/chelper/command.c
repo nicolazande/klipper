@@ -516,6 +516,7 @@ static int cp_f_stepper_get_position(struct ethercatqueue *sq, void *out, uint32
         struct command_encoder *ce = command_encoder_table[ETH_STEPPER_POSITION_CE];
         /* create response  */
         uint8_t msglen = command_encode_and_frame(buf, ce, oid, position);
+        errorf("cp_f_stepper_get_position = %i", position);
     }    
     return 0;
 }
