@@ -83,8 +83,8 @@ class PVT_endstop:
             # query drive endstop state
             params = self._query_cmd.send([self._oid])
             if params["finished"]:
-                for stepper in self._steppers:
-                    stepper.note_homing_end()
+                #for stepper in self._steppers:
+                #    stepper.note_homing_end()
                 # endstop triggered
                 break
         # get homing time
@@ -328,9 +328,7 @@ class PVT_drive:
         ffi_main, ffi_lib = chelper.get_ffi()
         # update last drive position
         last_pos = ffi_lib.pvtcompress_set_last_position(self._stepqueue, clock, last_pos)
-        sk = self._stepper_kinematics
-        ffi_lib.pvtsolve_set_position(sk, last_pos, last_pos, last_pos)
-        #self._set_mcu_position(last_pos)
+        self._set_mcu_position(last_pos)
         '''
         Send drive synch event for angle and extruder module.
         TODO: check for compatibility.
