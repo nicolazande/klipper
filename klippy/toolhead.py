@@ -451,9 +451,7 @@ class ToolHead:
         # Check if there are lots of queued moves and pause if so
         while 1:
             pause_time = buffer_time - BUFFER_TIME_HIGH
-            logging.info("reactor pause: (event time = %s, print time = %s, pause time = %s)" % (est_print_time, self.print_time, pause_time))
             if pause_time <= 0.:
-                logging.info("reactor restart: %s" % self.print_time)
                 break
             if not self.can_pause:
                 self.need_check_pause = self.reactor.NEVER
