@@ -829,8 +829,6 @@ static inline void check_master_state(struct ethercatqueue *sq)
 static double
 cyclic_event(struct ethercatqueue *sq, double eventtime)
 {
-    double t_start = get_monotonic();
-
     /* acquire mutex */
     pthread_mutex_lock(&sq->lock);
 
@@ -1009,13 +1007,6 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
 
     /* releas mutex */
     pthread_mutex_unlock(&sq->lock);
-
-    double t_end = get_monotonic();
-    double t_delta = t_end - t_start;
-    if (t_delta > 0.000100)
-    {
-        errorf(">> eventtime = %lf, high load = %lf", eventtime, t_delta);
-    }
 
     /* update next timer event (in pollreactor_check_timers) */
     return eventtime + master->sync0_ct;
