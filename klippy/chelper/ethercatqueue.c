@@ -852,7 +852,7 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
         double ptr = eventtime - old_eventtime;
         if (ptr > 1.001 * master->sync0_ct)
         {
-            errorf("--> ethercat cyclic task delay = %lf (%lf%)",
+            errorf("--> ethercat cyclic task delay = %lf (%lf %)",
                     ptr, 100*(ptr - master->sync0_ct) / master->sync0_ct);
         }
         old_eventtime = eventtime;
