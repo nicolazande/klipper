@@ -775,7 +775,7 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                             start_delta, stop_delta, sq->upcoming_time, slave->time_target);
                 }
                 cw->signal = 0;
-            }         
+            }
             else if (start_delta < master->sync0_ct)
             {
                 if (!cw->signal)
