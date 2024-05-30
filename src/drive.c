@@ -4,7 +4,6 @@
  * \brief Handling of drive drivers.
  */
 
-
 /****************************************************************
  * Includes
  ****************************************************************/
@@ -66,9 +65,52 @@ struct drive
 
 
 /****************************************************************
- * Private functions
+ * Private function prototypes
  ****************************************************************/
 /** setup a drive for the next move in its queue */
+static uint_fast8_t drive_load_next(struct drive *s);
+
+/** get drive for a given drive oid */
+static struct drive *drive_oid_lookup(uint8_t oid);
+
+/** current drive position (caller must disable irqs) */
+static int32_t drive_get_position(struct drive *s);
+
+/* stop all moves for a given drive (caller must disable IRQs) */
+static void drive_stop(struct trsync_signal *tss, uint8_t reason);
+
+
+/****************************************************************
+ * Public function prototypes
+ ****************************************************************/
+/* drive event function */
+uint_fast8_t drive_event(struct timer *t);
+
+/** configure drive */
+void command_config_drive(uint32_t *args);
+
+/** schedule a set of steps with a given timing */
+void drive_queue_step(uint32_t *args);
+
+/** 
+ * Set absolute time that the next step will be relative to.
+ * NOTE: use in combination with drive control word.
+ */
+void drive_reset_step_clock(uint32_t *args);
+
+/** report the current position of the drive */
+void command_drive_get_position(uint32_t *args);
+
+/** stop drive on trigger event (used in homing) */
+void command_drive_stop_on_trigger(uint32_t *args);
+
+/** drive shutdown function */
+void drive_shutdown(void);
+
+
+/****************************************************************
+ * Private functions
+ ****************************************************************/
 static uint_fast8_t
 drive_load_next(struct drive *s)
 {
@@ -80,205 +122,183 @@ drive_load_next(struct drive *s)
     }
 
     /* load next move */
-    struct move_node *mn = move_queue_pop(&s->mq);
-    struct drive_move *m = container_of(mn, struct drive_move, node);
+    struct move_node *n = move_queue_pop(&s->mq);
+    struct drive_move *m = container_of(n, struct drive_move, node);
 
     /* update drive data */
     s->position = m->position;
     s->velocity = m->velocity;
     s->next_step_time += m->time;
     s->time.waketime = s->next_step_time;
+    s->count++;
 
+    /* remove step */
     move_free(m);
+
     return SF_RESCHEDULE;
 }
 
-/* Optimized entry point for step function (may be inlined into sched.c code) */
-uint_fast8_t
-drive_event(struct timer *t)
-{
-    /* get drive associated with drive */
-    struct drive *s = container_of(t, struct drive, time);
-
-    /* command position setpoint */
-    gpio_out_toggle_noirq(s->step_pin);
-
-    uint32_t curtime = timer_read_time();
-    uint32_t min_next_time = curtime + s->step_pulse_ticks;
-    s->count--;
-
-    if (likely(s->count & 1))
-    {
-        // Schedule unstep event
-        goto reschedule_min;
-    }
-    if (likely(s->count))
-    {
-        s->next_step_time += s->interval;
-        s->interval += s->add;
-        if (unlikely(timer_is_before(s->next_step_time, min_next_time)))
-        {
-            // The next step event is too close - push it back
-            goto reschedule_min;
-        }
-        s->time.waketime = s->next_step_time;
-        return SF_RESCHEDULE;
-    }
-
-    uint_fast8_t ret = drive_load_next(s);
-    if (ret == SF_DONE || !timer_is_before(s->time.waketime, min_next_time))
-    {
-        return ret;
-    }
-    // Next step event is too close to the last unstep
-    int32_t diff = s->time.waketime - min_next_time;
-    if (diff < (int32_t)-timer_from_us(1000))
-    {
-        shutdown("Drive too far in past");
-    }
-reschedule_min:
-    s->time.waketime = min_next_time;
-    return SF_RESCHEDULE;
-}
-
-void
-command_config_drive(uint32_t *args)
-{
-    struct drive *s = oid_alloc(args[0], command_config_drive, sizeof(*s));
-    int_fast8_t invert_step = args[3];
-    s->flags = invert_step > 0 ? SF_INVERT_STEP : 0;
-    s->step_pin = gpio_out_setup(args[1], s->flags & SF_INVERT_STEP);
-    s->dir_pin = gpio_out_setup(args[2], 0);
-    s->position = 0;
-    s->step_pulse_ticks = args[4];
-    move_queue_setup(&s->mq, sizeof(struct drive_move));
-    s->time.func = drive_event_full;
-    
-}
-DECL_COMMAND(command_config_drive, "config_drive oid=%c step_pin=%c"
-             " dir_pin=%c invert_step=%c step_pulse_ticks=%u");
-
-// Return the 'struct drive' for a given drive oid
 static struct drive *
 drive_oid_lookup(uint8_t oid)
 {
     return oid_lookup(oid, command_config_drive);
 }
 
-// Schedule a set of steps with a given timing
-void
-command_queue_step(uint32_t *args)
-{
-    struct drive *s = drive_oid_lookup(args[0]);
-    struct drive_move *m = move_alloc();
-
-    m->position = args[1];
-    m->velocity = args[2];
-    m->time = args[3];
-    m->flags = 0;
-
-    irq_disable();
-
-    uint8_t flags = s->flags;
-    if (s->count)
-    {
-        s->flags = flags;
-        move_queue_push(&m->node, &s->mq);
-    }
-    else if (flags & SF_NEED_RESET)
-    {
-        move_free(m);
-    }
-    else
-    {
-        s->flags = flags;
-        move_queue_push(&m->node, &s->mq);
-        drive_load_next(s);
-        sched_add_timer(&s->time);
-    }
-    irq_enable();
-}
-DECL_COMMAND(command_queue_step,
-             "queue_step oid=%c interval=%u count=%hu add=%hi");
-
-// Set the direction of the next queued step
-void
-command_set_next_step_dir(uint32_t *args)
-{
-    struct drive *s = drive_oid_lookup(args[0]);
-    uint8_t nextdir = args[1] ? SF_NEXT_DIR : 0;
-    irq_disable();
-    s->flags = (s->flags & ~SF_NEXT_DIR) | nextdir;
-    irq_enable();
-}
-DECL_COMMAND(command_set_next_step_dir, "set_next_step_dir oid=%c dir=%c");
-
-// Set an absolute time that the next step will be relative to
-void
-command_reset_step_clock(uint32_t *args)
-{
-    struct drive *s = drive_oid_lookup(args[0]);
-    uint32_t waketime = args[1];
-    irq_disable();
-    if (s->count)
-    {
-        shutdown("Can't reset time when drive active");
-    }
-    s->next_step_time = s->time.waketime = waketime;
-    s->flags &= ~SF_NEED_RESET;
-    irq_enable();
-}
-DECL_COMMAND(command_reset_step_clock, "reset_step_clock oid=%c clock=%u");
-
-// Return the current drive position.  Caller must disable irqs.
-static uint32_t
+static int32_t
 drive_get_position(struct drive *s)
 {
-    uint32_t position = s->position;
-    // If drive is mid-move, subtract out steps not yet taken
-    position -= s->count / 2;
-    
-    // The top bit of s->position is an optimized reverse direction flag
-    if (position & 0x80000000)
-    {
-        return -position;
-    }
-    return position;
+    return s->position;
 }
 
-// Report the current position of the drive
-void
-command_drive_get_position(uint32_t *args)
-{
-    uint8_t oid = args[0];
-    struct drive *s = drive_oid_lookup(oid);
-    irq_disable();
-    uint32_t position = drive_get_position(s);
-    irq_enable();
-    sendf("drive_position oid=%c pos=%i", oid, position);
-}
-DECL_COMMAND(command_drive_get_position, "drive_get_position oid=%c");
-
-// Stop all moves for a given drive (caller must disable IRQs)
 static void
 drive_stop(struct trsync_signal *tss, uint8_t reason)
 {
     struct drive *s = container_of(tss, struct drive, stop_signal);
     sched_del_timer(&s->time);
     s->next_step_time = s->time.waketime = 0;
-    s->position = -drive_get_position(s);
+    s->position = drive_get_position(s);
     s->count = 0;
     s->flags = (s->flags & (SF_INVERT_STEP|SF_SINGLE_SCHED)) | SF_NEED_RESET;
+
+    /* stop TMC */
     gpio_out_write(s->dir_pin, 0);
+
     while (!move_queue_empty(&s->mq))
     {
+        /* remove all steps in queue */
         struct move_node *mn = move_queue_pop(&s->mq);
         struct drive_move *m = container_of(mn, struct drive_move, node);
         move_free(m);
     }
 }
 
-// Set the drive to stop on a "trigger event" (used in homing)
+
+/****************************************************************
+ * Public functions
+ ****************************************************************/
+uint_fast8_t
+drive_event(struct timer *t)
+{
+    /* get drive associated with timer */
+    struct drive *s = container_of(t, struct drive, time);
+
+    /* command position setpoint */
+    if (s->count)
+    {
+        gpio_out_toggle_noirq(s->step_pin);
+        s->count--;
+    }
+    if (!s->count)
+    {
+        /* load next move */
+        drive_load_next(s);
+    }
+
+    return SF_DONE;
+}
+
+void
+command_config_drive(uint32_t *args)
+{
+    struct drive *s = oid_alloc(args[0], command_config_drive, sizeof(*s));
+    // int_fast8_t invert_step = args[3];
+    // s->flags = invert_step > 0 ? SF_INVERT_STEP : 0;
+    // s->step_pin = gpio_out_setup(args[1], s->flags & SF_INVERT_STEP);
+    // s->dir_pin = gpio_out_setup(args[2], 0);
+    s->position = 0;
+    s->velocity = 0;
+    s->time = 0;
+    move_queue_setup(&s->mq, sizeof(struct drive_move));
+    s->time.func = drive_event;
+}
+DECL_COMMAND(command_config_drive, "config_drive oid=%c step_pin=%c"
+             " dir_pin=%c invert_step=%c step_pulse_ticks=%u");
+
+void
+drive_queue_step(uint32_t *args)
+{
+    /* get drive and create move */
+    struct drive *s = drive_oid_lookup(args[0]);
+    struct drive_move *m = move_alloc();
+
+    /* read message data */
+    m->position = args[1];
+    m->velocity = args[2];
+    m->time = args[3];
+    m->flags = 0;
+
+    /* disable interrupts */
+    irq_disable();
+
+    /* update flags */
+    uint8_t flags = s->flags;
+
+    if (s->count)
+    {
+        /* move queue nnt empty */
+        s->flags = flags;
+        move_queue_push(&m->node, &s->mq);
+    }
+    else if (flags & SF_NEED_RESET)
+    {
+        /* move queue empty and reset */
+        move_free(m);
+    }
+    else
+    {
+        /* move queue empty */
+        s->flags = flags;
+        move_queue_push(&m->node, &s->mq);
+        drive_load_next(s);
+        sched_add_timer(&s->time);
+    }
+
+    /* enable interrupts */
+    irq_enable();
+}
+DECL_COMMAND(drive_queue_step,
+             "drive_queue_step oid=%c position=%i velocity=%i time=%u");
+
+void
+drive_reset_step_clock(uint32_t *args)
+{
+    /* get drive */
+    struct drive *s = drive_oid_lookup(args[0]);
+
+    /* absolute time (clock) */
+    uint32_t waketime = args[1];
+
+    /* disable interrupts */
+    irq_disable();
+
+    if (s->count)
+    {
+        shutdown("Can't reset time when drive active");
+    }
+
+    /* update drive wake time */
+    s->next_step_time = s->time.waketime = waketime;
+
+    /* clear reset flag */
+    s->flags &= ~SF_NEED_RESET;
+
+    /* enable interrupts */
+    irq_enable();
+}
+DECL_COMMAND(drive_reset_step_clock, "drive_reset_step_clock oid=%c clock=%u");
+
+void
+command_drive_get_position(uint32_t *args)
+{
+    uint8_t oid = args[0];
+    struct drive *s = drive_oid_lookup(oid);
+    irq_disable();
+    int32_t position = drive_get_position(s);
+    irq_enable();
+    sendf("drive_position oid=%c pos=%i", oid, position);
+}
+DECL_COMMAND(command_drive_get_position, "drive_get_position oid=%c");
+
 void
 command_drive_stop_on_trigger(uint32_t *args)
 {

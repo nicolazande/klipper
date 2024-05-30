@@ -19,6 +19,7 @@
         "vector": "c",
         "initializer_list": "c",
         "stepcompress.h": "c",
-        "serialqueue.h": "c"
+        "serialqueue.h": "c",
+        "basecmd.h": "c"
     }
 }
