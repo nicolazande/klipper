@@ -411,6 +411,7 @@ class TMC4671:
         # generic command helper
         cmdhelper = TMCCommandHelper(config, self.mcu_tmc, current_helper)
         # setup registers
+        self.fields.set_config_field(config, "motor_type", config.getint('motor_type', 3, minval=1))
         self.fields.set_config_field(config, "pole_pairs", config.getint('pole_pairs', 1, minval=1)) #7
         self.fields.set_config_field(config, "kp_position", config.getint('kp_position', 4000)) #3000
         self.fields.set_config_field(config, "ki_position", config.getint('ki_position', 200)) #100
