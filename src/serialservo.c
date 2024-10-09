@@ -273,15 +273,12 @@ uint_fast8_t serialservo_event(struct timer *t)
     /* get timer serialservo */
     struct serialservo *d = container_of(t, struct serialservo, time);
 
-
     /* TMC position and velocity setpoint */
     reg_write(d->spi, PID_POSITION_TARGET, d->current_position);
 
     int32_t position_feedback = (int32_t)reg_read(d->spi, PID_POSITION_ACTUAL);
 
     output("==> position (target = %i, feedback = %i)", d->current_position , position_feedback);
-
-
 
     uint32_t event_time = timer_read_time();
     

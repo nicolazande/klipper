@@ -21,12 +21,14 @@ Registers = {
     "PID_POSITION_TARGET": 0x68,
     "PID_VELOCITY_ACTUAL": 0x6A,
     "PID_POSITION_ACTUAL": 0x6B,
+    "STATUS_FLAGS": 0x7C,
+    "STATUS_MASK": 0x7D,
 }
 
 # read subset registers
 ReadRegisters = [
     "PID_POSITION_ACTUAL", "PID_VELOCITY_ACTUAL",
-    "PID_VELOCITY_TARGET", "PID_TORQUE_FLUX_TARGET"
+    "PID_VELOCITY_TARGET", "PID_POSITION_TARGET"
 ]
 
 # register fields
@@ -51,6 +53,38 @@ Fields["MODE_RAMP_MODE_MOTION"] = {
     "mode_pid_type": 0x01 << 31,
     "mode_pid_smpl": 0x7F << 24,
     "mode_motion": 0xFF << 0,
+}
+
+Fields["STATUS_FLAGS"] = {
+    "pid_x_target_limit": 0x01 << 0,
+    "pid_x_errsum_limit": 0x01 << 2,
+    "pid_x_output_limit": 0x01 << 3,
+    "pid_v_target_limit": 0x01 << 4,
+    "pid_v_errsum_limit": 0x01 << 6,
+    "pid_v_output_limit": 0x01 << 7,
+    "pid_id_target_limit": 0x01 << 8,
+    "pid_id_errsum_limit": 0x01 << 10,
+    "pid_id_output_limit": 0x01 << 11,
+    "pid_iq_target_limit": 0x01 << 12,
+    "pid_iq_errsum_limit": 0x01 << 14,
+    "pid_iq_output_limit": 0x01 << 15,
+    "ipark_cirlim_limit_u_d": 0x01 << 16,
+    "ipark_cirlim_limit_u_q": 0x01 << 17,
+    "ipark_cirlim_limit_u_r": 0x01 << 18,
+    "ref_sw_r": 0x01 << 20,
+    "ref_sw_h": 0x01 << 21,
+    "ref_sw_l": 0x01 << 22,
+    "pwm_min": 0x01 << 24,
+    "pwm_max": 0x01 << 25,
+    "adc_i_clipped": 0x01 << 26,
+    "aenc_clipped": 0x01 << 27,
+    "enc_n": 0x01 << 28,
+    "enc_2_n": 0x01 << 29,
+    "aenc_n": 0x01 << 30,   
+}
+
+Fields["STATUS_MASK"] = {
+    "status_mask": 0xffffffff
 }
 
 SignedFields = ["position_target", "velocity_target", "torque_target"]
@@ -223,6 +257,8 @@ class TMCCommandHelper:
                  self.mcu_tmc.tmc_spi.chain_len,
                  self.mcu_tmc.chain_pos])
             logging.info(f"TMC4671 {self.name}: connected and initialized")
+            status_flags = self.mcu_tmc.get_register("STATUS_FLAGS")
+            logging.info("STATUS REGISTER = %s" % status_flags)
         except self.printer.command_error as e:
             logging.error(f"TMC4671 {self.name} failed to initialize: {str(e)}")
 
@@ -420,7 +456,8 @@ class TMC4671:
         self.fields.set_config_field(config, "kp_torque", config.getint('kp_torque', 4000))
         self.fields.set_config_field(config, "ki_torque", config.getint('ki_torque', 300))
         self.fields.set_config_field(config, "mode_motion", config.getint('mode_motion', 3)) #position mode
-        
+        self.fields.set_config_field(config, "status_mask", 0xffffffff)
+
 def load_config_prefix(config):
     '''
     Load TMC4671 from config file.
