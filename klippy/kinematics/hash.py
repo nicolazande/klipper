@@ -4,27 +4,29 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-import logging, stepper, pvt_drive
+import logging, serialservo, ethercatservo
 from . import idex_modes
 
-class HashKinematics:   
+class HashKinematics:
+    '''
+    Hash kinematics.
+    '''
     def __init__(self, toolhead, config):
         # get printer
         self.printer = config.get_printer()
         # setup axis rails
         self.dual_carriage_axis = None
         self.dual_carriage_rails = []
-        # setup rail axis (pvt drive and stepper)        
-        self.rails = \
-        [
-            pvt_drive.LookupMultiRail(config.getsection('pvt_drive_x')),
-            pvt_drive.LookupMultiRail(config.getsection('pvt_drive_y')),
-            stepper.LookupMultiRail(config.getsection('stepper_z'))
+        # setup rail axis (pvt drive and serialservo)        
+        self.rails = [
+            ethercatservo.LookupMultiRail(config.getsection('ethercatservo_x')),
+            ethercatservo.LookupMultiRail(config.getsection('ethercatservo_y')),
+            serialservo.LookupMultiRail(config.getsection('serialservo_z'))
         ]
         # setup kinematic solver
         self.rails[0].setup_itersolve('hash_drive_alloc', b'x')
         self.rails[1].setup_itersolve('hash_drive_alloc', b'y')
-        self.rails[2].setup_itersolve('cartesian_stepper_alloc', b'z')
+        self.rails[2].setup_itersolve('hash_serialservo_alloc', b'z')
         # same relative limits for all axes
         ranges = [r.get_range() for r in self.rails]
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
@@ -36,7 +38,7 @@ class HashKinematics:
             dc_axis = dc_config.getchoice('axis', {'x': 'x', 'y': 'y'})
             self.dual_carriage_axis = {'x': 0, 'y': 1}[dc_axis]
             # setup second dual carriage rail
-            self.rails.append(stepper.LookupMultiRail(dc_config))
+            self.rails.append(serialservo.LookupMultiRail(dc_config))
             self.rails[3].setup_itersolve('hash_drive_alloc', dc_axis.encode())
             dc_rail_0 = idex_modes.DualCarriagesRail(
                     self.rails[self.dual_carriage_axis],
@@ -46,7 +48,7 @@ class HashKinematics:
             self.dc_module = idex_modes.DualCarriages(
                     dc_config, dc_rail_0, dc_rail_1,
                     axis=self.dual_carriage_axis)
-        # set stepper trapezoidal queue and register step generator
+        # set serialservo trapezoidal queue and register step generator
         for s in self.get_steppers():
             s.set_trapq(toolhead.get_trapq())
             toolhead.register_step_generator(s.generate_steps)
@@ -169,8 +171,7 @@ class HashKinematics:
         Get homing status.
         '''
         axes = [a for a, (l, h) in zip("xyz", self.limits) if l <= h]
-        return \
-        {
+        return {
             'homed_axes': "".join(axes),
             'axis_minimum': self.axes_min,
             'axis_maximum': self.axes_max,

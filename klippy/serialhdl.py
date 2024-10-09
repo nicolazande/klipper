@@ -86,7 +86,7 @@ class SerialReader:
         self.background_thread.start()
         # Obtain and load the data dictionary from the firmware
         completion = self.reactor.register_callback(self._get_identify_data)
-        identify_data = completion.wait(self.reactor.monotonic() + 5.)
+        identify_data = completion.wait(self.reactor.monotonic() + 10.)
         if identify_data is None:
             logging.info("%sTimeout on connect", self.warn_prefix)
             self.disconnect()

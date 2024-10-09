@@ -89,24 +89,38 @@ spidev_transfer(struct spidev_s *spi, uint8_t receive_data
 {
     uint_fast8_t flags = spi->flags;
     if (!(flags & (SF_SOFTWARE|SF_HARDWARE)))
+    {
         // Not yet initialized
         return;
+    }
 
     if (CONFIG_WANT_SOFTWARE_SPI && flags & SF_SOFTWARE)
+    {
         spi_software_prepare(spi->spi_software);
+    }
     else
+    {
         spi_prepare(spi->spi_config);
+    }
 
     if (flags & SF_HAVE_PIN)
+    {
         gpio_out_write(spi->pin, !!(flags & SF_CS_ACTIVE_HIGH));
+    }
 
     if (CONFIG_WANT_SOFTWARE_SPI && flags & SF_SOFTWARE)
+    {
         spi_software_transfer(spi->spi_software, receive_data, data_len, data);
+    }
     else
+    {
         spi_transfer(spi->spi_config, receive_data, data_len, data);
+    }
 
     if (flags & SF_HAVE_PIN)
+    {
         gpio_out_write(spi->pin, !(flags & SF_CS_ACTIVE_HIGH));
+    }
 }
 
 void

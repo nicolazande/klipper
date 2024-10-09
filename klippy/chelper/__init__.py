@@ -21,7 +21,9 @@ COMPILE_ARGS = ("-Wall -g -O2 -shared -fPIC"
                 f" -o %s %s {ADDITIONAL_LIB_PATHS} {ADDITIONAL_LIBS}")
 SSE_FLAGS = "-mfpmath=sse -msse2"
 SOURCE_FILES = [
-    'command.c', 'ethcatqueue.c', 'kin_hash.c', 'pvtcompress.c', 'pvtsolve.c',
+    'command.c',
+    'ethercatqueue.c', 'kin_hash.c', 'ethercatservo_compress.c', 'ethercatservo_solve.c', 'ethercatmsg.c',
+    'serialservo_compress.c', 'serialservo_solve.c',
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c', 'trapq.c',
     'pollreactor.c', 'msgblock.c', 'trdispatch.c',
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
@@ -30,12 +32,52 @@ SOURCE_FILES = [
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
-    'command.h', 'ethcatqueue.h', 'ethercatmsg.h', 'pvtcompress.h',
+    'command.h',
+    'ethercatqueue.h', 'ethercatmsg.h', 'ethercatservo_compress.h',
+    'serialservo_compress.h', 'serialservo_solve.h',
     'list.h', 'serialqueue.h', 'stepcompress.h', 'itersolve.h', 'pyhelper.h',
     'trapq.h', 'pollreactor.h', 'msgblock.h'
 ]
 
-defs_pvtcompress = """
+defs_serialservo_compress = """
+    struct pull_history_serialservo_steps
+    {
+        uint64_t first_clock;
+        uint64_t last_clock;
+        int64_t start_position;
+        int64_t velocity;
+    };
+    struct stepcompress *serialservo_compress_alloc(uint32_t oid);
+    void serialservo_compress_fill(struct stepcompress *sc,
+                               int32_t queue_step_msgtag,
+                               int32_t polePairs,
+                               int32_t scaler);
+    void serialservo_compress_free(struct stepcompress *sc);
+    uint32_t serialservo_compress_get_oid(struct stepcompress *sc);
+    void serialservo_compress_append(struct stepcompress *sc, struct pose *pose, double move_time);
+    int serialservo_compress_reset(struct stepcompress *sc, uint64_t last_step_clock);
+    double serialservo_compress_set_last_position(struct stepcompress *sc, uint64_t clock, int64_t last_position);
+    double serialservo_compress_find_past_position(struct stepcompress *sc, uint64_t clock);
+    int serialservo_compress_extract_old(struct stepcompress *sc,
+                                     struct pull_history_serialservo_steps *p,
+                                     int max,
+                                     uint64_t start_clock,
+                                     uint64_t end_clock);
+    int serialservo_compress_queue_msg(struct stepcompress *sc, uint32_t *data, int len);
+"""
+
+defs_serialservo_solve = """
+    int32_t serialservo_solve_generate_steps(struct serialservo_kinematics *sk, double flush_time);
+    double serialservo_solve_check_active(struct serialservo_kinematics *sk, double flush_time);
+    int32_t serialservo_solve_is_active_axis(struct serialservo_kinematics *sk, char axis);
+    void serialservo_solve_set_trapq(struct serialservo_kinematics *sk, struct trapq *tq);
+    void serialservo_solve_set_stepcompress(struct serialservo_kinematics *sk, struct stepcompress *sc, double simtime);
+    double serialservo_solve_calc_position_from_coord(struct serialservo_kinematics *sk, double x, double y, double z);
+    void serialservo_solve_set_position(struct serialservo_kinematics *sk, double x, double y, double z);
+    double serialservo_solve_get_commanded_pos(struct serialservo_kinematics *sk);
+"""
+
+defs_ethercatservo_compress = """
     struct pull_history_pvt_steps
     {
         uint64_t first_clock;
@@ -43,44 +85,44 @@ defs_pvtcompress = """
         double start_position;
         double velocity;
     };
-    struct pvtcompress *pvtcompress_alloc(uint32_t oid);
-    void pvtcompress_free(struct pvtcompress *sc);
-    uint32_t pvtcompress_get_oid(struct pvtcompress *sc);
-    void pvtcompress_append(struct pvtcompress *sc, struct pose *pose, double move_time);
-    int pvtcompress_reset(struct pvtcompress *sc, uint64_t last_step_clock);
-    int pvtcompress_set_last_position(struct pvtcompress *sc, uint64_t clock, double last_position);
-    double pvtcompress_find_past_position(struct pvtcompress *sc, uint64_t clock);
-    int pvtcompress_queue_msg(struct pvtcompress *sc, uint32_t *data, int len);
-    int pvtcompress_extract_old(struct pvtcompress *sc,
+    struct ethercatservo_compress *ethercatservo_compress_alloc(uint32_t oid, double position_scaling, double velocity_scaling);
+    void ethercatservo_compress_free(struct ethercatservo_compress *sc);
+    uint32_t ethercatservo_compress_get_oid(struct ethercatservo_compress *sc);
+    void ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *pose, double move_time);
+    int ethercatservo_compress_reset(struct ethercatservo_compress *sc, uint64_t last_step_clock);
+    double ethercatservo_compress_set_last_position(struct ethercatservo_compress *sc, uint64_t clock, int32_t last_position);
+    double ethercatservo_compress_find_past_position(struct ethercatservo_compress *sc, uint64_t clock);
+    int ethercatservo_compress_extract_old(struct ethercatservo_compress *sc,
                                 struct pull_history_pvt_steps *p,
                                 int max,
                                 uint64_t start_clock,
                                 uint64_t end_clock);
-    struct drivesync *drivesync_alloc(struct ethcatqueue *sq,
-                                      struct pvtcompress **sc_list,
+    struct drivesync *drivesync_alloc(struct ethercatqueue *sq,
+                                      struct ethercatservo_compress **sc_list,
                                       int sc_num,
                                       int move_num);
     void drivesync_free(struct drivesync *ss);
     void drivesync_set_time(struct drivesync *ss, double time_offset, double mcu_freq);
-    int drivesync_flush(struct drivesync *ss, uint64_t move_clock);
+    int drivesync_flush(struct drivesync *ss, uint64_t move_clock, uint64_t clear_history_clock);
 """
 
-defs_pvtsolve = """
-    int32_t pvtsolve_generate_steps(struct drive_kinematics *sk, double flush_time);
-    double pvtsolve_check_active(struct drive_kinematics *sk, double flush_time);
-    int32_t pvtsolve_is_active_axis(struct drive_kinematics *sk, char axis);
-    void pvtsolve_set_trapq(struct drive_kinematics *sk, struct trapq *tq);
-    void pvtsolve_set_pvtcompress(struct drive_kinematics *sk, struct pvtcompress *sc, double simtime);
-    double pvtsolve_calc_position_from_coord(struct drive_kinematics *sk, double x, double y, double z);
-    void pvtsolve_set_position(struct drive_kinematics *sk, double x, double y, double z);
-    double pvtsolve_get_commanded_pos(struct drive_kinematics *sk);
+defs_ethercatservo_solve = """
+    int32_t ethercatservo_solve_generate_steps(struct drive_kinematics *sk, double flush_time);
+    double ethercatservo_solve_check_active(struct drive_kinematics *sk, double flush_time);
+    int32_t ethercatservo_solve_is_active_axis(struct drive_kinematics *sk, char axis);
+    void ethercatservo_solve_set_trapq(struct drive_kinematics *sk, struct trapq *tq);
+    void ethercatservo_solve_set_ethercatservo_compress(struct drive_kinematics *sk, struct ethercatservo_compress *sc, double simtime);
+    double ethercatservo_solve_calc_position_from_coord(struct drive_kinematics *sk, double x, double y, double z);
+    void ethercatservo_solve_set_position(struct drive_kinematics *sk, double x, double y, double z);
+    double ethercatservo_solve_get_commanded_pos(struct drive_kinematics *sk);
 """
 
 defs_kin_hash = """
     struct drive_kinematics *hash_drive_alloc(char axis);
+    struct serialservo_kinematics *hash_serialservo_alloc(char axis);
 """
 
-defs_ethcatqueue = """
+defs_ethercatqueue = """
     typedef struct
     {
         uint16_t alias;
@@ -104,54 +146,53 @@ defs_ethcatqueue = """
         unsigned int n_entries;
         ec_pdo_entry_info_t *entries;
     } ec_pdo_info_t;
-    void ethcatqueue_slave_config(struct ethcatqueue *sq,
-                              uint8_t index,
-                              uint16_t alias,
-                              uint16_t position,
-                              uint32_t vendor_id,
-                              uint32_t product_code,
-                              uint16_t assign_activate,
-                              double sync0_st,
-                              double sync1_st);
-    void ethcatqueue_slave_config_pdos(struct ethcatqueue *sq,
-                                    uint8_t slave_index,
-                                    uint8_t sync_index,
-                                    uint8_t direction,
-                                    uint8_t n_pdo_entries,
-                                    ec_pdo_entry_info_t *pdo_entries,
-                                    uint8_t n_pdos,
-                                    ec_pdo_info_t *pdos);
-    void ethcatqueue_master_config(struct ethcatqueue *sq,
-                                   double sync0_ct,
-                                   double sync1_ct);
-    void ethcatqueue_master_config_registers(struct ethcatqueue *sq,
-                                            uint8_t index,
-                                            uint8_t n_registers,
-                                            ec_pdo_entry_reg_t *registers);
-    struct ethcatqueue *ethcatqueue_alloc(void);
-    int ethcatqueue_init(struct ethcatqueue *sq);
-    void ethcatqueue_exit(struct ethcatqueue *sq);
-    void ethcatqueue_free(struct ethcatqueue *sq);
-    struct command_queue *ethcatqueue_alloc_commandqueue(void);
-    void ethcatqueue_free_commandqueue(struct command_queue *cq);
-    void ethcatqueue_send_command(struct ethcatqueue *sq,
-                                  uint8_t *msg,
-                                  int len,
-                                  uint64_t min_clock,
-                                  uint64_t req_clock,
-                                  uint64_t notify_id);
-    void ethcatqueue_send_batch(struct ethcatqueue *sq,
-                                struct command_queue *cq,
-                                struct list_head *msgs);
-    void ethcatqueue_pull(struct ethcatqueue *sq, struct pull_queue_message *pqm);
-    void ethcatqueue_set_wire_frequency(struct ethcatqueue *sq, double frequency);
-    void ethcatqueue_set_clock_est(struct ethcatqueue *sq,
-                                   double est_freq,
-                                   double conv_time,
-                                   uint64_t conv_clock,
-                                   uint64_t last_clock);
-    void ethcatqueue_get_clock_est(struct ethcatqueue *sq, struct clock_estimate *ce);
-    void ethcatqueue_get_stats(struct ethcatqueue *sq, char *buf, int len);
+    void ethercatqueue_config_cpu(struct ethercatqueue *sq, int cpu);
+    void ethercatqueue_slave_config(struct ethercatqueue *sq,
+                                    uint8_t index,
+                                    uint16_t alias,
+                                    uint16_t position,
+                                    uint32_t vendor_id,
+                                    uint32_t product_code,
+                                    uint16_t assign_activate,
+                                    uint8_t rx_size,
+                                    uint8_t interpolation_window);
+    void ethercatqueue_slave_config_sync(struct ethercatqueue *sq,
+                                         uint8_t slave_index,
+                                         uint8_t sync_index,
+                                         uint8_t direction,
+                                         uint8_t n_pdo_entries,
+                                         ec_pdo_entry_info_t *pdo_entries,
+                                         uint8_t n_pdos,
+                                         ec_pdo_info_t *pdos);
+    void ethercatqueue_master_config(struct ethercatqueue *sq,
+                                     double sync0_ct,
+                                     double sync0_st,
+                                     double sync1_ct,
+                                     double sync1_st,
+                                     double frame_time);
+    void ethercatqueue_master_config_registers(struct ethercatqueue *sq,
+                                               uint8_t index,
+                                               uint8_t n_registers,
+                                               ec_pdo_entry_reg_t *registers);
+    struct ethercatqueue *ethercatqueue_get(void);
+    int ethercatqueue_init(struct ethercatqueue *sq);
+    void ethercatqueue_exit(struct ethercatqueue *sq);
+    void ethercatqueue_free(struct ethercatqueue *sq);
+    void ethercatqueue_send_command(struct ethercatqueue *sq,
+                                    uint8_t *msg,
+                                    int len,
+                                    uint64_t min_clock,
+                                    uint64_t req_clock,
+                                    uint64_t notify_id);
+    void ethercatqueue_send_batch(struct ethercatqueue *sq,
+                                  struct list_head *msgs);
+    void ethercatqueue_pull(struct ethercatqueue *sq, struct pull_queue_message *pqm);
+    void ethercatqueue_set_clock_est(struct ethercatqueue *sq,
+                                     double est_freq,
+                                     double conv_time,
+                                     uint64_t conv_clock,
+                                     uint64_t last_clock);
+    void ethercatqueue_get_stats(struct ethercatqueue *sq, char *buf, int len);
 """
 
 defs_stepcompress = """
@@ -343,7 +384,8 @@ defs_std = """
 """
 
 defs_all = [
-    defs_pvtcompress, defs_pvtsolve, defs_kin_hash, defs_ethcatqueue,
+    defs_serialservo_compress, defs_serialservo_solve,
+    defs_ethercatservo_compress, defs_ethercatservo_solve, defs_kin_hash, defs_ethercatqueue,
     defs_pyhelper, defs_serialqueue, defs_std, defs_stepcompress,
     defs_itersolve, defs_trapq, defs_trdispatch,
     defs_kin_cartesian, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
@@ -386,6 +428,8 @@ def do_build_code(cmd):
         msg = "Unable to build C code module (error=%s)" % (res,)
         logging.error(msg)
         raise Exception(msg)
+    else:
+        logging.info("Compilation successful for command: %s", cmd)
 
 FFI_main = None
 FFI_lib = None

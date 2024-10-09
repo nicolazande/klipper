@@ -5,14 +5,14 @@
  * 
  */
 
-
 /****************************************************************
  * Includes
  ****************************************************************/
 #include <stdlib.h> // malloc
 #include <string.h> // memset
 #include "compiler.h" // __visible
-#include "pvtsolve.h" // struct drive_kinematics
+#include "ethercatservo_solve.h" // struct drive_kinematics
+#include "serialservo_solve.h" // struct serialservo_kinematics
 #include "pyhelper.h" // errorf
 #include "trapq.h" // move_get_coord
 
@@ -21,7 +21,7 @@
  * Private functions
  ****************************************************************/
 /** velocity step update helper */
-static double
+static inline double
 move_get_velocity(struct move *m, double move_time)
 {
     return (m->start_v + 2 * m->half_accel * move_time);
@@ -29,33 +29,33 @@ move_get_velocity(struct move *m, double move_time)
 
 /** forward kinematics for x axis */
 static struct pose
-x_axis_forward_kinematics(struct drive_kinematics *sk, struct move *m, double move_time)
+x_axis_forward_kinematics(struct move *m, double move_time)
 {
     struct pose pose;
     pose.position = move_get_coord(m, move_time).x;
-    pose.velocity = move_get_velocity(m, move_time);
+    pose.velocity = move_get_velocity(m, move_time) * m->axes_r.x;
     pose.time = m->print_time + move_time;
     return pose;
 }
 
 /** forward kinematics for y axis */
 static struct pose
-y_axis_forward_kinematics(struct drive_kinematics *sk, struct move *m, double move_time)
+y_axis_forward_kinematics(struct move *m, double move_time)
 {
     struct pose pose;
     pose.position = move_get_coord(m, move_time).y;
-    pose.velocity = move_get_velocity(m, move_time);
+    pose.velocity = move_get_velocity(m, move_time) * m->axes_r.y;
     pose.time = m->print_time + move_time;
     return pose;
 }
 
 /** forward kinematics for z axis */
 static struct pose
-z_axis_forward_kinematics(struct drive_kinematics *sk, struct move *m, double move_time)
+z_axis_forward_kinematics(struct move *m, double move_time)
 {
     struct pose pose;
     pose.position = move_get_coord(m, move_time).z;
-    pose.velocity = move_get_velocity(m, move_time);
+    pose.velocity = move_get_velocity(m, move_time) * m->axes_r.z;
     pose.time = m->print_time + move_time;
     return pose;
 }
@@ -92,4 +92,31 @@ hash_drive_alloc(char axis)
     return sk;
 }
 
+/** allocate serialservo kinematics object and associate specific callback */
+struct serialservo_kinematics * __visible
+hash_serialservo_alloc(char axis)
+{
+    /* create kinematic structure */
+    struct serialservo_kinematics *sk = malloc(sizeof(*sk));
+    memset(sk, 0, sizeof(*sk));
+
+    /* associate axis callbacks at runtime */
+    if (axis == 'x')
+    {
+        sk->kinematics_cb = x_axis_forward_kinematics;
+        sk->active_flags = AF_X;
+    }
+    else if (axis == 'y')
+    {
+        sk->kinematics_cb = y_axis_forward_kinematics;
+        sk->active_flags = AF_Y;
+    }
+    else if (axis == 'z')
+    {
+        sk->kinematics_cb = z_axis_forward_kinematics;
+        sk->active_flags = AF_Z;
+    }
+    
+    return sk;
+}
 

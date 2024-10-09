@@ -1,0 +1,502 @@
+{
+    "slaves": [
+		{
+			"name" : "ethercatservo_x",
+			"alias": 0,
+			"position": 3,
+			"vendor_id": 171,
+			"product_code": 4176,
+			"assign_activate" : 0,
+			"rx_size" : 32,
+			"interpolation_window" : 4,
+			"syncs" : [
+				{
+					"index" : 0,
+					"direction" : 1,
+					"pdos" : [],
+					"pdo_entries": []
+            	},
+				{
+					"index" : 1,
+					"direction" : 2,
+					"pdos" : [],
+					"pdo_entries": []
+            	},
+				{
+					"index" : 2,
+					"direction" : 1,
+					"pdos" : [
+						{
+							"index": 5632,
+							"n_entries": 6,
+							"entries": 0
+						}
+					],
+					"pdo_entries": [
+						{ 
+							"name" : "ip move segment command",
+							"index": 8208,
+							"subindex": 0,
+							"bit_length": 64
+						},
+						{
+							"name" : "control word",
+							"index": 24640,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "mode of operation",
+							"index": 24672,
+							"subindex": 0,
+							"bit_length": 8
+						},
+						{ 
+							"name" : "ip move segment command",
+							"index": 10256,
+							"subindex": 0,
+							"bit_length": 64
+						},
+						{
+							"name" : "control word",
+							"index": 26688,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "mode of operation",
+							"index": 26720,
+							"subindex": 0,
+							"bit_length": 8
+						}
+					]
+            	},
+				{
+					"index" : 3,
+					"direction" : 2,
+					"pdos" : [
+						{
+							"index": 6656,
+							"n_entries": 6,
+							"entries": 0
+						},
+						{
+							"index": 6657,
+							"n_entries": 4,
+							"entries": 0
+						}
+					],
+					"pdo_entries": [
+						{
+							"name" : "trajectory buffer free count",
+							"index": 8209,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "trajectory buffer status",
+							"index": 8210,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "status word",
+							"index": 24641,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "position actual",
+							"index": 24676,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "velocity actual",
+							"index": 24684,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "trajectory buffer free count",
+							"index": 10257,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "trajectory buffer status",
+							"index": 10258,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "status word",
+							"index": 26689,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "position actual",
+							"index": 26724,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "velocity actual",
+							"index": 26732,
+							"subindex": 0,
+							"bit_length": 32
+						}
+					]
+				}
+        	]
+    	},
+    	{
+			"name" : "ethercatservo_y",
+			"alias": 0,
+			"position": 3,
+			"vendor_id": 171,
+			"product_code": 4176,
+			"assign_activate" : 0,
+			"rx_size" : 32,
+			"interpolation_window" : 4,
+			"syncs" : [
+				{
+					"index" : 0,
+					"direction" : 1,
+					"pdos" : [],
+					"pdo_entries": []
+            	},
+				{
+					"index" : 1,
+					"direction" : 2,
+					"pdos" : [],
+					"pdo_entries": []
+            	},
+				{
+					"index" : 2,
+					"direction" : 1,
+					"pdos" : [
+						{
+							"index": 5632,
+							"n_entries": 6,
+							"entries": 0
+						}
+					],
+					"pdo_entries": [
+						{ 
+							"name" : "ip move segment command",
+							"index": 8208,
+							"subindex": 0,
+							"bit_length": 64
+						},
+						{
+							"name" : "control word",
+							"index": 24640,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "mode of operation",
+							"index": 24672,
+							"subindex": 0,
+							"bit_length": 8
+						},
+						{ 
+							"name" : "ip move segment command",
+							"index": 10256,
+							"subindex": 0,
+							"bit_length": 64
+						},
+						{
+							"name" : "control word",
+							"index": 26688,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "mode of operation",
+							"index": 26720,
+							"subindex": 0,
+							"bit_length": 8
+						}
+					]
+            	},
+				{
+					"index" : 3,
+					"direction" : 2,
+					"pdos" : [
+						{
+							"index": 6656,
+							"n_entries": 6,
+							"entries": 0
+						},
+						{
+							"index": 6657,
+							"n_entries": 4,
+							"entries": 0
+						}
+					],
+					"pdo_entries": [
+						{
+							"name" : "trajectory buffer free count",
+							"index": 8209,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "trajectory buffer status",
+							"index": 8210,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "status word",
+							"index": 24641,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "position actual",
+							"index": 24676,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "velocity actual",
+							"index": 24684,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "trajectory buffer free count",
+							"index": 10257,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "trajectory buffer status",
+							"index": 10258,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "status word",
+							"index": 26689,
+							"subindex": 0,
+							"bit_length": 16
+						},
+						{
+							"name" : "position actual",
+							"index": 26724,
+							"subindex": 0,
+							"bit_length": 32
+						},
+						{
+							"name" : "velocity actual",
+							"index": 26732,
+							"subindex": 0,
+							"bit_length": 32
+						}
+					]
+				}
+        	]
+    	}
+    ],
+	"master" :
+	{
+		"sync0_ct" : 0.01,
+		"sync0_st" : 0.001,
+		"sync1_ct" : 0,
+		"sync1_st" : 0,
+		"frame_time" : 0.000,
+		"domains" : [
+			{
+				"type" : "base",
+				"registers" : [
+					{
+						"name" : "ip move segment command",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 8208,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer free count",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 8209,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer status",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 8210,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "control word",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 24640,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "status word",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 24641,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "mode of operation",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 24672,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "position actual",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 24676,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "velocity actual",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 24684,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "ip move segment command",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 10256,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer free count",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 10257,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "trajectory buffer status",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 10258,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "control word",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 26688,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "status word",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 26689,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "mode of operation",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 26720,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "position actual",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 26724,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					},
+					{
+						"name" : "velocity actual",
+						"alias": 0,
+						"position": 3,
+						"vendor_id": 171,
+						"product_code": 4176,
+						"index" : 26732,
+						"subindex" : 0,
+						"offset" : 0,
+						"bit_position" : 0
+					}
+				]
+			}
+		]
+	},
+	"hardware" :
+	{
+		"cpu" : 1
+	}
+}
+

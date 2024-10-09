@@ -69,7 +69,9 @@ spi_software_transfer(struct spi_software *ss, uint8_t receive_data
         }
 
         if (receive_data)
+        {
             *data = inbuf;
+        }
         data++;
     }
 }
