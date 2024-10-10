@@ -35,6 +35,11 @@
 #define PID_VELOCITY_ACTUAL 0x6A
 #define PID_POSITION_ACTUAL 0x6B
 
+#define ABN_DECODER_COUNT 0x27
+#define PHI_E_SELECTION 0x52
+#define VELOCITY_SELECTION 0x50
+#define MODE_RAMP_MODE_MOTION 0x63
+
 
 /****************************************************************
  * Defines
@@ -319,8 +324,13 @@ void command_config_serialservo_spi(uint32_t *args)
     d->spi = spidev_oid_lookup(args[1]);
     d->chain_len = args[2];
     d->chain_pos = args[3];
-    output("chain len = %u, chain pos = %u",
-    d->chain_len, d->chain_pos);
+    /* reset encoder count */
+    reg_write(d->spi, ABN_DECODER_COUNT, 0);
+    /* witch to feedback control mode */
+    reg_write(d->spi, PHI_E_SELECTION, 0x3);
+    reg_write(d->spi, VELOCITY_SELECTION, 0x9);
+    /* witch to position mode for closed-loop control */
+    reg_write(d->spi, MODE_RAMP_MODE_MOTION, 0x3);
 }
 DECL_COMMAND(command_config_serialservo_spi, "config_serialservo_spi oid=%c spi_oid=%c chain_len=%c chain_pos=%c");
 

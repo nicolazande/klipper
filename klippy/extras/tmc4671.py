@@ -9,85 +9,240 @@ TMC_FREQUENCY = 25000000.
 
 # TMC4671 registers
 Registers = {
-    "CHIPINFO_DATA": 0x00,
-    "CHIPINFO_ADDR": 0x01,
-    "MOTOR_TYPE_N_POLE_PAIRS": 0x1B,
-    "PID_TORQUE_P_TORQUE_I": 0x56,
-    "PID_VELOCITY_P_VELOCITY_I": 0x58,
-    "PID_POSITION_P_POSITION_I": 0x5A,
-    "MODE_RAMP_MODE_MOTION": 0x63,
-    "PID_TORQUE_FLUX_TARGET": 0x64,
-    "PID_VELOCITY_TARGET": 0x66,
-    "PID_POSITION_TARGET": 0x68,
-    "PID_VELOCITY_ACTUAL": 0x6A,
-    "PID_POSITION_ACTUAL": 0x6B,
-    "STATUS_FLAGS": 0x7C,
-    "STATUS_MASK": 0x7D,
+    "CHIPINFO_DATA" : 0x00,
+    "CHIPINFO_ADDR" : 0x01,
+    "ADC_RAW_DATA" : 0x02,
+    "ADC_RAW_ADDR" : 0x03,
+    "dsADC_MCFG_B_MCFG_A" : 0x04,
+    "dsADC_MCLK_A" : 0x05,
+    "dsADC_MCLK_B" : 0x06,
+    "dsADC_MDEC_B_MDEC_A" : 0x07,
+    "ADC_I1_SCALE_OFFSET" : 0x08,
+    "ADC_I0_SCALE_OFFSET" : 0x09,
+    "ADC_I_SELECT" : 0x0A,
+    "ADC_I1_I0_EXT" : 0x0B,
+    "DS_ANALOG_INPUT_STAGE_CFG" : 0x0C,
+    "AENC_0_SCALE_OFFSET" : 0x0D,
+    "AENC_1_SCALE_OFFSET" : 0x0E,
+    "AENC_2_SCALE_OFFSET" : 0x0F,
+    "AENC_SELECT" : 0x11,
+    "ADC_IWY_IUX" : 0x12,
+    "ADC_IV" : 0x13,
+    "AENC_WY_UX" : 0x15,
+    "AENC_VN" : 0x16,
+    "PWM_POLARITIES" : 0x17,
+    "PWM_MAXCNT" : 0x18,
+    "PWM_BBM_H_BBM_L" : 0x19,
+    "PWM_SV_CHOP" : 0x1A,
+    "MOTOR_TYPE_N_POLE_PAIRS" : 0x1B,
+    "PHI_E_EXT" : 0x1C,
+    "OPENLOOP_MODE" : 0x1F,
+    "OPENLOOP_ACCELERATION" : 0x20,
+    "OPENLOOP_VELOCITY_TARGET" : 0x21,
+    "OPENLOOP_VELOCITY_ACTUAL" : 0x22,
+    "UQ_UD_EXT" : 0x24,
+    "ABN_DECODER_MODE" : 0x25,
+    "ABN_DECODER_PPR" : 0x26,
+    "ABN_DECODER_COUNT" : 0x27,
+    "ABN_DECODER_COUNT_N" : 0x28,
+    "ABN_DECODER_PHI_E_PHI_M_OFFSET" : 0x29,
+    "ABN_DECODER_PHI_E_PHI_M" : 0x2A,
+    "ABN_2_DECODER_MODE" : 0x2C,
+    "ABN_2_DECODER_PPR" : 0x2D,
+    "ABN_2_DECODER_COUNT" : 0x2E,
+    "ABN_2_DECODER_COUNT_N" : 0x2F,
+    "ABN_2_DECODER_PHI_M_OFFSET" : 0x30,
+    "ABN_2_DECODER_PHI_M" : 0x31,
+    "HALL_MODE" : 0x33,
+    "HALL_POSITION_060_000" : 0x34,
+    "HALL_POSITION_180_120" : 0x35,
+    "HALL_POSITION_300_240" : 0x36,
+    "HALL_PHI_E_PHI_M_OFFSET" : 0x37,
+    "HALL_DPHI_MAX" : 0x38,
+    "HALL_PHI_E_INTERPOLATED_PHI_E" : 0x39,
+    "HALL_PHI_M" : 0x3A,
+    "AENC_DECODER_MODE" : 0x3B,
+    "AENC_DECODER_N_THRESHOLD" : 0x3C,
+    "AENC_DECODER_PHI_A_RAW" : 0x3D,
+    "AENC_DECODER_PHI_A_OFFSET" : 0x3E,
+    "AENC_DECODER_PHI_A" : 0x3F,
+    "AENC_DECODER_PPR" : 0x40,
+    "AENC_DECODER_COUNT" : 0x41,
+    "AENC_DECODER_COUNT_N" : 0x42,
+    "AENC_DECODER_PHI_E_PHI_M_OFFSET" : 0x45,
+    "AENC_DECODER_PHI_E_PHI_M" : 0x46,
+    "CONFIG_DATA" : 0x4D,
+    "CONFIG_ADDR" : 0x4E,
+    "VELOCITY_SELECTION" : 0x50,
+    "POSITION_SELECTION" : 0x51,
+    "PHI_E_SELECTION" : 0x52,
+    "PHI_E" : 0x53,
+    "PID_FLUX_P_FLUX_I" : 0x54,
+    "PID_TORQUE_P_TORQUE_I" : 0x56,
+    "PID_VELOCITY_P_VELOCITY_I" : 0x58,
+    "PID_POSITION_P_POSITION_I" : 0x5A,
+    "PIDOUT_UQ_UD_LIMITS" : 0x5D,
+    "PID_TORQUE_FLUX_LIMITS" : 0x5E,
+    "PID_VELOCITY_LIMIT" : 0x60,
+    "PID_POSITION_LIMIT_LOW" : 0x61,
+    "PID_POSITION_LIMIT_HIGH" : 0x62,
+    "MODE_RAMP_MODE_MOTION" : 0x63,
+    "PID_TORQUE_FLUX_TARGET" : 0x64,
+    "PID_TORQUE_FLUX_OFFSET" : 0x65,
+    "PID_VELOCITY_TARGET" : 0x66,
+    "PID_VELOCITY_OFFSET" : 0x67,
+    "PID_POSITION_TARGET" : 0x68,
+    "PID_TORQUE_FLUX_ACTUAL" : 0x69,
+    "PID_VELOCITY_ACTUAL" : 0x6A,
+    "PID_POSITION_ACTUAL" : 0x6B,
+    "PID_ERROR_DATA" : 0x6C,
+    "PID_ERROR_ADDR" : 0x6D,
+    "INTERIM_DATA" : 0x6E,
+    "INTERIM_ADDR" : 0x6F,
+    "ADC_VM_LIMITS" : 0x75,
+    "TMC4671_INPUTS_RAW" : 0x76,
+    "TMC4671_OUTPUTS_RAW" : 0x77,
+    "STEP_WIDTH" : 0x78,
+    "UART_BPS" : 0x79,
+    "GPIO_dsADCI_CONFIG" : 0x7B,
+    "STATUS_FLAGS" : 0x7C,
+    "STATUS_MASK" : 0x7D
 }
-
-# read subset registers
-ReadRegisters = [
-    "PID_POSITION_ACTUAL", "PID_VELOCITY_ACTUAL",
-    "PID_VELOCITY_TARGET", "PID_POSITION_TARGET"
-]
 
 # register fields
 Fields = {}
+
+# motor type
+Fields["MOTOR_TYPE_N_POLE_PAIRS"] = {
+    "pole_pairs": 0xffff << 0,
+    "motor_type": 0xffff << 16,
+}
+
+#motion mode
+Fields["MODE_RAMP_MODE_MOTION"] = {
+    "mode_motion": 0xFF << 0,
+    "mode_pid_smpl": 0x7F << 24,
+    "mode_pid_type": 0x01 << 31,
+}
+
+# pwm
+Fields["PWM_POLARITIES"] = {
+    "low_side_gate" : 0x01 << 0,
+    "high_side_gate" : 0x01 << 1,
+}
+Fields["PWM_MAXCNT"] = {
+    "pwm_maxcnt" : 0xfff << 0,
+}
+Fields["PWM_SV_CHOP"] = {
+    "pwm_chomp" : 0xff << 0,
+    "pwm_sv" : 0x01 << 8
+}
+Fields["PWM_BBM_H_BBM_L"] = {
+    "pwm_bbm_l" : 0xff << 0,
+    "pwm_bbm_h" : 0xff << 8,
+}
+
+# adc
+Fields["ADC_I_SELECT"] = {
+    "adc_i0_select": 0xff << 0,
+    "adc_i1_select": 0xff << 8,
+    "adc_i_ux_select" : 0x03 << 24,
+    "adc_i_v_select" : 0x03 << 26,
+    "adc_i_wy_select" : 0x03 << 28,
+}
+Fields["ADC_I0_SCALE_OFFSET"] = {
+    "adc_i0_offset" : 0xffff << 0,
+    "adc_i0_scale" : 0xffff << 16,
+}
+Fields["ADC_I1_SCALE_OFFSET"] = {
+    "adc_i1_offset" : 0xffff << 0,
+    "adc_i1_scale" : 0xffff << 16,
+}
+Fields["dsADC_MDEC_B_MDEC_A"] = {
+    "dsadc_mdec_a" : 0xffff << 0,
+    "dsadc_mdec_b" : 0xffff << 16,
+}
+Fields["dsADC_MCFG_B_MCFG_A"] = {
+    "cfg_dsmodulator_a" : 0x03 << 0,
+    "mclk_polarity_a" : 0x01 << 2,
+    "mdat_polarity_a" : 0x01 << 3,
+    "sel_nclk_mclk_i_a" : 0x01 << 4,
+    "cfg_dsmodulator_b" : 0x03 << 16,
+    "mclk_polarity_b" : 0x01 << 18,
+    "mdat_polarity_b" : 0x01 << 19,
+    "sel_nclk_mclk_i_b" : 0x01 << 20,
+}
+Fields["dsADC_MCLK_A"] = {
+    "dsadc_mclk_a" : 0xffffffff << 0,
+}
+Fields["dsADC_MCLK_B"] = {
+    "dsadc_mclk_b": 0xffffffff << 0,
+}
+
+#encoder
+Fields["ABN_DECODER_MODE"] = {
+    "apol" : 0x01 << 0,
+    "bpol" : 0x01 << 1,
+    "npol" : 0x01 << 2,
+    "use_abn_as_n" : 0x01 << 3,
+    "cln" : 0x01 << 8,
+    "direction" : 0x01 << 12
+}
+Fields["ABN_DECODER_PPR"] = {
+    "abn_decoder_ppr" : 0xffffff << 0,
+}
+Fields["ABN_DECODER_COUNT"] = {
+    "abn_decoder_count" : 0xffffff << 0,
+}
+Fields["ABN_DECODER_PHI_E_PHI_M_OFFSET"] = {
+    "abn_decoder_phi_m_offset" : 0xffff << 0,
+    "abn_decoder_phi_e_offset" : 0xffff << 16,
+}
+Fields["VELOCITY_SELECTION"] = {
+    "velocity_selection" : 0xff << 0,
+    "velocity_meter_selection" : 0xff << 8
+}
+Fields["PHI_E_SELECTION"] = {
+    "phi_e_selection" : 0xff << 0
+}
+Fields["PHI_E_EXT"] = {
+    "phi_e_ext" : 0xffff << 0
+}
+Fields["UQ_UD_EXT"] = {
+    "ud_ext" : 0xffff << 0,
+    "uq_ext" : 0xffff << 16
+}
+
+#limits
+Fields["PID_TORQUE_FLUX_LIMITS"] = {
+    "pid_torque_flux_limits" : 0xffff
+}
+Fields["PID_VELOCITY_LIMIT"] = {
+    "pid_velocity_limit" : 0xffff
+}
+
+#controller
 Fields["PID_POSITION_P_POSITION_I"] = {
-    "kp_position": 0xffff << 16,
     "ki_position": 0xffff << 0,
+    "kp_position": 0xffff << 16,
 }
 Fields["PID_VELOCITY_P_VELOCITY_I"] = {
-    "kp_velocity": 0xffff << 16,
     "ki_velocity": 0xffff << 0,
+    "kp_velocity": 0xffff << 16,
 }
 Fields["PID_TORQUE_P_TORQUE_I"] = {
-    "kp_torque": 0xffff << 16,
     "ki_torque": 0xffff << 0,
+    "kp_torque": 0xffff << 16,
 }
-Fields["MOTOR_TYPE_N_POLE_PAIRS"] = {
-    "motor_type": 0xffff << 16,
-    "pole_pairs": 0xffff << 0,
-}
-Fields["MODE_RAMP_MODE_MOTION"] = {
-    "mode_pid_type": 0x01 << 31,
-    "mode_pid_smpl": 0x7F << 24,
-    "mode_motion": 0xFF << 0,
+Fields["PID_FLUX_P_FLUX_I"] = {
+    "ki_flux" : 0xffff << 0,
+    "kp_flux" : 0xffff << 16
 }
 
-Fields["STATUS_FLAGS"] = {
-    "pid_x_target_limit": 0x01 << 0,
-    "pid_x_errsum_limit": 0x01 << 2,
-    "pid_x_output_limit": 0x01 << 3,
-    "pid_v_target_limit": 0x01 << 4,
-    "pid_v_errsum_limit": 0x01 << 6,
-    "pid_v_output_limit": 0x01 << 7,
-    "pid_id_target_limit": 0x01 << 8,
-    "pid_id_errsum_limit": 0x01 << 10,
-    "pid_id_output_limit": 0x01 << 11,
-    "pid_iq_target_limit": 0x01 << 12,
-    "pid_iq_errsum_limit": 0x01 << 14,
-    "pid_iq_output_limit": 0x01 << 15,
-    "ipark_cirlim_limit_u_d": 0x01 << 16,
-    "ipark_cirlim_limit_u_q": 0x01 << 17,
-    "ipark_cirlim_limit_u_r": 0x01 << 18,
-    "ref_sw_r": 0x01 << 20,
-    "ref_sw_h": 0x01 << 21,
-    "ref_sw_l": 0x01 << 22,
-    "pwm_min": 0x01 << 24,
-    "pwm_max": 0x01 << 25,
-    "adc_i_clipped": 0x01 << 26,
-    "aenc_clipped": 0x01 << 27,
-    "enc_n": 0x01 << 28,
-    "enc_2_n": 0x01 << 29,
-    "aenc_n": 0x01 << 30,   
-}
-
-Fields["STATUS_MASK"] = {
-    "status_mask": 0xffffffff
-}
-
-SignedFields = ["position_target", "velocity_target", "torque_target"]
+SignedFields = [
+    "position_target",
+    "velocity_target",
+    "torque_target"]
 
 FieldFormatters = {
     "position_target": (lambda v: "Position Target: %d" % v),
@@ -447,16 +602,111 @@ class TMC4671:
         # generic command helper
         cmdhelper = TMCCommandHelper(config, self.mcu_tmc, current_helper)
         # setup registers
-        self.fields.set_config_field(config, "motor_type", config.getint('motor_type', 3, minval=1))
-        self.fields.set_config_field(config, "pole_pairs", config.getint('pole_pairs', 1, minval=1)) #7
-        self.fields.set_config_field(config, "kp_position", config.getint('kp_position', 4000)) #3000
-        self.fields.set_config_field(config, "ki_position", config.getint('ki_position', 200)) #100
-        self.fields.set_config_field(config, "kp_velocity", config.getint('kp_velocity', 5000)) #4000
-        self.fields.set_config_field(config, "ki_velocity", config.getint('ki_velocity', 200))
-        self.fields.set_config_field(config, "kp_torque", config.getint('kp_torque', 4000))
-        self.fields.set_config_field(config, "ki_torque", config.getint('ki_torque', 300))
-        self.fields.set_config_field(config, "mode_motion", config.getint('mode_motion', 3)) #position mode
-        self.fields.set_config_field(config, "status_mask", 0xffffffff)
+        #MOTOR_TYPE_N_POLE_PAIRS
+        self.fields.set_config_field(config, "pole_pairs", 4) #four poles
+        self.fields.set_config_field(config, "motor_type", 3) #three phase motor
+        #PWM_POLARITIES
+        self.fields.set_config_field(config, "low_side_gate", 0) #standard polarity
+        self.fields.set_config_field(config, "high_side_gate", 0) #standard polarity
+        #PWM_MAXCNT
+        self.fields.set_config_field(config, "pwm_maxcnt", 0xF9F) #pwm frequency (25kHz)
+        #PWM_BBM_H_BBM_L
+        self.fields.set_config_field(config, "pwm_bbm_l", 0x0A) #low side mosfet dead time (10 ms)
+        self.fields.set_config_field(config, "pwm_bbm_h", 0x0A) #high side mosfet dead time (10 ms)
+        #PWM_SV_CHOP
+        self.fields.set_config_field(config, "pwm_chomp", 0x07) #centered pwm for foc
+        self.fields.set_config_field(config, "pwm_sv", 0x00) #enable space vector modulation
+
+        #ADC_I_SELECT
+        self.fields.set_config_field(config, "adc_i0_select", 0x00) #adc channel ADCSD_I0_RAW
+        self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
+        self.fields.set_config_field(config, "adc_i_ux_select", 0x00) #UX = ADC_I0 (default = 0)
+        self.fields.set_config_field(config, "adc_i_v_select", 0x02) #UX = ADC_I2 (default = 0)
+        self.fields.set_config_field(config, "adc_i_wy_select", 0x01) #WY = ADC_I1 (default = 2)
+
+        #dsADC_MCFG_B_MCFG_A
+        self.fields.set_config_field(config, "cfg_dsmodulator_a", 0x00)
+        self.fields.set_config_field(config, "mclk_polarity_a", 0x00)
+        self.fields.set_config_field(config, "mdat_polarity_a", 0x00)
+        self.fields.set_config_field(config, "sel_nclk_mclk_i_a", 0x01)
+        self.fields.set_config_field(config, "cfg_dsmodulator_b", 0x00)
+        self.fields.set_config_field(config, "mclk_polarity_b", 0x00)
+        self.fields.set_config_field(config, "mdat_polarity_b", 0x00)
+        self.fields.set_config_field(config, "sel_nclk_mclk_i_b", 0x01)
+
+        #dsADC_MCLK_A
+        self.fields.set_config_field(config, "dsadc_mclk_a", 0x20000000)
+        
+        #dsADC_MCLK_B
+        self.fields.set_config_field(config, "dsadc_mclk_b", 0x00)
+
+        #dsADC_MDEC_B_MDEC_A
+        self.fields.set_config_field(config, "dsadc_mdec_a", 0x014E)
+        self.fields.set_config_field(config, "dsadc_mdec_b", 0x014E)
+        
+        #ADC_I0_SCALE_OFFSET
+        self.fields.set_config_field(config, "adc_i0_offset", 0x815B)
+        self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
+        
+        #ADC_I1_SCALE_OFFSET
+        self.fields.set_config_field(config, "adc_i1_offset", 0x81CE)
+        self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
+
+        #ABN_DECODER_MODE
+        self.fields.set_config_field(config, "apol", 0x00)
+        self.fields.set_config_field(config, "bpol", 0x00)
+        self.fields.set_config_field(config, "npol", 0x00)
+        self.fields.set_config_field(config, "use_abn_as_n", 0x00)
+        self.fields.set_config_field(config, "cln", 0x00)
+        self.fields.set_config_field(config, "direction", 0x00)
+
+        #ABN_DECODER_PPR
+        self.fields.set_config_field(config, "abn_decoder_ppr", 0x00001000)
+
+        #ABN_DECODER_COUNT
+        self.fields.set_config_field(config, "abn_decoder_count", 0x00000CAD) #encoder count
+        
+        #ABN_DECODER_PHI_E_PHI_M_OFFSET
+        self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
+        self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
+
+        #PID_TORQUE_FLUX_LIMITS
+        self.fields.set_config_field(config, "pid_torque_flux_limits", 0x00000BB8)
+        
+        #PID_VELOCITY_LIMIT
+        self.fields.set_config_field(config, "pid_velocity_limit", 0x00000064)
+
+        #PID_TORQUE_P_TORQUE_I
+        self.fields.set_config_field(config, "ki_torque", 0x0100)
+        self.fields.set_config_field(config, "kp_torque", 0x0100)
+        
+        #PID_FLUX_P_FLUX_I
+        self.fields.set_config_field(config, "ki_flux", 0x0100)
+        self.fields.set_config_field(config, "kp_flux", 0x0100)
+
+        #PID_VELOCITY_P_VELOCITY_I
+        self.fields.set_config_field(config, "ki_velocity", 0x05DC)
+        self.fields.set_config_field(config, "kp_velocity", 0x2710)
+
+        #PID_POSITION_P_POSITION_I
+        self.fields.set_config_field(config, "ki_position", 0x0002)
+        self.fields.set_config_field(config, "kp_position", 0x000F)
+
+        #MODE_RAMP_MODE_MOTION
+        self.fields.set_config_field(config, "mode_motion", 0x08) #Initialize in open-loop mode
+        self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
+        self.fields.set_config_field(config, "mode_pid_type", 0x00)
+
+        #PHI_E_SELECTION
+        self.fields.set_config_field(config, "phi_e_selection", 0x01)
+
+        #PHI_E_EXT
+        self.fields.set_config_field(config, "phi_e_ext", 0x00)
+
+        #UQ_UD_EXT
+        self.fields.set_config_field(config, "ud_ext", 0x07D0) #initial torque or voltage value
+        self.fields.set_config_field(config, "uq_ext", 0x0000)
+
 
 def load_config_prefix(config):
     '''
