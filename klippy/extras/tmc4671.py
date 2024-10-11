@@ -112,6 +112,11 @@ Registers = {
 # register fields
 Fields = {}
 
+# status flags
+Fields["STATUS_FLAGS"] = {
+    "status_flags" : 0xffffffff
+}
+
 # motor type
 Fields["MOTOR_TYPE_N_POLE_PAIRS"] = {
     "pole_pairs": 0xffff << 0,
@@ -602,6 +607,8 @@ class TMC4671:
         # generic command helper
         cmdhelper = TMCCommandHelper(config, self.mcu_tmc, current_helper)
         # setup registers
+        #STATUS_FLAGS
+        self.fields.set_config_field(config, "status_flags", 0)
         #MOTOR_TYPE_N_POLE_PAIRS
         self.fields.set_config_field(config, "pole_pairs", 4) #four poles
         self.fields.set_config_field(config, "motor_type", 3) #three phase motor
