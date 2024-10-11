@@ -207,6 +207,9 @@ Fields["VELOCITY_SELECTION"] = {
     "velocity_selection" : 0xff << 0,
     "velocity_meter_selection" : 0xff << 8
 }
+Fields["POSITION_SELECTION"] = {
+    "position_selection" : 0xff << 0,
+}
 Fields["PHI_E_SELECTION"] = {
     "phi_e_selection" : 0xff << 0
 }
@@ -685,13 +688,12 @@ class TMC4671:
         self.fields.set_config_field(config, "mode_motion", 0x08) #Initialize in open-loop mode
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x00)
+         #VELOCITY_SELECTION
+        self.fields.set_config_field(config, "velocity_selection", 0x03)
+        #POSITION_SELECTION
+        self.fields.set_config_field(config, "position_selection", 0x03)
         #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", 0x01)
-        #PHI_E_EXT
-        self.fields.set_config_field(config, "phi_e_ext", 0x00)
-        #UQ_UD_EXT
-        self.fields.set_config_field(config, "ud_ext", 0x07D0) #initial torque or voltage value
-        self.fields.set_config_field(config, "uq_ext", 0x0000)
+        self.fields.set_config_field(config, "phi_e_selection", 0x03)
 
 
 def load_config_prefix(config):

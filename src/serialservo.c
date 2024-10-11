@@ -329,8 +329,8 @@ void command_config_serialservo_spi(uint32_t *args)
     /* reset encoder count */
     reg_write(d->spi, ABN_DECODER_COUNT, 0);
     /* witch to feedback control mode */
-    reg_write(d->spi, PHI_E_SELECTION, 0x3);
-    reg_write(d->spi, VELOCITY_SELECTION, 0x9);
+    //reg_write(d->spi, PHI_E_SELECTION, 0x3);
+    //reg_write(d->spi, VELOCITY_SELECTION, 0x9);
     /* witch to position mode for closed-loop control */
     reg_write(d->spi, MODE_RAMP_MODE_MOTION, 0x3);
 }
