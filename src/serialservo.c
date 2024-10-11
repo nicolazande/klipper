@@ -39,7 +39,7 @@
 #define PHI_E_SELECTION 0x52
 #define VELOCITY_SELECTION 0x50
 #define MODE_RAMP_MODE_MOTION 0x63
-
+#define STATUS_FLAGS 0x7C
 
 /****************************************************************
  * Defines
@@ -282,8 +282,10 @@ uint_fast8_t serialservo_event(struct timer *t)
     reg_write(d->spi, PID_POSITION_TARGET, d->current_position);
 
     int32_t position_feedback = (int32_t)reg_read(d->spi, PID_POSITION_ACTUAL);
+    uint32_t status = reg_read(d->spi, STATUS_FLAGS);
 
-    output("==> position (target = %i, feedback = %i)", d->current_position , position_feedback);
+    output("==> position (target = %i, feedback = %i, status = %u)",
+    d->current_position , position_feedback, status);
 
     uint32_t event_time = timer_read_time();
     
