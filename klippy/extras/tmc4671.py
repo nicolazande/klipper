@@ -625,13 +625,13 @@ class TMC4671:
         self.fields.set_config_field(config, "pwm_bbm_h", 0x0A) #high side mosfet dead time (10 ms)
         #PWM_SV_CHOP
         self.fields.set_config_field(config, "pwm_chomp", 0x07) #centered pwm for foc
-        self.fields.set_config_field(config, "pwm_sv", 0x00) #enable space vector modulation
+        self.fields.set_config_field(config, "pwm_sv", 0x01) #enable space vector modulation
         #ADC_I_SELECT
         self.fields.set_config_field(config, "adc_i0_select", 0x00) #adc channel ADCSD_I0_RAW
         self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
         self.fields.set_config_field(config, "adc_i_ux_select", 0x00) #UX = ADC_I0 (default = 0)
-        self.fields.set_config_field(config, "adc_i_v_select", 0x02) #UX = ADC_I2 (default = 0)
-        self.fields.set_config_field(config, "adc_i_wy_select", 0x01) #WY = ADC_I1 (default = 2)
+        self.fields.set_config_field(config, "adc_i_v_select", 0x01) #UX = ADC_I2 (default = 0)
+        self.fields.set_config_field(config, "adc_i_wy_select", 0x02) #WY = ADC_I1 (default = 2)
         #dsADC_MCFG_B_MCFG_A
         self.fields.set_config_field(config, "cfg_dsmodulator_a", 0x00)
         self.fields.set_config_field(config, "mclk_polarity_a", 0x00)
@@ -664,7 +664,7 @@ class TMC4671:
         #ABN_DECODER_PPR
         self.fields.set_config_field(config, "abn_decoder_ppr", 0x00001000)
         #ABN_DECODER_COUNT
-        self.fields.set_config_field(config, "abn_decoder_count", 0x00000CAD) #encoder count
+        self.fields.set_config_field(config, "abn_decoder_count", 0x00) #encoder count
         #ABN_DECODER_PHI_E_PHI_M_OFFSET
         self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
         self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
@@ -685,10 +685,10 @@ class TMC4671:
         self.fields.set_config_field(config, "ki_position", 0x00C8)
         self.fields.set_config_field(config, "kp_position", 0x0FA0)
         #MODE_RAMP_MODE_MOTION
-        self.fields.set_config_field(config, "mode_motion", 0x08) #Initialize in open-loop mode
+        self.fields.set_config_field(config, "mode_motion", 0x03) #Initialize in open-loop mode
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x00)
-         #VELOCITY_SELECTION
+        #VELOCITY_SELECTION
         self.fields.set_config_field(config, "velocity_selection", 0x03)
         #POSITION_SELECTION
         self.fields.set_config_field(config, "position_selection", 0x03)
