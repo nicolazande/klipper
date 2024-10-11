@@ -616,14 +616,12 @@ class TMC4671:
         #PWM_SV_CHOP
         self.fields.set_config_field(config, "pwm_chomp", 0x07) #centered pwm for foc
         self.fields.set_config_field(config, "pwm_sv", 0x00) #enable space vector modulation
-
         #ADC_I_SELECT
         self.fields.set_config_field(config, "adc_i0_select", 0x00) #adc channel ADCSD_I0_RAW
         self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
         self.fields.set_config_field(config, "adc_i_ux_select", 0x00) #UX = ADC_I0 (default = 0)
         self.fields.set_config_field(config, "adc_i_v_select", 0x02) #UX = ADC_I2 (default = 0)
         self.fields.set_config_field(config, "adc_i_wy_select", 0x01) #WY = ADC_I1 (default = 2)
-
         #dsADC_MCFG_B_MCFG_A
         self.fields.set_config_field(config, "cfg_dsmodulator_a", 0x00)
         self.fields.set_config_field(config, "mclk_polarity_a", 0x00)
@@ -633,25 +631,19 @@ class TMC4671:
         self.fields.set_config_field(config, "mclk_polarity_b", 0x00)
         self.fields.set_config_field(config, "mdat_polarity_b", 0x00)
         self.fields.set_config_field(config, "sel_nclk_mclk_i_b", 0x01)
-
         #dsADC_MCLK_A
         self.fields.set_config_field(config, "dsadc_mclk_a", 0x20000000)
-        
         #dsADC_MCLK_B
         self.fields.set_config_field(config, "dsadc_mclk_b", 0x00)
-
         #dsADC_MDEC_B_MDEC_A
         self.fields.set_config_field(config, "dsadc_mdec_a", 0x014E)
         self.fields.set_config_field(config, "dsadc_mdec_b", 0x014E)
-        
         #ADC_I0_SCALE_OFFSET
         self.fields.set_config_field(config, "adc_i0_offset", 0x815B)
         self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
-        
         #ADC_I1_SCALE_OFFSET
         self.fields.set_config_field(config, "adc_i1_offset", 0x81CE)
         self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
-
         #ABN_DECODER_MODE
         self.fields.set_config_field(config, "apol", 0x00)
         self.fields.set_config_field(config, "bpol", 0x00)
@@ -659,50 +651,37 @@ class TMC4671:
         self.fields.set_config_field(config, "use_abn_as_n", 0x00)
         self.fields.set_config_field(config, "cln", 0x00)
         self.fields.set_config_field(config, "direction", 0x00)
-
         #ABN_DECODER_PPR
         self.fields.set_config_field(config, "abn_decoder_ppr", 0x00001000)
-
         #ABN_DECODER_COUNT
         self.fields.set_config_field(config, "abn_decoder_count", 0x00000CAD) #encoder count
-        
         #ABN_DECODER_PHI_E_PHI_M_OFFSET
         self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
         self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
-
         #PID_TORQUE_FLUX_LIMITS
-        self.fields.set_config_field(config, "pid_torque_flux_limits", 0x00000BB8)
-        
+        self.fields.set_config_field(config, "pid_torque_flux_limits", 0x7fff)
         #PID_VELOCITY_LIMIT
-        self.fields.set_config_field(config, "pid_velocity_limit", 0x00000064)
-
+        self.fields.set_config_field(config, "pid_velocity_limit", 0x7fffffff)
         #PID_TORQUE_P_TORQUE_I
-        self.fields.set_config_field(config, "ki_torque", 0x0100)
-        self.fields.set_config_field(config, "kp_torque", 0x0100)
-        
+        self.fields.set_config_field(config, "ki_torque", 0x012C)
+        self.fields.set_config_field(config, "kp_torque", 0x0FA0)
         #PID_FLUX_P_FLUX_I
         self.fields.set_config_field(config, "ki_flux", 0x0100)
         self.fields.set_config_field(config, "kp_flux", 0x0100)
-
         #PID_VELOCITY_P_VELOCITY_I
-        self.fields.set_config_field(config, "ki_velocity", 0x05DC)
-        self.fields.set_config_field(config, "kp_velocity", 0x2710)
-
+        self.fields.set_config_field(config, "ki_velocity", 0x00C8)
+        self.fields.set_config_field(config, "kp_velocity", 0x1388)
         #PID_POSITION_P_POSITION_I
-        self.fields.set_config_field(config, "ki_position", 0x0002)
-        self.fields.set_config_field(config, "kp_position", 0x000F)
-
+        self.fields.set_config_field(config, "ki_position", 0x00C8)
+        self.fields.set_config_field(config, "kp_position", 0x0FA0)
         #MODE_RAMP_MODE_MOTION
         self.fields.set_config_field(config, "mode_motion", 0x08) #Initialize in open-loop mode
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x00)
-
         #PHI_E_SELECTION
         self.fields.set_config_field(config, "phi_e_selection", 0x01)
-
         #PHI_E_EXT
         self.fields.set_config_field(config, "phi_e_ext", 0x00)
-
         #UQ_UD_EXT
         self.fields.set_config_field(config, "ud_ext", 0x07D0) #initial torque or voltage value
         self.fields.set_config_field(config, "uq_ext", 0x0000)
