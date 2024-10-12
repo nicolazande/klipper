@@ -254,7 +254,8 @@ Fields["OPENLOOP_ACCELERATION"] = {
     "openloop_acceleration" : 0xffffffff << 0
 }
 Fields["PID_POSITION_ACTUAL"] = {
-    "pid_position_actual" : 0xffffffff
+    "pid_position_angle" : 0xffff << 0,
+    "pid_position_revolutions" : 0xffff << 16
 }
 
 SignedFields = [
@@ -728,17 +729,18 @@ class TMC4671:
         self.fields.set_config_field(config, "velocity_selection", 0x09)  # Usa velocità da encoder
 
         #ADC_I0_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i0_offset", 0)
+        self.fields.set_config_field(config, "adc_i0_offset", 0xFF000000)
         self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
         #ADC_I1_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i1_offset", 0)
+        self.fields.set_config_field(config, "adc_i1_offset", 0xFF000000)
         self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
 
         # Configurazioni PID per il controllo della posizione
         self.fields.set_config_field(config, "ki_position", 0x0100)
         self.fields.set_config_field(config, "kp_position", 0x2000)
         self.fields.set_config_field(config, "pid_velocity_limit", 0x7fffffff)
-        self.fields.set_config_field(config, "pid_position_actual", 0x00)
+        self.fields.set_config_field(config, "pid_position_angle", 0x00)
+        self.fields.set_config_field(config, "pid_position_revolutions", 0x00)
 
 
 def load_config_prefix(config):
