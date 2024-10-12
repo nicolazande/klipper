@@ -253,6 +253,9 @@ Fields["OPENLOOP_MODE"] = {
 Fields["OPENLOOP_ACCELERATION"] = {
     "openloop_acceleration" : 0xffffffff << 0
 }
+Fields["PID_POSITION_ACTUAL"] = {
+    "pid_position_actual" : 0xffffffff
+}
 
 SignedFields = [
     "position_target",
@@ -714,7 +717,7 @@ class TMC4671:
         self.fields.set_config_field(config, "motor_type", 3)  # Tipo motore (3: BLDC/PMSM)
 
         # Configurazione dell'encoder incrementale
-        self.fields.set_config_field(config, "abn_decoder_ppr", 4000)  # Sostituisci con il valore PPR corretto
+        self.fields.set_config_field(config, "abn_decoder_ppr", 0x1000)  # Sostituisci con il valore PPR corretto
         self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
         self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
         self.fields.set_config_field(config, "phi_e_selection", 0x03)  # Usa encoder per feedback
@@ -728,6 +731,7 @@ class TMC4671:
         self.fields.set_config_field(config, "ki_position", 0x0100)
         self.fields.set_config_field(config, "kp_position", 0x2000)
         self.fields.set_config_field(config, "pid_velocity_limit", 0x7fffffff)
+        self.fields.set_config_field(config, "pid_position_actual", 0x00)
 
 
 def load_config_prefix(config):
