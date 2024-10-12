@@ -727,6 +727,13 @@ class TMC4671:
         self.fields.set_config_field(config, "position_selection", 0x02)  # Abilita posizione tramite PID
         self.fields.set_config_field(config, "velocity_selection", 0x09)  # Usa velocità da encoder
 
+        #ADC_I0_SCALE_OFFSET
+        self.fields.set_config_field(config, "adc_i0_offset", 0xFF000000)
+        self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
+        #ADC_I1_SCALE_OFFSET
+        self.fields.set_config_field(config, "adc_i1_offset", 0xFF000000)
+        self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
+
         # Configurazioni PID per il controllo della posizione
         self.fields.set_config_field(config, "ki_position", 0x0100)
         self.fields.set_config_field(config, "kp_position", 0x2000)
