@@ -40,6 +40,7 @@
 #define VELOCITY_SELECTION 0x50
 #define MODE_RAMP_MODE_MOTION 0x63
 #define STATUS_FLAGS 0x7C
+#define OPENLOOP_VELOCITY_TARGET 0x21
 
 /****************************************************************
  * Defines
@@ -279,7 +280,7 @@ uint_fast8_t serialservo_event(struct timer *t)
     struct serialservo *d = container_of(t, struct serialservo, time);
 
     /* TMC position and velocity setpoint */
-    reg_write(d->spi, PID_POSITION_TARGET, d->current_position);
+    reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_position);
 
     int32_t position_feedback = (int32_t)reg_read(d->spi, PID_POSITION_ACTUAL);
     uint32_t status = reg_read(d->spi, STATUS_FLAGS);
