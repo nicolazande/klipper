@@ -619,6 +619,7 @@ class TMC4671:
         # setup registers
         #STATUS_FLAGS
         self.fields.set_config_field(config, "status_flags", 0)
+        '''
         #MOTOR_TYPE_N_POLE_PAIRS
         self.fields.set_config_field(config, "pole_pairs", 4) #four poles
         self.fields.set_config_field(config, "motor_type", 3) #three phase motor
@@ -707,6 +708,26 @@ class TMC4671:
         #UQ_UD_EXT
         self.fields.set_config_field(config,"ud_ext", 2000)
         self.fields.set_config_field(config,"uq_ext", 0)
+        '''
+        # Configura il controllo del motore in closed-loop usando l'encoder
+        self.fields.set_config_field(config, "pole_pairs", 4)  # Definisci correttamente
+        self.fields.set_config_field(config, "motor_type", 3)  # Tipo motore (3: BLDC/PMSM)
+
+        # Configurazione dell'encoder incrementale
+        self.fields.set_config_field(config, "abn_decoder_ppr", 4000)  # Sostituisci con il valore PPR corretto
+        self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
+        self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
+        self.fields.set_config_field(config, "phi_e_selection", 0x03)  # Usa encoder per feedback
+
+        # Seleziona la modalità closed-loop per controllo di posizione
+        self.fields.set_config_field(config, "mode_motion", 0x03)  # Modalità posizione
+        self.fields.set_config_field(config, "position_selection", 0x02)  # Abilita posizione tramite PID
+        self.fields.set_config_field(config, "velocity_selection", 0x09)  # Usa velocità da encoder
+
+        # Configurazioni PID per il controllo della posizione
+        self.fields.set_config_field(config, "ki_position", 0x0100)
+        self.fields.set_config_field(config, "kp_position", 0x2000)
+        self.fields.set_config_field(config, "pid_velocity_limit", 0x7fffffff)
 
 
 def load_config_prefix(config):
