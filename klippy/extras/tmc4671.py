@@ -623,7 +623,6 @@ class TMC4671:
         # setup registers
         #STATUS_FLAGS
         self.fields.set_config_field(config, "status_flags", 0)
-        
         #MOTOR_TYPE_N_POLE_PAIRS
         self.fields.set_config_field(config, "pole_pairs", 4) #four poles
         self.fields.set_config_field(config, "motor_type", 3) #three phase motor
@@ -705,7 +704,7 @@ class TMC4671:
         #POSITION_SELECTION
         self.fields.set_config_field(config, "position_selection", 0x09)
         #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", 0x03)
+        self.fields.set_config_field(config, "phi_e_selection", 0x05)
         
         self.fields.set_config_field(config,"open_loop_phi_direction", 0)
         self.fields.set_config_field(config,"openloop_acceleration", 100)
