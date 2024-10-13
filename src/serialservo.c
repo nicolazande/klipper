@@ -281,7 +281,7 @@ uint_fast8_t serialservo_event(struct timer *t)
     struct serialservo *d = container_of(t, struct serialservo, time);
 
     /* TMC position and velocity setpoint */
-    reg_write(d->spi, PID_POSITION_TARGET, d->current_position);
+    reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
 
     int32_t position_feedback = (int32_t)reg_read(d->spi, PID_POSITION_ACTUAL);
     int32_t angle = position_feedback & 0xffff;

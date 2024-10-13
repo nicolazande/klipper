@@ -254,7 +254,7 @@ Fields["PID_FLUX_P_FLUX_I"] = {
 }
 
 Fields["OPENLOOP_MODE"] = {
-    "open_loop_phi_direction" : 1 << 12
+    "open_loop_mode" : 0xffffffff << 0
 }
 Fields["OPENLOOP_ACCELERATION"] = {
     "openloop_acceleration" : 0xffffffff << 0
@@ -706,23 +706,17 @@ class TMC4671:
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x00)
         #VELOCITY_SELECTION
-        self.fields.set_config_field(config, "velocity_selection", 0x09)
+        self.fields.set_config_field(config, "velocity_selection", 0x09) #0x09
         #POSITION_SELECTION
-        self.fields.set_config_field(config, "position_selection", 0x09)
+        self.fields.set_config_field(config, "position_selection", 0x09) #0x09
         #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", 0x05)
+        self.fields.set_config_field(config, "phi_e_selection", 0x02) #0x05
         
-        self.fields.set_config_field(config,"open_loop_phi_direction", 0)
+        self.fields.set_config_field(config,"open_loop_mode", 0)
         self.fields.set_config_field(config,"openloop_acceleration", 100)
         #UQ_UD_EXT
         self.fields.set_config_field(config,"ud_ext", 2000)
-        self.fields.set_config_field(config,"uq_ext", 0)
-        
-        self.fields.set_config_field(config, "pid_position_angle", 0x00)
-        self.fields.set_config_field(config, "pid_position_revolutions", 0x00)
-        self.fields.set_config_field(config, "pid_position_limit_low", 0)
-        self.fields.set_config_field(config, "pid_position_limit_high", 10000000000)
-        
+        self.fields.set_config_field(config,"uq_ext", 0)        
 
 
 def load_config_prefix(config):
