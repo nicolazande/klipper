@@ -228,6 +228,12 @@ Fields["PID_TORQUE_FLUX_LIMITS"] = {
 Fields["PID_VELOCITY_LIMIT"] = {
     "pid_velocity_limit" : 0xffff
 }
+Fields["PID_POSITION_LIMIT_LOW"] = {
+    "pid_position_limit_low" : 0xffffffff
+}
+Fields["PID_POSITION_LIMIT_HIGH"] = {
+    "pid_position_limit_high" : 0xffffffff
+}
 
 #controller
 Fields["PID_POSITION_P_POSITION_I"] = {
@@ -714,6 +720,9 @@ class TMC4671:
         
         self.fields.set_config_field(config, "pid_position_angle", 0x00)
         self.fields.set_config_field(config, "pid_position_revolutions", 0x00)
+        self.fields.set_config_field(config, "pid_position_limit_low", -10000000000)
+        self.fields.set_config_field(config, "pid_position_limit_high", 10000000000)
+        
 
 
 def load_config_prefix(config):
