@@ -720,7 +720,7 @@ class TMC4671:
         
         self.fields.set_config_field(config, "pid_position_angle", 0x00)
         self.fields.set_config_field(config, "pid_position_revolutions", 0x00)
-        self.fields.set_config_field(config, "pid_position_limit_low", -10000000000)
+        self.fields.set_config_field(config, "pid_position_limit_low", 0)
         self.fields.set_config_field(config, "pid_position_limit_high", 10000000000)
         
 
