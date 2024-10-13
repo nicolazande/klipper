@@ -623,7 +623,7 @@ class TMC4671:
         # setup registers
         #STATUS_FLAGS
         self.fields.set_config_field(config, "status_flags", 0)
-        '''
+        
         #MOTOR_TYPE_N_POLE_PAIRS
         self.fields.set_config_field(config, "pole_pairs", 4) #four poles
         self.fields.set_config_field(config, "motor_type", 3) #three phase motor
@@ -637,7 +637,7 @@ class TMC4671:
         self.fields.set_config_field(config, "pwm_bbm_h", 0x0A) #high side mosfet dead time (10 ms)
         #PWM_SV_CHOP
         self.fields.set_config_field(config, "pwm_chomp", 0x07) #centered pwm for foc
-        self.fields.set_config_field(config, "pwm_sv", 0x01) #enable space vector modulation
+        self.fields.set_config_field(config, "pwm_sv", 0x00) #enable space vector modulation
         #ADC_I_SELECT
         self.fields.set_config_field(config, "adc_i0_select", 0x00) #adc channel ADCSD_I0_RAW
         self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
@@ -701,44 +701,18 @@ class TMC4671:
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x00)
         #VELOCITY_SELECTION
-        self.fields.set_config_field(config, "velocity_selection", 0x02)
+        self.fields.set_config_field(config, "velocity_selection", 0x09)
         #POSITION_SELECTION
         self.fields.set_config_field(config, "position_selection", 0x02)
         #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", 0x02)
+        self.fields.set_config_field(config, "phi_e_selection", 0x03)
         
         self.fields.set_config_field(config,"open_loop_phi_direction", 0)
         self.fields.set_config_field(config,"openloop_acceleration", 100)
         #UQ_UD_EXT
         self.fields.set_config_field(config,"ud_ext", 2000)
         self.fields.set_config_field(config,"uq_ext", 0)
-        '''
-        # Configura il controllo del motore in closed-loop usando l'encoder
-        self.fields.set_config_field(config, "pole_pairs", 4)  # Definisci correttamente
-        self.fields.set_config_field(config, "motor_type", 3)  # Tipo motore (3: BLDC/PMSM)
-
-        # Configurazione dell'encoder incrementale
-        self.fields.set_config_field(config, "abn_decoder_ppr", 0x1000)  # Sostituisci con il valore PPR corretto
-        self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
-        self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
-        self.fields.set_config_field(config, "phi_e_selection", 0x03)  # Usa encoder per feedback
-
-        # Seleziona la modalità closed-loop per controllo di posizione
-        self.fields.set_config_field(config, "mode_motion", 0x03)  # Modalità posizione
-        self.fields.set_config_field(config, "position_selection", 0x02)  # Abilita posizione tramite PID
-        self.fields.set_config_field(config, "velocity_selection", 0x09)  # Usa velocità da encoder
-
-        #ADC_I0_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i0_offset", 0xFF000000)
-        self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
-        #ADC_I1_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i1_offset", 0xFF000000)
-        self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
-
-        # Configurazioni PID per il controllo della posizione
-        self.fields.set_config_field(config, "ki_position", 0x0100)
-        self.fields.set_config_field(config, "kp_position", 0x2000)
-        self.fields.set_config_field(config, "pid_velocity_limit", 0x7fffffff)
+        
         self.fields.set_config_field(config, "pid_position_angle", 0x00)
         self.fields.set_config_field(config, "pid_position_revolutions", 0x00)
 
