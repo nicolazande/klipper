@@ -696,7 +696,7 @@ class TMC4671:
         self.fields.set_config_field(config, "ki_position", 0x00C8)
         self.fields.set_config_field(config, "kp_position", 0x0FA0)
         #MODE_RAMP_MODE_MOTION
-        self.fields.set_config_field(config, "mode_motion", 0x08) #Initialize in open-loop mode
+        self.fields.set_config_field(config, "mode_motion", 0x03) #Initialize in open-loop mode
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x00)
         #VELOCITY_SELECTION
