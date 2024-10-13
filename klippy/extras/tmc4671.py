@@ -703,7 +703,7 @@ class TMC4671:
         #VELOCITY_SELECTION
         self.fields.set_config_field(config, "velocity_selection", 0x09)
         #POSITION_SELECTION
-        self.fields.set_config_field(config, "position_selection", 0x02)
+        self.fields.set_config_field(config, "position_selection", 0x09)
         #PHI_E_SELECTION
         self.fields.set_config_field(config, "phi_e_selection", 0x03)
         

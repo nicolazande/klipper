@@ -288,8 +288,8 @@ uint_fast8_t serialservo_event(struct timer *t)
     int32_t revolution = (position_feedback >> 1) & 0xffff;
     uint32_t status = reg_read(d->spi, STATUS_FLAGS);
 
-    output("==> position (target = %i, [angle = %i, revolution = %i], status = %u)",
-    d->current_position, angle, revolution, status);
+    output("==> position (target = %i, feedback = %i, status = %u)",
+    d->current_position, position_feedback, status);
 
     uint32_t event_time = timer_read_time();
     
