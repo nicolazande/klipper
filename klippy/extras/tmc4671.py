@@ -116,6 +116,12 @@ Fields = {}
 Fields["STATUS_FLAGS"] = {
     "status_flags" : 0xffffffff
 }
+Fields["TMC4671_INPUTS_RAW"] = {
+    "tmc4671_inputs_raw" : 0xffffffff << 0
+}
+Fields["TMC4671_OUTPUTS_RAW"] = {
+    "tmc4671_outputs_raw" : 0xffffffff << 0
+}
 
 # motor type
 Fields["MOTOR_TYPE_N_POLE_PAIRS"] = {

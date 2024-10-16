@@ -41,6 +41,8 @@
 #define MODE_RAMP_MODE_MOTION 0x63
 #define STATUS_FLAGS 0x7C
 #define OPENLOOP_VELOCITY_TARGET 0x21
+#define TMC4671_INPUTS_RAW 0x76
+#define TMC4671_OUTPUTS_RAW 0x77
 
 
 /****************************************************************
@@ -284,12 +286,11 @@ uint_fast8_t serialservo_event(struct timer *t)
     reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
 
     int32_t position_feedback = (int32_t)reg_read(d->spi, PID_POSITION_ACTUAL);
-    int32_t angle = position_feedback & 0xffff;
-    int32_t revolution = (position_feedback >> 1) & 0xffff;
-    uint32_t status = reg_read(d->spi, STATUS_FLAGS);
+    uint32_t input_status = reg_read(d->spi, TMC4671_INPUTS_RAW);
+    uint32_t output_status = reg_read(d->spi, TMC4671_OUTPUTS_RAW);
 
-    output("==> position (target = %i, feedback = %i, status = %u)",
-    d->current_position, position_feedback, status);
+    output("==> position (target = %i, feedback = %i, input_status = %u, output_status = %u)",
+    d->current_position, position_feedback, input_status, output_status);
 
     uint32_t event_time = timer_read_time();
     
