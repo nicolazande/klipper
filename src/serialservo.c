@@ -16,33 +16,109 @@
 #include "serialservo.h" // drive_event
 #include "trsync.h" // trsync_add_signal
 #include "spicmds.h" // spidev_transfer
-//#include "tmc4671.h" // TMC4671 control functions
 
 
 /****************************************************************
- * Registers
+ * TMC registers
  ****************************************************************/
 #define CHIPINFO_DATA 0x00
 #define CHIPINFO_ADDR 0x01
+#define ADC_RAW_DATA 0x02
+#define ADC_RAW_ADDR 0x03
+#define dsADC_MCFG_B_MCFG_A 0x04
+#define dsADC_MCLK_A 0x05
+#define dsADC_MCLK_B 0x06
+#define dsADC_MDEC_B_MDEC_A 0x07
+#define ADC_I1_SCALE_OFFSET 0x08
+#define ADC_I0_SCALE_OFFSET 0x09
+#define ADC_I_SELECT 0x0A
+#define ADC_I1_I0_EXT 0x0B
+#define DS_ANALOG_INPUT_STAGE_CFG 0x0C
+#define AENC_0_SCALE_OFFSET 0x0D
+#define AENC_1_SCALE_OFFSET 0x0E
+#define AENC_2_SCALE_OFFSET 0x0F
+#define AENC_SELECT 0x11
+#define ADC_IWY_IUX 0x12
+#define ADC_IV 0x13
+#define AENC_WY_UX 0x15
+#define AENC_VN 0x16
+#define PWM_POLARITIES 0x17
+#define PWM_MAXCNT 0x18
+#define PWM_BBM_H_BBM_L 0x19
+#define PWM_SV_CHOP 0x1A
 #define MOTOR_TYPE_N_POLE_PAIRS 0x1B
+#define PHI_E_EXT 0x1C
+#define OPENLOOP_MODE 0x1F
+#define OPENLOOP_ACCELERATION 0x20
+#define OPENLOOP_VELOCITY_TARGET 0x21
+#define OPENLOOP_VELOCITY_ACTUAL 0x22
+#define UQ_UD_EXT 0x24
+#define ABN_DECODER_MODE 0x25
+#define ABN_DECODER_PPR 0x26
+#define ABN_DECODER_COUNT 0x27
+#define ABN_DECODER_COUNT_N 0x28
+#define ABN_DECODER_PHI_E_PHI_M_OFFSET 0x29
+#define ABN_DECODER_PHI_E_PHI_M 0x2A
+#define ABN_2_DECODER_MODE 0x2C
+#define ABN_2_DECODER_PPR 0x2D
+#define ABN_2_DECODER_COUNT 0x2E
+#define ABN_2_DECODER_COUNT_N 0x2F
+#define ABN_2_DECODER_PHI_M_OFFSET 0x30
+#define ABN_2_DECODER_PHI_M 0x31
+#define HALL_MODE 0x33
+#define HALL_POSITION_060_000 0x34
+#define HALL_POSITION_180_120 0x35
+#define HALL_POSITION_300_240 0x36
+#define HALL_PHI_E_PHI_M_OFFSET 0x37
+#define HALL_DPHI_MAX 0x38
+#define HALL_PHI_E_INTERPOLATED_PHI_E 0x39
+#define HALL_PHI_M 0x3A
+#define AENC_DECODER_MODE 0x3B
+#define AENC_DECODER_N_THRESHOLD 0x3C
+#define AENC_DECODER_PHI_A_RAW 0x3D
+#define AENC_DECODER_PHI_A_OFFSET 0x3E
+#define AENC_DECODER_PHI_A 0x3F
+#define AENC_DECODER_PPR 0x40
+#define AENC_DECODER_COUNT 0x41
+#define AENC_DECODER_COUNT_N 0x42
+#define AENC_DECODER_PHI_E_PHI_M_OFFSET 0x45
+#define AENC_DECODER_PHI_E_PHI_M 0x46
+#define CONFIG_DATA 0x4D
+#define CONFIG_ADDR 0x4E
+#define VELOCITY_SELECTION 0x50
+#define POSITION_SELECTION 0x51
+#define PHI_E_SELECTION 0x52
+#define PHI_E 0x53
+#define PID_FLUX_P_FLUX_I 0x54
 #define PID_TORQUE_P_TORQUE_I 0x56
 #define PID_VELOCITY_P_VELOCITY_I 0x58
 #define PID_POSITION_P_POSITION_I 0x5A
+#define PIDOUT_UQ_UD_LIMITS 0x5D
+#define PID_TORQUE_FLUX_LIMITS 0x5E
+#define PID_VELOCITY_LIMIT 0x60
+#define PID_POSITION_LIMIT_LOW 0x61
+#define PID_POSITION_LIMIT_HIGH 0x62
 #define MODE_RAMP_MODE_MOTION 0x63
 #define PID_TORQUE_FLUX_TARGET 0x64
+#define PID_TORQUE_FLUX_OFFSET 0x65
 #define PID_VELOCITY_TARGET 0x66
+#define PID_VELOCITY_OFFSET 0x67
 #define PID_POSITION_TARGET 0x68
+#define PID_TORQUE_FLUX_ACTUAL 0x69
 #define PID_VELOCITY_ACTUAL 0x6A
 #define PID_POSITION_ACTUAL 0x6B
-
-#define ABN_DECODER_COUNT 0x27
-#define PHI_E_SELECTION 0x52
-#define VELOCITY_SELECTION 0x50
-#define MODE_RAMP_MODE_MOTION 0x63
-#define STATUS_FLAGS 0x7C
-#define OPENLOOP_VELOCITY_TARGET 0x21
+#define PID_ERROR_DATA 0x6C
+#define PID_ERROR_ADDR 0x6D
+#define INTERIM_DATA 0x6E
+#define INTERIM_ADDR 0x6F
+#define ADC_VM_LIMITS 0x75
 #define TMC4671_INPUTS_RAW 0x76
 #define TMC4671_OUTPUTS_RAW 0x77
+#define STEP_WIDTH 0x78
+#define UART_BPS 0x79
+#define GPIO_dsADCI_CONFIG 0x7B
+#define STATUS_FLAGS 0x7C
+#define STATUS_MASK 0x7D
 
 
 /****************************************************************
@@ -98,30 +174,14 @@ struct serialservo
 };
 
 
-uint32_t reg_read(struct spidev_s *spi, uint8_t address)
-{
-	/* read data packet */
-	uint8_t msg[5] = {address & 0x7F, 0, 0, 0, 0};
+/****************************************************************
+ * TMC function prototypes
+ ****************************************************************/
+/** read TMC register */
+uint32_t reg_read(struct spidev_s *spi, uint8_t address);
 
-    spidev_transfer(spi, 1, sizeof(msg), msg);
-	
-    return (uint32_t)((msg[1] << 24) | (msg[2] << 16) | (msg[3] << 8) | msg[4]);
-}
-
-void reg_write(struct spidev_s *spi, uint8_t address, int32_t value)
-{
-	/* write data packet */
-	uint8_t msg[5] = 
-    {
-        address | 0x80,
-        (value >> 24) & 0xFF,
-        (value >> 16) & 0xFF,
-        (value >> 8) & 0xFF,
-        value & 0xFF
-    };
-
-	spidev_transfer(spi, 0, sizeof(msg), msg);
-}
+/** write TMC register */
+void reg_write(struct spidev_s *spi, uint8_t address, int32_t value);
 
 
 /****************************************************************
@@ -166,6 +226,35 @@ void command_serialservo_stop_on_trigger(uint32_t *args);
 
 /* shutdown command */
 void serialservo_shutdown(void);
+
+
+/****************************************************************
+ * TMC functions
+ ****************************************************************/
+uint32_t reg_read(struct spidev_s *spi, uint8_t address)
+{
+	/* read data packet */
+	uint8_t msg[5] = {address & 0x7F, 0, 0, 0, 0};
+
+    spidev_transfer(spi, 1, sizeof(msg), msg);
+	
+    return (uint32_t)((msg[1] << 24) | (msg[2] << 16) | (msg[3] << 8) | msg[4]);
+}
+
+void reg_write(struct spidev_s *spi, uint8_t address, int32_t value)
+{
+	/* write data packet */
+	uint8_t msg[5] = 
+    {
+        address | 0x80,
+        (value >> 24) & 0xFF,
+        (value >> 16) & 0xFF,
+        (value >> 8) & 0xFF,
+        value & 0xFF
+    };
+
+	spidev_transfer(spi, 0, sizeof(msg), msg);
+}
 
 
 /****************************************************************
