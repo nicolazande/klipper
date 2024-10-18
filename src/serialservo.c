@@ -178,10 +178,22 @@ struct serialservo
  * TMC function prototypes
  ****************************************************************/
 /** read TMC register */
-uint32_t reg_read(struct spidev_s *spi, uint8_t address);
+uint32_t tmc_reg_read(struct spidev_s *spi, uint8_t address);
 
 /** write TMC register */
-void reg_write(struct spidev_s *spi, uint8_t address, int32_t value);
+void tmc_reg_write(struct spidev_s *spi, uint8_t address, uint32_t value);
+
+/** set tmc pid target position */
+void tmc_set_position(struct serialservo *d, int32_t position);
+
+/** get tmc actual position */
+int32_t tmc_get_position(struct serialservo *d);
+
+/** set tmc pid target velocity */
+void tmc_set_velocity(struct serialservo *d, int32_t velocity);
+
+/** get tmc actual velocity */
+int32_t tmc_get_velocity(struct serialservo *d);
 
 
 /****************************************************************
@@ -231,7 +243,7 @@ void serialservo_shutdown(void);
 /****************************************************************
  * TMC functions
  ****************************************************************/
-uint32_t reg_read(struct spidev_s *spi, uint8_t address)
+uint32_t tmc_reg_read(struct spidev_s *spi, uint8_t address)
 {
 	/* read data packet */
 	uint8_t msg[5] = {address & 0x7F, 0, 0, 0, 0};
@@ -241,7 +253,7 @@ uint32_t reg_read(struct spidev_s *spi, uint8_t address)
     return (uint32_t)((msg[1] << 24) | (msg[2] << 16) | (msg[3] << 8) | msg[4]);
 }
 
-void reg_write(struct spidev_s *spi, uint8_t address, int32_t value)
+void tmc_reg_write(struct spidev_s *spi, uint8_t address, uint32_t value)
 {
 	/* write data packet */
 	uint8_t msg[5] = 
@@ -254,6 +266,26 @@ void reg_write(struct spidev_s *spi, uint8_t address, int32_t value)
     };
 
 	spidev_transfer(spi, 0, sizeof(msg), msg);
+}
+
+void tmc_set_position(struct serialservo *d, int32_t position)
+{
+    tmc_reg_write(d->spi, PID_POSITION_TARGET, (uint32_t)position);
+}
+
+int32_t tmc_get_position(struct serialservo *d)
+{
+    return (int32_t)tmc_reg_read(d->spi, PID_POSITION_ACTUAL);
+}
+
+void tmc_set_velocity(struct serialservo *d, int32_t velocity)
+{
+    tmc_reg_write(d->spi, PID_VELOCITY_TARGET, (uint32_t)velocity);
+}
+
+int32_t tmc_get_velocity(struct serialservo *d)
+{
+    return (int32_t)tmc_reg_read(d->spi, PID_VELOCITY_ACTUAL);
 }
 
 
@@ -302,10 +334,6 @@ serialservo_load_next(struct serialservo *d, uint32_t event_time)
     /* calculate interpolation steps */
     d->interpolation_steps = d->delta_time / d->sampling_time;
     d->count--;
-
-    // output("loaded move: p=%i, v=%i, t=%u, et=%u, dt=%i, s=%u", 
-    //         m->target_position, m->target_velocity, m->time,
-    //         event_time, d->delta_time, d->interpolation_steps);
 
     /* delete move */
     move_free(m);
@@ -372,11 +400,11 @@ uint_fast8_t serialservo_event(struct timer *t)
     struct serialservo *d = container_of(t, struct serialservo, time);
 
     /* TMC position and velocity setpoint */
-    reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
+    tmc_reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
 
-    int32_t position_feedback = (int32_t)reg_read(d->spi, PID_POSITION_ACTUAL);
-    uint32_t input_status = reg_read(d->spi, TMC4671_INPUTS_RAW);
-    uint32_t output_status = reg_read(d->spi, TMC4671_OUTPUTS_RAW);
+    int32_t position_feedback = tmc_get_position(d->spi);
+    uint32_t input_status = tmc_reg_read(d->spi, TMC4671_INPUTS_RAW);
+    uint32_t output_status = tmc_reg_read(d->spi, TMC4671_OUTPUTS_RAW);
 
     output("==> position (target = %i, feedback = %i, input_status = %u, output_status = %u)",
     d->current_position, position_feedback, input_status, output_status);
@@ -421,12 +449,12 @@ void command_config_serialservo_spi(uint32_t *args)
     d->chain_len = args[2];
     d->chain_pos = args[3];
     /* reset encoder count */
-    //reg_write(d->spi, ABN_DECODER_COUNT, 0);
+    //tmc_reg_write(d->spi, ABN_DECODER_COUNT, 0);
     /* witch to feedback control mode */
-    //reg_write(d->spi, PHI_E_SELECTION, 0x3);
-    //reg_write(d->spi, VELOCITY_SELECTION, 0x9);
+    //tmc_reg_write(d->spi, PHI_E_SELECTION, 0x3);
+    //tmc_reg_write(d->spi, VELOCITY_SELECTION, 0x9);
     /* witch to position mode for closed-loop control */
-    //reg_write(d->spi, MODE_RAMP_MODE_MOTION, 0x3);
+    //tmc_reg_write(d->spi, MODE_RAMP_MODE_MOTION, 0x3);
 }
 DECL_COMMAND(command_config_serialservo_spi, "config_serialservo_spi oid=%c spi_oid=%c chain_len=%c chain_pos=%c");
 
