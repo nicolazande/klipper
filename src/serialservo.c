@@ -373,14 +373,13 @@ static void serialservo_stop(struct trsync_signal *tss, uint8_t reason)
     struct serialservo *d = container_of(tss, struct serialservo, stop_signal);
     sched_del_timer(&d->time);
     /** NOTE: important for offset calculation */
-    //d->current_position = tmc4671_read_actual_position();
+    d->current_position = tmc_get_position(d);
     d->target_time = d->start_time = d->time.waketime = 0;
     d->interpolation_steps = d->count = 0;
     d->flags |= DF_NEED_RESET; //stop accepting new moves
 
-    /* stop the motor by setting velocity and torque to zero */
-    // tmc4671_set_target_velocity(0);
-    // tmc4671_set_target_torque(0);
+    /* stop the motor by setting velocity to zero */
+    tmc_set_position(d, 0);
 
     while (!move_queue_empty(&d->mq))
     {
@@ -402,7 +401,7 @@ uint_fast8_t serialservo_event(struct timer *t)
     /* TMC position and velocity setpoint */
     tmc_reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
 
-    int32_t position_feedback = tmc_get_position(d->spi);
+    int32_t position_feedback = tmc_get_position(d);
     uint32_t input_status = tmc_reg_read(d->spi, TMC4671_INPUTS_RAW);
     uint32_t output_status = tmc_reg_read(d->spi, TMC4671_OUTPUTS_RAW);
 
