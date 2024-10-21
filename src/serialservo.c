@@ -373,7 +373,7 @@ static void serialservo_stop(struct trsync_signal *tss, uint8_t reason)
     struct serialservo *d = container_of(tss, struct serialservo, stop_signal);
     sched_del_timer(&d->time);
     /** NOTE: important for offset calculation */
-    d->current_position = tmc_get_position(d);
+    //d->current_position = tmc_get_position(d);
     d->target_time = d->start_time = d->time.waketime = 0;
     d->interpolation_steps = d->count = 0;
     d->flags |= DF_NEED_RESET; //stop accepting new moves
