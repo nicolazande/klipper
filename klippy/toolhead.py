@@ -6,11 +6,11 @@
 import math, logging, importlib
 import mcu, chelper, kinematics.extruder
 
-'''
-Common suffixes: _d is distance (in mm), _v is velocity (in mm/second),
-_v2 is velocity squared (mm^2/s^2), _t is time (in seconds),
-_r is ratio (scalar between 0.0 and 1.0)
-'''
+# Common suffixes: _d is distance (in mm), _v is velocity (in
+#   mm/second), _v2 is velocity squared (mm^2/s^2), _t is time (in
+#   seconds), _r is ratio (scalar between 0.0 and 1.0)
+
+# Class to track each move request
 class Move:
     '''
     Move request.
@@ -29,8 +29,9 @@ class Move:
         # get total move in (x, y, z)
         self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:3]]))
         if move_d < .000000001:
-            # extrude only move
-            self.end_pos = (start_pos[0], start_pos[1], start_pos[2], end_pos[3])
+            # Extrude only move
+            self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
+                            end_pos[3])
             axes_d[0] = axes_d[1] = axes_d[2] = 0.
             self.move_d = move_d = abs(axes_d[3])
             inv_move_d = 0.
@@ -44,15 +45,15 @@ class Move:
         # relative move for (x, y, z, extruder)
         self.axes_r = [d * inv_move_d for d in axes_d]
         self.min_move_t = move_d / velocity
-        '''
-        Junction speeds are tracked in velocity squared. The delta_v2 is the maximum
-        amount of this squared-velocity that can change in this move.
-        '''
+        # Junction speeds are tracked in velocity squared.  The
+        # delta_v2 is the maximum amount of this squared-velocity that
+        # can change in this move.
         self.max_start_v2 = 0.
         self.max_cruise_v2 = velocity**2
         self.delta_v2 = 2.0 * move_d * self.accel
         self.max_smoothed_v2 = 0.
         self.smooth_delta_v2 = 2.0 * move_d * toolhead.max_accel_to_decel
+        self.next_junction_v2 = 999999999.9
 
     def limit_speed(self, speed, accel):
         '''
@@ -65,6 +66,9 @@ class Move:
         self.accel = min(self.accel, accel)
         self.delta_v2 = 2.0 * self.move_d * self.accel
         self.smooth_delta_v2 = min(self.smooth_delta_v2, self.delta_v2)
+
+    def limit_next_junction_speed(self, speed):
+        self.next_junction_v2 = min(self.next_junction_v2, speed**2)
 
     def move_error(self, msg="Move out of range"):
         '''
@@ -80,55 +84,56 @@ class Move:
         '''
         if not self.is_kinematic_move or not prev_move.is_kinematic_move:
             return
-        # allow extruder to calculate its maximum junction
+        # Allow extruder to calculate its maximum junction
         extruder_v2 = self.toolhead.extruder.calc_junction(prev_move, self)
-        # find max velocity using approximated centripetal velocity
+        max_start_v2 = min(extruder_v2, self.max_cruise_v2,
+                           prev_move.max_cruise_v2, prev_move.next_junction_v2,
+                           prev_move.max_start_v2 + prev_move.delta_v2)
+        # Find max velocity using "approximated centripetal velocity"
         axes_r = self.axes_r
         prev_axes_r = prev_move.axes_r
         junction_cos_theta = -(axes_r[0] * prev_axes_r[0]
                                + axes_r[1] * prev_axes_r[1]
                                + axes_r[2] * prev_axes_r[2])
-        if junction_cos_theta > 0.999999:
-            return
-        junction_cos_theta = max(junction_cos_theta, -0.999999)
-        sin_theta_d2 = math.sqrt(0.5*(1.0-junction_cos_theta))
-        R_jd = sin_theta_d2 / (1. - sin_theta_d2)
-        # approximated circle must contact moves no further away than mid-move
-        tan_theta_d2 = sin_theta_d2 / math.sqrt(0.5*(1.0+junction_cos_theta))
-        move_centripetal_v2 = .5 * self.move_d * tan_theta_d2 * self.accel
-        prev_move_centripetal_v2 = (.5 * prev_move.move_d * tan_theta_d2 * prev_move.accel)
-        # apply limits
-        self.max_start_v2 = min(
-            R_jd * self.junction_deviation * self.accel,
-            R_jd * prev_move.junction_deviation * prev_move.accel,
-            move_centripetal_v2, prev_move_centripetal_v2,
-            extruder_v2, self.max_cruise_v2, prev_move.max_cruise_v2,
-            prev_move.max_start_v2 + prev_move.delta_v2)
+        sin_theta_d2 = math.sqrt(max(0.5*(1.0-junction_cos_theta), 0.))
+        cos_theta_d2 = math.sqrt(max(0.5*(1.0+junction_cos_theta), 0.))
+        one_minus_sin_theta_d2 = 1. - sin_theta_d2
+        if one_minus_sin_theta_d2 > 0. and cos_theta_d2 > 0.:
+            R_jd = sin_theta_d2 / one_minus_sin_theta_d2
+            move_jd_v2 = R_jd * self.junction_deviation * self.accel
+            pmove_jd_v2 = R_jd * prev_move.junction_deviation * prev_move.accel
+            # Approximated circle must contact moves no further than mid-move
+            #   centripetal_v2 = .5 * self.move_d * self.accel * tan_theta_d2
+            quarter_tan_theta_d2 = .25 * sin_theta_d2 / cos_theta_d2
+            move_centripetal_v2 = self.delta_v2 * quarter_tan_theta_d2
+            pmove_centripetal_v2 = prev_move.delta_v2 * quarter_tan_theta_d2
+            max_start_v2 = min(max_start_v2, move_jd_v2, pmove_jd_v2,
+                               move_centripetal_v2, pmove_centripetal_v2)
+        # Apply limits
+        self.max_start_v2 = max_start_v2
         self.max_smoothed_v2 = min(
-            self.max_start_v2, prev_move.max_smoothed_v2 + prev_move.smooth_delta_v2)
-        
-    def set_junction(self, start_v2, cruise_v2, end_v2):
+            max_start_v2, prev_move.max_smoothed_v2 + prev_move.smooth_delta_v2)
+
+    def set_junction(self, start_v2, cruise_v2, end_v2, time_decimals = 3):
         '''
         Set move junction time.
         NOTE: the acceleration, cruise and deceleration times are calculated
               with 1ms resolution, so that the trapezoidal queue items can
               be directly processed by the drive.
         '''
-        # time resolution (decimal position)
-        TIME_DECIMALS = 3 #milliseconds
         # determine accel, cruise, and decel portions of the move distance
         half_inv_accel = .5 / self.accel
         accel_d = (cruise_v2 - start_v2) * half_inv_accel
         decel_d = (cruise_v2 - end_v2) * half_inv_accel
         cruise_d = self.move_d - accel_d - decel_d
-        # determine move velocities
+        # Determine move velocities
         self.start_v = start_v = math.sqrt(start_v2)
         self.cruise_v = cruise_v = math.sqrt(cruise_v2)
         self.end_v = end_v = math.sqrt(end_v2)
         # determine time spent in each portion of move
-        self.accel_t = max(round(accel_d / ((start_v + cruise_v) * 0.5), TIME_DECIMALS), 0.)
-        self.cruise_t = max(round(cruise_d / cruise_v, TIME_DECIMALS), 0.)
-        self.decel_t = max(round(decel_d / ((end_v + cruise_v) * 0.5), TIME_DECIMALS), 0.)
+        self.accel_t = max(round(accel_d / ((start_v + cruise_v) * 0.5), time_decimals), 0.)
+        self.cruise_t = max(round(cruise_d / cruise_v, time_decimals), 0.)
+        self.decel_t = max(round(decel_d / ((end_v + cruise_v) * 0.5), time_decimals), 0.)
         # recalculate distance covered after time approximation.
         accel_d = (start_v + cruise_v) * 0.5 * self.accel_t
         cruise_d = cruise_v * self.cruise_t
@@ -169,11 +174,9 @@ class LookAheadQueue:
         update_flush_count = lazy
         queue = self.queue
         flush_count = len(queue)
-        '''
-        Traverse queue from last to first move and determine maximum
-        junction speed assuming the robot comes to a complete stop
-        after the last move.
-        '''
+        # Traverse queue from last to first move and determine maximum
+        # junction speed assuming the robot comes to a complete stop
+        # after the last move.
         delayed = []
         next_end_v2 = next_smoothed_v2 = peak_cruise_v2 = 0.
         for i in range(flush_count-1, -1, -1):
@@ -183,25 +186,24 @@ class LookAheadQueue:
             reachable_smoothed_v2 = next_smoothed_v2 + move.smooth_delta_v2
             smoothed_v2 = min(move.max_smoothed_v2, reachable_smoothed_v2)
             if smoothed_v2 < reachable_smoothed_v2:
-                # it's possible for this move to accelerate
+                # It's possible for this move to accelerate
                 if (smoothed_v2 + move.smooth_delta_v2 > next_smoothed_v2
                     or delayed):
-                    '''
-                    This move can decelerate or this is a full accel move
-                    after a full decel move.
-                    '''
+                    # This move can decelerate or this is a full accel
+                    # move after a full decel move
                     if update_flush_count and peak_cruise_v2:
                         flush_count = i
                         update_flush_count = False
                     peak_cruise_v2 = min(move.max_cruise_v2, (
                         smoothed_v2 + reachable_smoothed_v2) * .5)
                     if delayed:
-                        # propagate peak_cruise_v2 to any delayed moves
+                        # Propagate peak_cruise_v2 to any delayed moves
                         if not update_flush_count and i < flush_count:
                             mc_v2 = peak_cruise_v2
                             for m, ms_v2, me_v2 in reversed(delayed):
                                 mc_v2 = min(mc_v2, ms_v2)
-                                m.set_junction(min(ms_v2, mc_v2), mc_v2, min(me_v2, mc_v2))
+                                m.set_junction(min(ms_v2, mc_v2), mc_v2
+                                               , min(me_v2, mc_v2))
                         del delayed[:]
                 if not update_flush_count and i < flush_count:
                     cruise_v2 = min((start_v2 + reachable_start_v2) * .5
@@ -209,15 +211,15 @@ class LookAheadQueue:
                     move.set_junction(min(start_v2, cruise_v2), cruise_v2
                                       , min(next_end_v2, cruise_v2))
             else:
-                # delay calculating this move until peak_cruise_v2 is known
+                # Delay calculating this move until peak_cruise_v2 is known
                 delayed.append((move, start_v2, next_end_v2))
             next_end_v2 = start_v2
             next_smoothed_v2 = smoothed_v2
         if update_flush_count or not flush_count:
             return
-        # generate step times for all moves ready to be flushed
+        # Generate step times for all moves ready to be flushed
         self.toolhead._process_moves(queue[:flush_count])
-        # remove processed moves from the queue
+        # Remove processed moves from the queue
         del queue[:flush_count]
 
     def add_move(self, move):
@@ -227,7 +229,7 @@ class LookAheadQueue:
         move.calc_junction(self.queue[-2])
         self.junction_flush -= move.min_move_t
         if self.junction_flush <= 0.:
-            # enough moves have been queued to reach the target flush time.
+            # Enough moves have been queued to reach the target flush time.
             self.flush(lazy=True)
 
 
@@ -266,12 +268,20 @@ class ToolHead:
         # Velocity and acceleration control
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_accel = config.getfloat('max_accel', above=0.)
-        self.requested_accel_to_decel = config.getfloat(
-            'max_accel_to_decel', self.max_accel * 0.5, above=0.)
-        self.max_accel_to_decel = self.requested_accel_to_decel
+        min_cruise_ratio = 0.5
+        if config.getfloat('minimum_cruise_ratio', None) is None:
+            req_accel_to_decel = config.getfloat('max_accel_to_decel', None,
+                                                 above=0.)
+            if req_accel_to_decel is not None:
+                config.deprecate('max_accel_to_decel')
+                min_cruise_ratio = 1. - min(1., (req_accel_to_decel
+                                                 / self.max_accel))
+        self.min_cruise_ratio = config.getfloat('minimum_cruise_ratio',
+                                                min_cruise_ratio,
+                                                below=1., minval=0.)
         self.square_corner_velocity = config.getfloat(
             'square_corner_velocity', 5., minval=0.)
-        self.junction_deviation = 0.
+        self.junction_deviation = self.max_accel_to_decel = 0.
         self._calc_junction_deviation()
         # Input stall detection
         self.check_stall_time = 0.
@@ -327,7 +337,7 @@ class ToolHead:
                                             self._handle_shutdown)
         # Load some default modules
         modules = ["gcode_move", "homing", "idle_timeout", "statistics",
-                   "manual_probe", "tuning_tower"]
+                   "manual_probe", "tuning_tower", "garbage_collection"]
         for module_name in modules:
             self.printer.load_object(config, module_name)
 
@@ -350,7 +360,7 @@ class ToolHead:
         free_time = sg_flush_time - self.kin_flush_delay
         self.trapq_finalize_moves(self.trapq, free_time, clear_history_time)
         self.extruder.update_move_time(free_time, clear_history_time)
-        # flush stepcompress and mcu steppersync
+        # Flush stepcompress and mcu steppersync
         for m in self.all_mcus:
             m.flush_moves(flush_time, clear_history_time)
         self.last_flush_time = flush_time
@@ -400,13 +410,15 @@ class ToolHead:
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[3]:
                 self.extruder.move(next_move_time, move)
-            next_move_time = (next_move_time + move.accel_t + move.cruise_t + move.decel_t)
+            next_move_time = (next_move_time + move.accel_t
+                              + move.cruise_t + move.decel_t)
             for cb in move.timing_callbacks:
                 cb(next_move_time)
         # Generate steps for moves
         if self.special_queuing_state:
             self._update_drip_move_time(next_move_time)
-        self.note_mcu_movequeue_activity(next_move_time + self.kin_flush_delay, set_step_gen_time=True)
+        self.note_mcu_movequeue_activity(next_move_time + self.kin_flush_delay,
+                                         set_step_gen_time=True)
         self._advance_move_time(next_move_time)
 
     def _flush_lookahead(self):
@@ -507,8 +519,8 @@ class ToolHead:
     
     def get_position(self):
         return list(self.commanded_pos)
-    
-    def set_position(self, newpos, homing_axes=()):
+
+    def set_position(self, newpos, homing_axes=""):
         self.flush_step_generation()
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.trapq_set_position(self.trapq, self.print_time,
@@ -516,6 +528,11 @@ class ToolHead:
         self.commanded_pos[:] = newpos
         self.kin.set_position(newpos, homing_axes)
         self.printer.send_event("toolhead:set_position")
+
+    def limit_next_junction_speed(self, speed):
+        last_move = self.lookahead.get_last()
+        if last_move is not None:
+            last_move.limit_next_junction_speed(speed)
 
     def move(self, newpos, speed):
         move = Move(self, self.commanded_pos, newpos, speed)
@@ -573,7 +590,8 @@ class ToolHead:
                 self.drip_completion.wait(curtime + wait_time)
                 continue
             npt = min(self.print_time + DRIP_SEGMENT_TIME, next_print_time)
-            self.note_mcu_movequeue_activity(npt + self.kin_flush_delay, set_step_gen_time=True)
+            self.note_mcu_movequeue_activity(npt + self.kin_flush_delay,
+                                             set_step_gen_time=True)
             self._advance_move_time(npt)
 
     def drip_move(self, newpos, speed, drip_completion):
@@ -633,7 +651,7 @@ class ToolHead:
                      'position': self.Coord(*self.commanded_pos),
                      'max_velocity': self.max_velocity,
                      'max_accel': self.max_accel,
-                     'max_accel_to_decel': self.requested_accel_to_decel,
+                     'minimum_cruise_ratio': self.min_cruise_ratio,
                      'square_corner_velocity': self.square_corner_velocity})
         return res
     
@@ -681,9 +699,8 @@ class ToolHead:
     def _calc_junction_deviation(self):
         scv2 = self.square_corner_velocity**2
         self.junction_deviation = scv2 * (math.sqrt(2.) - 1.) / self.max_accel
-        self.max_accel_to_decel = min(self.requested_accel_to_decel,
-                                      self.max_accel)
-        
+        self.max_accel_to_decel = self.max_accel * (1. - self.min_cruise_ratio)
+
     def cmd_G4(self, gcmd):
         # Dwell
         delay = gcmd.get_float('P', 0., minval=0.) / 1000.
@@ -699,29 +716,34 @@ class ToolHead:
         max_accel = gcmd.get_float('ACCEL', None, above=0.)
         square_corner_velocity = gcmd.get_float(
             'SQUARE_CORNER_VELOCITY', None, minval=0.)
-        requested_accel_to_decel = gcmd.get_float(
-            'ACCEL_TO_DECEL', None, above=0.)
+        min_cruise_ratio = gcmd.get_float(
+            'MINIMUM_CRUISE_RATIO', None, minval=0., below=1.)
+        if min_cruise_ratio is None:
+            req_accel_to_decel = gcmd.get_float('ACCEL_TO_DECEL',
+                                                None, above=0.)
+            if req_accel_to_decel is not None and max_accel is not None:
+                min_cruise_ratio = 1. - min(1., req_accel_to_decel / max_accel)
+            elif req_accel_to_decel is not None and max_accel is None:
+                min_cruise_ratio = 1. - min(1., (req_accel_to_decel
+                                                 / self.max_accel))
         if max_velocity is not None:
             self.max_velocity = max_velocity
         if max_accel is not None:
             self.max_accel = max_accel
         if square_corner_velocity is not None:
             self.square_corner_velocity = square_corner_velocity
-        if requested_accel_to_decel is not None:
-            self.requested_accel_to_decel = requested_accel_to_decel
+        if min_cruise_ratio is not None:
+            self.min_cruise_ratio = min_cruise_ratio
         self._calc_junction_deviation()
         msg = ("max_velocity: %.6f\n"
                "max_accel: %.6f\n"
-               "max_accel_to_decel: %.6f\n"
+               "minimum_cruise_ratio: %.6f\n"
                "square_corner_velocity: %.6f" % (
                    self.max_velocity, self.max_accel,
-                   self.requested_accel_to_decel,
-                   self.square_corner_velocity))
+                   self.min_cruise_ratio, self.square_corner_velocity))
         self.printer.set_rollover_info("toolhead", "toolhead: %s" % (msg,))
-        if (max_velocity is None and
-            max_accel is None and
-            square_corner_velocity is None and
-            requested_accel_to_decel is None):
+        if (max_velocity is None and max_accel is None
+            and square_corner_velocity is None and min_cruise_ratio is None):
             gcmd.respond_info(msg, log=False)
             
     def cmd_M204(self, gcmd):

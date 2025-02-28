@@ -193,9 +193,7 @@ void *
 oid_lookup(uint8_t oid, void *type)
 {
     if (oid >= oid_count || type != oids[oid].type)
-    {
         shutdown("Invalid oid type");
-    }
     return oids[oid].data;
 }
 
@@ -203,9 +201,7 @@ void *
 oid_alloc(uint8_t oid, void *type, uint16_t size)
 {
     if (oid >= oid_count || oids[oid].type || is_finalized())
-    {
         shutdown("Can't assign oid");
-    }
     oids[oid].type = type;
     void *data = alloc_chunk(size);
     oids[oid].data = data;

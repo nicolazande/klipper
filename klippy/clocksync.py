@@ -146,12 +146,12 @@ class ClockSync:
               this is not a problem since absolute clock is used.
         '''
         # update serialqueue clock estimate
-        self.serial.set_clock_est(new_freq, self.time_avg + TRANSMIT_EXTRA,
-                                  int(self.clock_avg - 3. * pred_stddev), clock)
+        conv_time = self.time_avg + TRANSMIT_EXTRA
+        conv_clock = int(self.clock_avg - 3. * pred_stddev)
+        self.serial.set_clock_est(new_freq, conv_time, conv_clock, clock)
         # update ethercatqueue clock estimate
         if self.ethercat is not None:
-            self.ethercat.set_clock_est(new_freq, self.time_avg + TRANSMIT_EXTRA,
-                                        int(self.clock_avg - 3. * pred_stddev), clock)
+            self.ethercat.set_clock_est(new_freq, conv_time, conv_clock, clock)
         # update current mcu clock estimate
         self.clock_est = (self.time_avg + self.min_half_rtt, self.clock_avg, new_freq)
         

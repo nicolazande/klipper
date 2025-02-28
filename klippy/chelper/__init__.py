@@ -308,8 +308,9 @@ defs_kin_winch = """
 
 defs_kin_extruder = """
     struct stepper_kinematics *extruder_stepper_alloc(void);
+    void extruder_stepper_free(struct stepper_kinematics *sk);
     void extruder_set_pressure_advance(struct stepper_kinematics *sk
-        , double pressure_advance, double smooth_time);
+        , double print_time, double pressure_advance, double smooth_time);
 """
 
 defs_kin_shaper = """
@@ -473,7 +474,8 @@ def get_ffi():
             raise
             
         # Setup error logging
-        pyhelper_logging_callback = FFI_main.callback("void func(const char *)", logging_callback)
+        pyhelper_logging_callback = FFI_main.callback("void func(const char *)",
+                                                      logging_callback)
         FFI_lib.set_python_logging_callback(pyhelper_logging_callback)
     return FFI_main, FFI_lib
 

@@ -26,7 +26,7 @@
 #define MESSAGE_SEQ_MASK 0x0f
 #define MESSAGE_DEST 0x10
 #define MESSAGE_SYNC 0x7E
-#define HF_IN_SHUTDOWN   0x01   //handler can run even when in emergency stop
+#define HF_IN_SHUTDOWN 0x01   //handler can run even when in emergency stop
 
 
 /****************************************************************
