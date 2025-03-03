@@ -35,7 +35,7 @@ class HashKinematics:
         # check for dual carriage support (NOTE: not used for the moment)
         if config.has_section('dual_carriage'):
             dc_config = config.getsection('dual_carriage')
-            dc_axis = dc_config.getchoice('axis', {'x': 'x', 'y': 'y'})
+            dc_axis = dc_config.getchoice('axis', ['x', 'y'])
             self.dual_carriage_axis = {'x': 0, 'y': 1}[dc_axis]
             # setup second dual carriage rail
             self.rails.append(serialservo.LookupMultiRail(dc_config))
@@ -70,8 +70,13 @@ class HashKinematics:
         '''
         Get position of all steppers and drives.
         '''
-        return [stepper_positions[rail.get_name()] for rail in self.rails]
-    
+        rails = self.rails
+        if self.dc_module:
+            primary_rail = self.dc_module.get_primary_rail().get_rail()
+            rails = (rails[:self.dc_module.axis] +
+                     [primary_rail] + rails[self.dc_module.axis+1:])
+        return [stepper_positions[rail.get_name()] for rail in rails]
+        
     def update_limits(self, i, range):
         '''
         Update limits only for already homed axis.
@@ -92,8 +97,18 @@ class HashKinematics:
         '''
         for i, rail in enumerate(self.rails):
             rail.set_position(newpos)
-            if i in homing_axes:
-                self.limits[i] = rail.get_range()
+        for axis_name in homing_axes:
+            axis = "xyz".index(axis_name)
+            if self.dc_module and axis == self.dc_module.axis:
+                rail = self.dc_module.get_primary_rail().get_rail()
+            else:
+                rail = self.rails[axis]
+            self.limits[axis] = rail.get_range()
+
+    def clear_homing_state(self, clear_axes):
+        for axis, axis_name in enumerate("xyz"):
+            if axis_name in clear_axes:
+                self.limits[axis] = (1.0, -1.0)
                 
     def note_z_not_homed(self):
         '''

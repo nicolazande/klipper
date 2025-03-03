@@ -53,6 +53,7 @@ class PrinterStats:
     def __init__(self, config):
         self.printer = config.get_printer()
         reactor = self.printer.get_reactor()
+        self.active = config.getboolean('active', True)
         self.stats_timer = reactor.register_timer(self.generate_stats)
         self.stats_cb = []
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
@@ -63,10 +64,11 @@ class PrinterStats:
             reactor = self.printer.get_reactor()
             reactor.update_timer(self.stats_timer, reactor.NOW)
     def generate_stats(self, eventtime):
-        stats = [cb(eventtime) for cb in self.stats_cb]
-        if max([s[0] for s in stats]):
-            logging.info("Stats %.1f: %s", eventtime,
-                         ' '.join([s[1] for s in stats]))
+        if self.active:
+            stats = [cb(eventtime) for cb in self.stats_cb]
+            if max([s[0] for s in stats]):
+                logging.info("Stats %.1f: %s", eventtime,
+                            ' '.join([s[1] for s in stats]))
         return eventtime + 1.
 
 def load_config(config):

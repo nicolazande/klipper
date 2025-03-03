@@ -23,5 +23,6 @@
         "servo_solve.h": "c",
         "limits": "c",
         "gpio.h": "c"
-    }
+    },
+    "cmake.ignoreCMakeListsMissing": true
 }

@@ -604,6 +604,8 @@ static int cp_f_endstop_query_state(struct ethercatqueue *sq, void *out, uint32_
             uint8_t homing = (slave->operation_mode == COE_OPERATION_MODE_HOMING);
             uint8_t finished = sw->homing_attained; //homed
             uint32_t next_clock = sq->last_clock; //current input event clock
+
+            errorf("homing = %u, finished = %u, next_clock = %u", homing, finished, next_clock);
             /* get command encoder */
             struct command_encoder *ce = command_encoder_table[ETH_ENDSTOP_STATE_CE];
             /* create response  */
