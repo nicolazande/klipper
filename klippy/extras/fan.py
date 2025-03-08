@@ -1,32 +1,45 @@
+# File: fan.py
+# Location: ~/klipper/klippy/extras/fan.py
+
 # Printer cooling fan
 #
 # Copyright (C) 2016-2024  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from . import pulse_counter, output_pin
+import logging
 
 class Fan:
-    def __init__(self, config, default_shutdown_speed=0.):
+    def __init__(self, config, default_shutdown_speed=0., master_fan=None):
         self.printer = config.get_printer()
         self.last_fan_value = self.last_req_value = 0.
+        self.master_fan = master_fan  # Reference to master fan for slave fans
+
         # Read config
         self.max_power = config.getfloat('max_power', 1., above=0., maxval=1.)
-        self.kick_start_time = config.getfloat('kick_start_time', 0.1,
-                                               minval=0.)
-        self.off_below = config.getfloat('off_below', default=0.,
-                                         minval=0., maxval=1.)
+        self.kick_start_time = config.getfloat('kick_start_time', 0.1, minval=0.)
+        self.off_below = config.getfloat('off_below', default=0., minval=0., maxval=1.)
         cycle_time = config.getfloat('cycle_time', 0.010, above=0.)
         hardware_pwm = config.getboolean('hardware_pwm', False)
         shutdown_speed = config.getfloat(
             'shutdown_speed', default_shutdown_speed, minval=0., maxval=1.)
-        # Setup pwm object
-        ppins = self.printer.lookup_object('pins')
-        self.mcu_fan = ppins.setup_pin('pwm', config.get('pin'))
-        self.mcu_fan.setup_max_duration(0.)
-        self.mcu_fan.setup_cycle_time(cycle_time, hardware_pwm)
-        shutdown_power = max(0., min(self.max_power, shutdown_speed))
-        self.mcu_fan.setup_start_value(0., shutdown_power)
 
+        # Setup PWM object
+        ppins = self.printer.lookup_object('pins')
+        if master_fan is not None:
+            # Slave fan uses master's PWM
+            self.mcu_fan = master_fan.mcu_fan
+            if self.mcu_fan is None:
+                raise config.error("Master fan must have a PWM pin defined")
+        else:
+            # Master fan initializes its own PWM pin
+            self.mcu_fan = ppins.setup_pin('pwm', config.get('pin'))
+            self.mcu_fan.setup_max_duration(0.)
+            self.mcu_fan.setup_cycle_time(cycle_time, hardware_pwm)
+            shutdown_power = max(0., min(self.max_power, shutdown_speed))
+            self.mcu_fan.setup_start_value(0., shutdown_power)
+
+        # Enable pin setup
         self.enable_pin = None
         enable_pin = config.get('enable_pin', None)
         if enable_pin is not None:
@@ -46,6 +59,7 @@ class Fan:
 
     def get_mcu(self):
         return self.mcu_fan.get_mcu()
+
     def _apply_speed(self, print_time, value):
         if value < self.off_below:
             value = 0.
@@ -66,17 +80,32 @@ class Fan:
             return "delay", self.kick_start_time
         self.last_fan_value = self.last_req_value = value
         self.mcu_fan.set_pwm(print_time, value)
+
     def set_speed(self, value, print_time=None):
-        self.gcrq.send_async_request(value, print_time)
+        if self.master_fan is not None:
+            # If this is a slave fan, set the master's speed instead
+            self.master_fan.set_speed(value, print_time)
+        else:
+            # If this is the master fan, proceed with setting the speed
+            self.gcrq.send_async_request(value, print_time)
+
     def set_speed_from_command(self, value):
-        self.gcrq.queue_gcode_request(value)
+        if self.master_fan is not None:
+            # If this is a slave fan, forward the command to the master
+            self.master_fan.set_speed_from_command(value)
+        else:
+            # If this is the master fan, queue the G-code request
+            self.gcrq.queue_gcode_request(value)
+
     def _handle_request_restart(self, print_time):
         self.set_speed(0., print_time)
 
     def get_status(self, eventtime):
+        # Report the master's speed if this is a slave fan
+        speed = self.master_fan.last_req_value if self.master_fan else self.last_req_value
         tachometer_status = self.tachometer.get_status(eventtime)
         return {
-            'speed': self.last_req_value,
+            'speed': speed,
             'rpm': tachometer_status['rpm'],
         }
 
