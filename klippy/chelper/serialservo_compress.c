@@ -179,7 +179,7 @@ double __visible
 serialservo_compress_set_last_position(struct stepcompress *sc, uint64_t clock, int64_t last_position)
 {
     /* update last position */
-    sc->last_position  = ((double)last_position * sc->scaler) / (65536.0 * sc->polePairs);
+    sc->last_position  = ((double)last_position * sc->scaler) / (65536.0 * 1000 * sc->polePairs);
     /* add a marker to the history list */
     struct history_steps *hs = malloc(sizeof(*hs));
     memset(hs, 0, sizeof(*hs));
@@ -288,7 +288,7 @@ serialservo_compress_append(struct stepcompress *sc, struct pose *pose, double m
      *   linear / scaler * polePairs         = [electricalRotation]
      *   linear / scaler * polePairs * 65536 = [1/65536 * electricalRotation]   
      */
-    int32_t mcu_position = (int32_t)(pose->position * 65536 * sc->polePairs / sc->scaler);
+    int32_t mcu_position = (int32_t)(pose->position * 1000 * 65536 * sc->polePairs / sc->scaler);
 
     /**
      * Velocity onversion calculation:
@@ -300,7 +300,7 @@ serialservo_compress_append(struct stepcompress *sc, struct pose *pose, double m
 	 *   linear / scaler      = [mechanicalRotation / s]
 	 *   linear / scaler * 60 = [mechanicalRotation / minute]
      */
-    int32_t mcu_velocity = (int32_t)(pose->velocity * 60. / sc->scaler);
+    int32_t mcu_velocity = (int32_t)(pose->velocity * 1000 * 60. / sc->scaler);
 
     /* move time in mcu ticks */
     uint32_t mcu_time = (uint32_t)/*(move_time * sc->mcu_freq); */sc->last_step_clock;

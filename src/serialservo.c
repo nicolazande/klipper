@@ -399,8 +399,9 @@ uint_fast8_t serialservo_event(struct timer *t)
     struct serialservo *d = container_of(t, struct serialservo, time);
 
     /* TMC position and velocity setpoint */
-    tmc_reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
-
+    tmc_set_position(d, d->current_position);
+    tmc_set_velocity(d, d->current_velocity);
+    
     int32_t position_feedback = tmc_get_position(d);
     uint32_t input_status = tmc_reg_read(d->spi, TMC4671_INPUTS_RAW);
     uint32_t output_status = tmc_reg_read(d->spi, TMC4671_OUTPUTS_RAW);

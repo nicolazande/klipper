@@ -23,6 +23,7 @@ DECL_CONSTANT_STR("BUS_PINS_spi1", "PG9,PD7,PG11");
 DECL_ENUMERATION("spi_bus", "spi2", __COUNTER__);
 DECL_CONSTANT_STR("BUS_PINS_spi2", "PB14,PB15,PD3");
 
+//TODO: remove, just for debug on toolhead mcu (miso, mosi, sclk)
 DECL_ENUMERATION("spi_bus", "spi3", __COUNTER__);
 DECL_CONSTANT_STR("BUS_PINS_spi3", "PC11,PB2,PC10");
 

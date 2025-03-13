@@ -636,8 +636,8 @@ class TMC4671:
         #STATUS_FLAGS
         self.fields.set_config_field(config, "status_flags", 0)
         #MOTOR_TYPE_N_POLE_PAIRS
-        self.fields.set_config_field(config, "pole_pairs", 4) #four poles
-        self.fields.set_config_field(config, "motor_type", 3) #three phase motor
+        self.fields.set_config_field(config, "pole_pairs", config.getint('pole_pairs', 4)) #four poles
+        self.fields.set_config_field(config, "motor_type", config.getint('motor_type', 3)) #three phase motor
         #PWM_POLARITIES
         self.fields.set_config_field(config, "low_side_gate", 0) #standard polarity
         self.fields.set_config_field(config, "high_side_gate", 0) #standard polarity
@@ -654,7 +654,7 @@ class TMC4671:
         self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
         self.fields.set_config_field(config, "adc_i_ux_select", 0x00) #UX = ADC_I0 (default = 0)
         self.fields.set_config_field(config, "adc_i_v_select", 0x01) #UX = ADC_I2 (default = 0)
-        self.fields.set_config_field(config, "adc_i_wy_select", 0x02) #WY = ADC_I1 (default = 2)
+        self.fields.set_config_field(config, "adc_i_wy_select", 0x01) #WY = ADC_I1 (default = 2)
         #dsADC_MCFG_B_MCFG_A
         self.fields.set_config_field(config, "cfg_dsmodulator_a", 0x00)
         self.fields.set_config_field(config, "mclk_polarity_a", 0x00)
@@ -667,15 +667,15 @@ class TMC4671:
         #dsADC_MCLK_A
         self.fields.set_config_field(config, "dsadc_mclk_a", 0x20000000)
         #dsADC_MCLK_B
-        self.fields.set_config_field(config, "dsadc_mclk_b", 0x00)
+        self.fields.set_config_field(config, "dsadc_mclk_b", 0x20000000)
         #dsADC_MDEC_B_MDEC_A
-        self.fields.set_config_field(config, "dsadc_mdec_a", 0x014E)
+        self.fields.set_config_field(config, "dsadc_mdec_a", 0x380038)
         self.fields.set_config_field(config, "dsadc_mdec_b", 0x014E)
         #ADC_I0_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i0_offset", 0x815B)
+        self.fields.set_config_field(config, "adc_i0_offset", 0x6B4D)
         self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
         #ADC_I1_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i1_offset", 0x81CE)
+        self.fields.set_config_field(config, "adc_i1_offset", 0x6C29)
         self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
         #ABN_DECODER_MODE
         self.fields.set_config_field(config, "apol", 0x00)
@@ -687,42 +687,37 @@ class TMC4671:
         #ABN_DECODER_PPR
         self.fields.set_config_field(config, "abn_decoder_ppr", 0x00001000)
         #ABN_DECODER_COUNT
-        self.fields.set_config_field(config, "abn_decoder_count", 0x00) #encoder count
+        self.fields.set_config_field(config, "abn_decoder_count", 0xA7B) #encoder count
         #ABN_DECODER_PHI_E_PHI_M_OFFSET
         self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
         self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
         #PID_TORQUE_FLUX_LIMITS
         self.fields.set_config_field(config, "pid_torque_flux_limits", 0x7fff)
         #PID_VELOCITY_LIMIT
-        self.fields.set_config_field(config, "pid_velocity_limit", 0x7fffffff)
+        self.fields.set_config_field(config, "pid_velocity_limit", 4000)
         #PID_TORQUE_P_TORQUE_I
-        self.fields.set_config_field(config, "ki_torque", 0x012C)
-        self.fields.set_config_field(config, "kp_torque", 0x0FA0)
+        self.fields.set_config_field(config, "ki_torque", 0x0164)
+        self.fields.set_config_field(config, "kp_torque", 0x0966)
         #PID_FLUX_P_FLUX_I
-        self.fields.set_config_field(config, "ki_flux", 0x0100)
-        self.fields.set_config_field(config, "kp_flux", 0x0100)
+        self.fields.set_config_field(config, "ki_flux", 0x0164)
+        self.fields.set_config_field(config, "kp_flux", 0x0966)
         #PID_VELOCITY_P_VELOCITY_I
-        self.fields.set_config_field(config, "ki_velocity", 0x00C8)
-        self.fields.set_config_field(config, "kp_velocity", 0x1388)
+        self.fields.set_config_field(config, "ki_velocity", 0x0000)
+        self.fields.set_config_field(config, "kp_velocity", 0x0480)
         #PID_POSITION_P_POSITION_I
-        self.fields.set_config_field(config, "ki_position", 0x00C8)
-        self.fields.set_config_field(config, "kp_position", 0x0FA0)
+        self.fields.set_config_field(config, "ki_position", 0x0000)
+        self.fields.set_config_field(config, "kp_position", 0x0280)
         #MODE_RAMP_MODE_MOTION
-        self.fields.set_config_field(config, "mode_motion", 0x08) #Initialize in open-loop mode
+        self.fields.set_config_field(config, "mode_motion", config.getint('mode_motion', 0x08)) #Initialize in open-loop mode
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
-        self.fields.set_config_field(config, "mode_pid_type", 0x00)
+        self.fields.set_config_field(config, "mode_pid_type", 0x01)
         #VELOCITY_SELECTION
-        self.fields.set_config_field(config, "velocity_selection", 0x09) #0x09
+        self.fields.set_config_field(config, "velocity_selection", 0x03) #phi_e_abn
+        self.fields.set_config_field(config, "velocity_meter_selection", 0x01) #advanced
         #POSITION_SELECTION
         self.fields.set_config_field(config, "position_selection", 0x09) #0x09
         #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", 0x02) #0x05
-        
-        self.fields.set_config_field(config,"open_loop_mode", 0)
-        self.fields.set_config_field(config,"openloop_acceleration", 100)
-        #UQ_UD_EXT
-        self.fields.set_config_field(config,"ud_ext", 2000)
-        self.fields.set_config_field(config,"uq_ext", 0)        
+        self.fields.set_config_field(config, "phi_e_selection", 0x03)    
 
 
 def load_config_prefix(config):
