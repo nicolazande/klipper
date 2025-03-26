@@ -399,15 +399,22 @@ uint_fast8_t serialservo_event(struct timer *t)
     struct serialservo *d = container_of(t, struct serialservo, time);
 
     /* TMC position and velocity setpoint */
-    tmc_set_position(d, d->current_position);
-    tmc_set_velocity(d, d->current_velocity);
+    //tmc_set_position(d, d->current_position);
+    //tmc_set_velocity(d, d->current_velocity);
     
+    tmc_reg_write(d->spi, OPENLOOP_ACCELERATION, 0x100);
+    tmc_reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
+    tmc_reg_write(d->spi, UQ_UD_EXT, 0x07D0);
+
     int32_t position_feedback = tmc_get_position(d);
+    int32_t velocity_feedback = (int32_t)tmc_reg_read(d->spi, OPENLOOP_VELOCITY_ACTUAL); // tmc_get_velocity(d);
     uint32_t input_status = tmc_reg_read(d->spi, TMC4671_INPUTS_RAW);
     uint32_t output_status = tmc_reg_read(d->spi, TMC4671_OUTPUTS_RAW);
-
-    output("==> position (target = %i, feedback = %i, input_status = %u, output_status = %u)",
-    d->current_position, position_feedback, input_status, output_status);
+    uint32_t status = tmc_reg_read(d->spi, STATUS_FLAGS);
+    output("==> position (target = %i, feedback = %i), velocity (target = %i, feedback = %i), input_status = %u, output_status = %u, status = %u)",
+    d->current_position, position_feedback,
+    d->current_velocity, velocity_feedback,
+    input_status, output_status, status);
 
     uint32_t event_time = timer_read_time();
     
@@ -436,9 +443,6 @@ void command_config_serialservo(uint32_t *args)
     d->count = 0;
     move_queue_setup(&d->mq, sizeof(struct serialservo_move));
     d->time.func = serialservo_event;
-
-    /* initialize serialservo in position control mode */
-    // tmc4671_init(TMC4671_MODE_POSITION);
 }
 DECL_COMMAND(command_config_serialservo, "config_serialservo oid=%c sampling_time=%u");
 
@@ -494,7 +498,7 @@ void command_queue_serialservo(uint32_t *args)
     }
     else 
     {
-        //output("move restart");
+        output("move restart");
         d->target_time = event_time;
         move_queue_push(&m->node, &d->mq);
         serialservo_load_next(d, event_time);

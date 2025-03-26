@@ -16,8 +16,10 @@ from extras import bus, tmc, thermistor
 
 # The 4671 has a 25 MHz external clock
 TMC_FREQUENCY=25000000.
+# However there is a 100 MHz internal clock, hence 10 ns units in places
 
-# motion modes
+# Some magic numbers for the driver
+
 class MotionMode(IntEnum):
     stopped_mode = 0
     torque_mode = 1
@@ -32,6 +34,8 @@ class MotionMode(IntEnum):
 ######################################################################
 # Register map for the 6100 companion chip
 ######################################################################
+
+
 Registers6100 = {
     "GCONF": (0x00, None),
     "GSTAT": (0x01, None),
@@ -78,6 +82,8 @@ Fields6100["IOIN"] = {
     "VERSION": 0xFF << 24,
 }
 
+# TODO: SHORT_CONF (defaults are reasonable)
+
 Fields6100["DRV_CONF"] = {
     "BBMCLKS": 0x0F,
     "OTSELECT": 0x03 << 16,
@@ -92,6 +98,8 @@ DumpGroups6100 = {
 ######################################################################
 # Register map for the 4671
 ######################################################################
+
+
 Registers = {
     "CHIPINFO_DATA": (0x00, None), # R,Test
     "CHIPINFO_ADDR": (0x01, None), # RW,Test
@@ -295,6 +303,7 @@ Registers = {
     "STATUS_MASK": (0x7D, None), # RW,Monitor
 }
 
+# These are read-only
 ReadOnlyRegisters = {
     "CHIPINFO_DATA", "ADC_RAW_DATA", "ADC_IWY_IUX", "ADC_IV", "AENC_WY_UX",
     "AENC_VN", "ABN_DECODER_PHI_E_PHI_M", "ABN_2_DECODER_PHI_M",
@@ -315,15 +324,12 @@ Fields = {}
 Fields["ADC_I1_RAW_ADC_I0_RAW"] = {
     "ADC_I0_RAW": 0xffff, "ADC_I1_RAW": 0xffff << 16
 }
-
 Fields["ADC_AGPI_A_RAW_ADC_VM_RAW"] = {
     "ADC_AGPI_A_RAW": 0xffff, "ADC_VM_RAW": 0xffff << 16
 }
-
 Fields["ADC_AENC_UX_RAW_ADC_AGPI_B_RAW"] = {
     "ADC_AENC_UX_RAW": 0xffff, "ADC_AGPI_B_RAW": 0xffff << 16
 }
-
 Fields["ADC_AENC_WY_RAW_ADC_AENC_VN_RAW"] = {
     "ADC_AENC_WY_RAW": 0xffff, "ADC_AENC_VN_RAW": 0xffff << 16
 }
@@ -366,6 +372,7 @@ Fields["ADC_I1_I0_EXT"] = {
     "ADC_I0_EXT": 0xffff,
     "ADC_I1_EXT": 0xffff << 16
 }
+
 
 Fields["DS_ANALOG_INPUT_STAGE_CFG"] = {
     "CFG_ADC_I0": 0xf,
@@ -536,6 +543,7 @@ Fields["AENC_DECODER_PHI_E_PHI_M"] = {
     "AENC_DECODER_PHI_E": 0xffff << 16
 }
 
+# CONFIG_DATA changes layout depending on the selected address
 Fields["CONFIG_ADVANCED_PI_REPRESENT"] = {
     "CURRENT_I_n": 1 << 0,
     "CURRENT_P_n": 1 << 1,
@@ -596,6 +604,7 @@ Fields["INTERIM_PWM_WY_UX"] = {
     "INTERIM_PWM_WY": 0xffff << 16
 }
 
+
 Fields["ADC_VM_LIMITS"] = {
     "ADC_VM_LIMIT_LOW": 0xffff,
     "ADC_VM_LIMIT_HIGH": 0xffff << 16
@@ -629,6 +638,7 @@ Fields["STATUS_FLAGS"] = {
     "AENC_N": 1 << 30,
 }
 
+# Mask has same structure as the status field
 FloatFields = {"PID_FLUX_I", "PID_FLUX_P",
                 "PID_TORQUE_I", "PID_TORQUE_P", "PID_VELOCITY_I",
                 "PID_VELOCITY_P", "PID_POSITION_I", "PID_POSITION_P",
@@ -845,6 +855,8 @@ DumpGroups = {
 ######################################################################
 # Biquad filter utilities
 ######################################################################
+
+
 # Filter design formula from 4671 datasheet
 def biquad_lpf_tmc(fs, f, D):
     w0 = 2.0 * math.pi * f / fs
@@ -854,6 +866,8 @@ def biquad_lpf_tmc(fs, f, D):
     a1 = 2.0 * D / w0
     a0 = 1.0
     return b0, b1, b2, a0, a1, a2
+
+# Filter design formulae from https://www.w3.org/TR/audio-eq-cookbook/
 
 # Design a biquad low pass filter in canonical form
 def biquad_lpf(fs, f, Q):
@@ -927,6 +941,8 @@ def biquad_tmc(b0, b1, b2, a0, a1, a2):
     return a1, a2, b0, b1, b2
 
 # S-IMC PI controller design, "Improved Method"
+# See https://folk.ntnu.no/skoge/publications/2012/skogestad-improved-simc-pid/PIDbook-chapter5.pdf
+# and http://npcw17.imm.dtu.dk/Proceedings/Session%207%20Control%20Theory/The%20improved%20SIMC%20method%20for%20PI%20controller%20tuning.pdf
 def simc(k, theta, tau1, tauc):
     Kc = (1.0/k) * ((tau1 + theta / 3.0) / (tauc + theta))
     taui = min((tau1 + theta / 3.0), 4*(tauc + theta))
@@ -936,6 +952,8 @@ def simc(k, theta, tau1, tauc):
 ######################################################################
 # Field manipulation helpers
 ######################################################################
+
+
 # Return the position of the first bit set in a mask
 def ffs(mask):
     return (mask & -mask).bit_length() - 1
@@ -954,12 +972,10 @@ class FieldHelper:
         self.field_to_register = { f: r for r, fields in self.all_fields.items()
                                    for f in fields }
         self.prefix = prefix
-
     def lookup_register(self, field_name, default=None):
         if field_name in Registers:
             return field_name
         return self.field_to_register.get(field_name, default)
-    
     def get_field(self, field_name, reg_value=None, reg_name=None):
         # Returns value of the register field
         if reg_name is None:
@@ -974,7 +990,6 @@ class FieldHelper:
         if field_name in self.signed_fields and ((reg_value & mask)<<1) > mask:
             field_value -= (1 << field_value.bit_length())
         return field_value
-    
     def set_field(self, field_name, field_value, reg_value=None, reg_name=None):
         # Returns register value with field bits filled with supplied value
         if reg_name is None:
@@ -988,7 +1003,6 @@ class FieldHelper:
         new_value = (reg_value & ~mask) | ((field_value << ffs(mask)) & mask)
         self.registers[reg_name] = new_value
         return new_value
-    
     def set_config_field(self, config, field_name, default, convert=lambda x: x):
         # Allow a field to be set from the config file
         config_name = self.prefix + field_name
@@ -1009,7 +1023,6 @@ class FieldHelper:
             val = config.getint(config_name, default, minval=0, maxval=maxval)
         self.field_setters[field_name] = convert
         return self.set_field(field_name, convert(val), reg_name=reg_name)
-    
     def pretty_format(self, reg_name, reg_value):
         # Provide a string description of a register
         reg_fields = self.all_fields.get(reg_name, {reg_name: 0xffffffff})
@@ -1021,7 +1034,6 @@ class FieldHelper:
             if sval and sval != "0":
                 fields.append(" %s=%s" % (field_name.lower(), sval))
         return "%-11s %08x%s" % (reg_name + ":", reg_value, "".join(fields))
-    
     def get_reg_fields(self, reg_name, reg_value):
         # Provide fields found in a register
         reg_fields = self.all_fields.get(reg_name, {reg_name: 0})
@@ -1049,6 +1061,8 @@ class PIDHelper:
 ######################################################################
 # Current control
 ######################################################################
+
+
 MAX_CURRENT = 10.000
 
 class CurrentHelper:
@@ -1071,45 +1085,36 @@ class CurrentHelper:
         self.fields.set_field("PID_TORQUE_FLUX_LIMITS", self.flux_limit)
         self.flux_limit = self._calc_flux_limit(self.flux_current)
         self.fields.set_field("PID_FLUX_OFFSET", self.flux_limit)
-        
     def _calc_flux_limit(self, current):
         flux_limit = round(current * 1e3 / self.current_scale)
         return flux_limit
-    
     def convert_adc_current(self, adc):
         return adc * self.current_scale * 1e-3
-    
     def get_run_current(self):
         return self.run_current
-    
     def get_homing_current(self):
         return self.homing_current
-    
     def get_current(self):
         c = self.convert_adc_current(self._read_field("PID_TORQUE_FLUX_LIMITS"))
         iux = self.convert_adc_current(self._read_field("ADC_IUX"))
         iv = self.convert_adc_current(self._read_field("ADC_IV"))
         iwy = self.convert_adc_current(self._read_field("ADC_IWY"))
         return c, MAX_CURRENT, iux, iv, iwy
-    
     def set_current(self, run_current):
         self.run_current = run_current
         self.flux_limit = self._calc_flux_limit(self.run_current)
         self._write_field("PID_TORQUE_FLUX_LIMITS", self.flux_limit)
         return self.flux_limit
-    
     def set_flux_current(self, current):
         self.flux_current = current
         self.flux_limit = self._calc_flux_limit(self.flux_current)
         self._write_field("PID_FLUX_OFFSET", self.flux_limit)
         return self.flux_limit
-    
     def _read_field(self, field):
         reg_name = self.fields.lookup_register(field)
         reg_value = self.mcu_tmc.get_register(reg_name)
         return self.fields.get_field(field, reg_value=reg_value,
                                      reg_name=reg_name)
-    
     def _write_field(self, field, val):
         reg_name = self.fields.lookup_register(field)
         reg_value = self.mcu_tmc.get_register(reg_name)
@@ -1122,6 +1127,8 @@ class CurrentHelper:
 ######################################################################
 # Helper to configure the microstep settings
 ######################################################################
+
+
 def StepHelper(config, mcu_tmc):
     fields = mcu_tmc.get_fields()
     stepper_name = " ".join(config.get_name().split()[1:])
@@ -1144,6 +1151,8 @@ def StepHelper(config, mcu_tmc):
 ######################################################################
 # Periodic error checking
 ######################################################################
+
+
 class TMCErrorCheck:
     def __init__(self, config, mcu_tmc):
         self.printer = config.get_printer()
@@ -1181,13 +1190,11 @@ class TMCErrorCheck:
         if self.adc_temp_reg is not None:
             pheaters = self.printer.load_object(config, 'heaters')
             pheaters.register_monitor(config)
-
     def _make_mask(self, entries):
         mask = 0
         for f in entries:
             mask = self.fields.set_field(f, 1, mask, "STATUS_FLAGS")
         return mask
-    
     def _query_status(self):
         status = self.mcu_tmc.get_register("STATUS_FLAGS")
         # fmt = self.fields.pretty_format("STATUS_FLAGS", status)
@@ -1207,7 +1214,6 @@ class TMCErrorCheck:
         #    self.monitor_data.update(self.fields.get_reg_fields(reg_name, val))
         #    logging.info("TMC 4671 '%s' %s: %s", self.stepper_name,
         #                 reg_name, self.fields.pretty_format(reg_name, val))
-
     def _query_temperature(self):
         try:
             if self.adc_temp_reg is not None:
@@ -1218,7 +1224,6 @@ class TMCErrorCheck:
             # Ignore comms error for temperature
             self.adc_temp = None
             return
-        
     def _do_periodic_check(self, eventtime):
         try:
             self._query_status()
@@ -1227,13 +1232,11 @@ class TMCErrorCheck:
             self.printer.invoke_shutdown(str(e))
             return self.printer.get_reactor().NEVER
         return eventtime + 1.
-    
     def stop_checks(self):
         if self.check_timer is None:
             return
         self.printer.get_reactor().unregister_timer(self.check_timer)
         self.check_timer = None
-
     def start_checks(self):
         if self.check_timer is not None:
             self.stop_checks()
@@ -1242,7 +1245,6 @@ class TMCErrorCheck:
         self.check_timer = reactor.register_timer(self._do_periodic_check,
                                                   curtime + 1.)
         return True
-    
     def _convert_temp(self, adc):
         v = adc - 0x7fff
         if v < 0:
@@ -1256,7 +1258,6 @@ class TMCErrorCheck:
             temp = 1.0 / temp
             temp -= 273.15
         logging.info("TMC %s temp: %g", self.stepper_name, temp)
-
     def get_status(self, eventtime=None):
         res = {'drv_status': None, 'temperature': None}
         res.update(self.monitor_data)
@@ -1273,6 +1274,8 @@ class TMCErrorCheck:
 ######################################################################
 # Helper class for "sensorless homing"
 ######################################################################
+
+
 class TMCVirtualPinHelper:
     def __init__(self, config, mcu_tmc, current_helper):
         self.printer = config.get_printer()
@@ -1308,7 +1311,6 @@ class TMCVirtualPinHelper:
         logging.info("TMC virtual endstop %s, mask is %x", self.name, self.status_mask)
         ppins = self.printer.lookup_object("pins")
         ppins.register_chip("%s" % (self.name), self)
-
     def setup_pin(self, pin_type, pin_params):
         # Validate pin
         ppins = self.printer.lookup_object('pins')
@@ -1325,7 +1327,6 @@ class TMCVirtualPinHelper:
                                             self.handle_homing_move_end)
         self.mcu_endstop = ppins.setup_pin('endstop', self.diag_pin)
         return self.mcu_endstop
-    
     def handle_homing_move_begin(self, hmove):
         if self.mcu_endstop not in hmove.get_mcu_endstops():
             return
@@ -1338,7 +1339,6 @@ class TMCVirtualPinHelper:
         status = self.mcu_tmc.get_register("STATUS_FLAGS")
         fmt = self.fields.pretty_format("STATUS_FLAGS", status)
         logging.info("TMC 4671 '%s' status at homing start %s", self.name, fmt)
-
     def handle_homing_move_end(self, hmove):
         status = self.mcu_tmc.get_register("STATUS_FLAGS")
         fmt = self.fields.pretty_format("STATUS_FLAGS", status)
@@ -1355,6 +1355,7 @@ class TMCVirtualPinHelper:
 ######################################################################
 # SPI communication, fields, and registers
 ######################################################################
+
 # 4671 does not support chaining, so that's removed
 # 4671 protocol does not require dummy reads
 # default speed is 1 MHz, conservative for the device.
@@ -1364,14 +1365,12 @@ class MCU_TMC_SPI_simple:
         self.printer = config.get_printer()
         self.mutex = self.printer.get_reactor().mutex()
         self.spi = bus.MCU_SPI_from_config(config, 3, default_speed=1000000, pin_option=pin_option)
-    
     def reg_read(self, reg):
         cmd = [reg, 0x00, 0x00, 0x00, 0x00]
         #self.spi.spi_send(cmd)
         params = self.spi.spi_transfer(cmd)
         pr = bytearray(params['response'])
         return (pr[1] << 24) | (pr[2] << 16) | (pr[3] << 8) | pr[4]
-    
     def reg_write(self, reg, val, print_time=None):
         minclock = 0
         if print_time is not None:
@@ -1392,10 +1391,8 @@ class MCU_TMC_SPI:
         self.name_to_reg = name_to_reg
         self.fields = fields
         self.tmc_frequency = tmc_frequency
-
     def get_fields(self):
         return self.fields
-    
     def get_register(self, reg_name):
         reg, addr = self.name_to_reg[reg_name]
         with self.mutex:
@@ -1409,7 +1406,6 @@ class MCU_TMC_SPI:
                         "Unable to write tmc spi '%s' address register %s (last read %x)" % (self.name, reg_name, v))
             read = self.tmc_spi.reg_read(reg)
         return read
-    
     def set_register_once(self, reg_name, val, print_time=None):
         reg, addr = self.name_to_reg[reg_name]
         with self.mutex:
@@ -1419,7 +1415,6 @@ class MCU_TMC_SPI:
                     raise self.printer.command_error(
                         "Unable to write tmc spi '%s' address register %s (last read %x)" % (self.name, reg_name, v))
             v = self.tmc_spi.reg_write(reg, val, print_time)
-
     def set_register(self, reg_name, val, print_time=None):
         reg, addr = self.name_to_reg[reg_name]
         with self.mutex:
@@ -1437,17 +1432,14 @@ class MCU_TMC_SPI:
                     return
         raise self.printer.command_error(
             "Unable to write tmc spi '%s' address register %s (last read %x)" % (self.name, reg_name, v))
-    
     def get_tmc_frequency(self):
         return self.tmc_frequency
-    
     def read_field(self, field):
         reg_name = self.fields.lookup_register(field)
         reg_value = self.get_register(reg_name)
         return self.fields.get_field(field,
                                      reg_value=reg_value,
                                      reg_name=reg_name)
-    
     def write_field(self, field, val):
         reg_name = self.fields.lookup_register(field)
         reg_value = self.get_register(reg_name)
@@ -1460,6 +1452,8 @@ class MCU_TMC_SPI:
 ######################################################################
 # Main driver class
 ######################################################################
+
+
 class TMC4671:
     def __init__(self, config):
         self.printer = config.get_printer()
@@ -1667,8 +1661,6 @@ class TMC4671:
         # Lookup stepper object
         force_move = self.printer.lookup_object("force_move")
         self.stepper = force_move.lookup_stepper(self.stepper_name)
-        # Note default pulse duration and step_both_edge unavailable
-        #self.stepper.setup_default_pulse_duration(.000000100, False)
 
     def _handle_stepper_enable(self, print_time, is_enable):
         if is_enable:
@@ -1692,6 +1684,7 @@ class TMC4671:
     #    # klippy:ready handlers are limited in what they may do. Communicating with a MCU
     #    # will pause the reactor and is thus forbidden. That code has to run outside of the event handler.
     #    self.printer.reactor.register_callback(self._handle_ready_deferred)
+
     def _handle_ready(self, print_time=None):
         with self.mutex:
             if print_time is None:
@@ -1712,7 +1705,7 @@ class TMC4671:
             enable_line = self.stepper_enable.lookup_enable(self.stepper_name)
             enable_line.motor_enable(print_time)
             # Just test the PID, as it also sets up the encoder offsets
-            #P, I = self._tune_flux_pid(True, 1.0, print_time)
+            P, I = self._tune_flux_pid(True, 1.0, print_time)
             #self._write_field("ABN_DECODER_COUNT", 0)
             self._write_field("PID_POSITION_TARGET", 0)
             print_time = self.printer.lookup_object('toolhead').get_last_move_time()
@@ -1815,6 +1808,7 @@ class TMC4671:
         return self._tune_pid("TORQUE", 1.0, derate, True, test_existing, print_time)
 
     # Align motors and tune PID via a setpoint change experiment
+    # See https://folk.ntnu.no/skoge/publications/2012/skogestad-improved-simc-pid/PIDbook-chapter5.pdf
     def _tune_pid(self, X, Kc, derate, offsets, test_existing, print_time):
         ch = self.current_helper
         dwell = self.printer.lookup_object('toolhead').dwell
@@ -1832,7 +1826,7 @@ class TMC4671:
         self._write_field("PID_TORQUE_TARGET", 0)
         self._write_field("PID_VELOCITY_TARGET", 0)
         self._write_field("PID_POSITION_TARGET", 0)
-        self._write_field("PID_POSITION_ACTUAL", 0)
+        #self._write_field("PID_POSITION_ACTUAL", 0)
         self._write_field("MODE_MOTION", MotionMode.uq_ud_ext_mode)
         # Turn on the chopper and wait a bit to measure the resistance
         self._write_field("PWM_CHOP", 7)
@@ -1895,7 +1889,7 @@ class TMC4671:
         self._write_field("PID_TORQUE_TARGET", 0)
         self._write_field("PID_VELOCITY_TARGET", 0)
         self._write_field("PID_POSITION_TARGET", 0)
-        self._write_field("PID_POSITION_ACTUAL", 0)
+        #self._write_field("PID_POSITION_ACTUAL", 0)
         self._write_field("MODE_MOTION", old_mode)
         self._write_field("PID_FLUX_OFFSET", old_flux_offset)
         self._write_field("PHI_E_SELECTION", old_phi_e_selection)

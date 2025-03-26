@@ -260,7 +260,7 @@ Fields["PID_FLUX_P_FLUX_I"] = {
 }
 
 Fields["OPENLOOP_MODE"] = {
-    "open_loop_mode" : 0xffffffff << 0
+    "openloop_phi_direction" : 0x01 << 12
 }
 Fields["OPENLOOP_ACCELERATION"] = {
     "openloop_acceleration" : 0xffffffff << 0
@@ -268,6 +268,14 @@ Fields["OPENLOOP_ACCELERATION"] = {
 Fields["PID_POSITION_ACTUAL"] = {
     "pid_position_angle" : 0xffff << 0,
     "pid_position_revolutions" : 0xffff << 16
+}
+
+Fields["OPENLOOP_VELOCITY_TARGET"] = {
+    "openloop_velocity_target" : 0xffffffff << 0
+}
+
+Fields["OPENLOOP_ACCELERATION"] = {
+    "openloop_acceleration" : 0xffffffff << 0
 }
 
 SignedFields = [
@@ -644,8 +652,8 @@ class TMC4671:
         #PWM_MAXCNT
         self.fields.set_config_field(config, "pwm_maxcnt", 0xF9F) #pwm frequency (25kHz)
         #PWM_BBM_H_BBM_L
-        self.fields.set_config_field(config, "pwm_bbm_l", 0x0A) #low side mosfet dead time (10 ms)
-        self.fields.set_config_field(config, "pwm_bbm_h", 0x0A) #high side mosfet dead time (10 ms)
+        self.fields.set_config_field(config, "pwm_bbm_l", 0xFF) #low side mosfet dead time (2.55 µs)
+        self.fields.set_config_field(config, "pwm_bbm_h", 0xFF) #high side mosfet dead time (2.55 µs)
         #PWM_SV_CHOP
         self.fields.set_config_field(config, "pwm_chomp", 0x07) #centered pwm for foc
         self.fields.set_config_field(config, "pwm_sv", 0x00) #enable space vector modulation
@@ -653,8 +661,8 @@ class TMC4671:
         self.fields.set_config_field(config, "adc_i0_select", 0x00) #adc channel ADCSD_I0_RAW
         self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
         self.fields.set_config_field(config, "adc_i_ux_select", 0x00) #UX = ADC_I0 (default = 0)
-        self.fields.set_config_field(config, "adc_i_v_select", 0x01) #UX = ADC_I2 (default = 0)
-        self.fields.set_config_field(config, "adc_i_wy_select", 0x01) #WY = ADC_I1 (default = 2)
+        self.fields.set_config_field(config, "adc_i_v_select", 0x01) #UX = ADC_I1 (default = 1)
+        self.fields.set_config_field(config, "adc_i_wy_select", 0x02) #WY = ADC_I1 (default = 2)
         #dsADC_MCFG_B_MCFG_A
         self.fields.set_config_field(config, "cfg_dsmodulator_a", 0x00)
         self.fields.set_config_field(config, "mclk_polarity_a", 0x00)
@@ -702,23 +710,28 @@ class TMC4671:
         self.fields.set_config_field(config, "ki_flux", 0x0164)
         self.fields.set_config_field(config, "kp_flux", 0x0966)
         #PID_VELOCITY_P_VELOCITY_I
-        self.fields.set_config_field(config, "ki_velocity", 0x0000)
+        self.fields.set_config_field(config, "ki_velocity", 0x0080)
         self.fields.set_config_field(config, "kp_velocity", 0x0480)
         #PID_POSITION_P_POSITION_I
-        self.fields.set_config_field(config, "ki_position", 0x0000)
+        self.fields.set_config_field(config, "ki_position", 0x0080)
         self.fields.set_config_field(config, "kp_position", 0x0280)
         #MODE_RAMP_MODE_MOTION
         self.fields.set_config_field(config, "mode_motion", config.getint('mode_motion', 0x08)) #Initialize in open-loop mode
         self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
         self.fields.set_config_field(config, "mode_pid_type", 0x01)
         #VELOCITY_SELECTION
-        self.fields.set_config_field(config, "velocity_selection", 0x03) #phi_e_abn
+        self.fields.set_config_field(config, "velocity_selection",  config.getint('velocity_selection', 0x03)) #phi_e_abn
         self.fields.set_config_field(config, "velocity_meter_selection", 0x01) #advanced
         #POSITION_SELECTION
-        self.fields.set_config_field(config, "position_selection", 0x09) #0x09
+        self.fields.set_config_field(config, "position_selection", config.getint('position_selection', 0x03))
         #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", 0x03)    
-
+        self.fields.set_config_field(config, "phi_e_selection", config.getint('phi_e_selection', 0x03))
+        self.fields.set_config_field(config, "openloop_phi_direction", config.getint('openloop_phi_direction', 0x00))    
+        
+        self.fields.set_config_field(config, "ud_ext", 0x07D0)
+        self.fields.set_config_field(config, "uq_ext", 0x1000)
+        self.fields.set_config_field(config, "openloop_velocity_target", 0x1000)
+        self.fields.set_config_field(config, "openloop_acceleration", 0x100)
 
 def load_config_prefix(config):
     '''
