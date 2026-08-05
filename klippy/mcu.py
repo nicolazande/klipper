@@ -649,6 +649,7 @@ class MCU:
         # ethercat interface
         self._ethercat = ethercathdl.EthercatReader(self._reactor, warn_prefix=wp)
         self._baud = 0
+        self._serial_half_duplex = False
         self._canbus_iface = None
         canbus_uuid = config.get('canbus_uuid', None)
         if canbus_uuid is not None:
@@ -662,6 +663,8 @@ class MCU:
             if not (self._serialport.startswith("/dev/rpmsg_")
                     or self._serialport.startswith("/tmp/klipper_host_")):
                 self._baud = config.getint('baud', 250000, minval=2400)
+                self._serial_half_duplex = config.getboolean(
+                    'serial_half_duplex', False)
         # restarts
         restart_methods = [None, 'arduino', 'cheetah', 'command', 'rpi_usb']
         self._restart_method = 'command'
@@ -912,7 +915,23 @@ class MCU:
                 elif self._baud:
                     # cheetah boards require RTS to be deasserted.
                     rts = (resmeth != "cheetah")
-                    self._serial.connect_uart(self._serialport, self._baud, rts)
+                    self._serial.connect_uart(
+                        self._serialport, self._baud, rts,
+                        self._serial_half_duplex)
+                    firmware_half_duplex = bool(
+                        self._serial.get_msgparser().get_constant_int(
+                            'SERIAL_HALF_DUPLEX', 0))
+                    if firmware_half_duplex != self._serial_half_duplex:
+                        if firmware_half_duplex:
+                            reason = ("firmware uses half-duplex RS-485, but "
+                                      "serial_half_duplex is not enabled")
+                        else:
+                            reason = ("serial_half_duplex is enabled, but "
+                                      "the firmware was built without an "
+                                      "RS-485 DE pin")
+                        raise serialhdl.error(
+                            "MCU '%s' serial configuration mismatch: %s"
+                            % (self._name, reason))
                 else:
                     self._serial.connect_pipe(self._serialport)
                 # connect to ethercat

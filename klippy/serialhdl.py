@@ -76,12 +76,15 @@ class SerialReader:
                     # Done
                     return identify_data
                 identify_data += msgdata
-    def _start_session(self, serial_dev, serial_fd_type=b'u', client_id=0):
+    def _start_session(self, serial_dev, serial_fd_type=b'u', client_id=0,
+                       half_duplex=False):
         self.serial_dev = serial_dev
         self.serialqueue = self.ffi_main.gc(
             self.ffi_lib.serialqueue_alloc(serial_dev.fileno(),
                                            serial_fd_type, client_id),
             self.ffi_lib.serialqueue_free)
+        if half_duplex:
+            self.ffi_lib.serialqueue_set_half_duplex(self.serialqueue, 1)
         self.background_thread = threading.Thread(target=self._bg_thread)
         self.background_thread.start()
         # Obtain and load the data dictionary from the firmware
@@ -107,6 +110,10 @@ class SerialReader:
         if receive_window is not None:
             self.ffi_lib.serialqueue_set_receive_window(
                 self.serialqueue, receive_window)
+        firmware_half_duplex = msgparser.get_constant_int(
+            'SERIAL_HALF_DUPLEX', 0)
+        if firmware_half_duplex:
+            self.ffi_lib.serialqueue_set_half_duplex(self.serialqueue, 1)
         return True
     def connect_canbus(self, canbus_uuid, canbus_nodeid, canbus_iface="can0"):
         import can # XXX
@@ -174,7 +181,7 @@ class SerialReader:
             ret = self._start_session(serial_dev)
             if ret:
                 break
-    def connect_uart(self, serialport, baud, rts=True):
+    def connect_uart(self, serialport, baud, rts=True, half_duplex=False):
         # Initial connection
         logging.info("%sStarting serial connect", self.warn_prefix)
         start_time = self.reactor.monotonic()
@@ -193,7 +200,7 @@ class SerialReader:
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
             stk500v2_leave(serial_dev, self.reactor)
-            ret = self._start_session(serial_dev)
+            ret = self._start_session(serial_dev, half_duplex=half_duplex)
             if ret:
                 break
     def connect_file(self, debugoutput, dictionary, pace=False):

@@ -152,6 +152,56 @@ Handlers.append(HandlerConstants)
 
 
 ######################################################################
+# Optional serial driver-enable pin
+######################################################################
+
+class HandleSerialDEPin:
+    def __init__(self):
+        self.pin = None
+        self.ctr_dispatch = {
+            'DECL_SERIAL_DE_PIN': self.decl_serial_de_pin,
+        }
+    def decl_serial_de_pin(self, req):
+        pin = req.split(None, 1)[1].strip()
+        if pin.startswith('"') and pin.endswith('"'):
+            pin = pin[1:-1].strip()
+        self.pin = pin
+    def update_data_dictionary(self, data):
+        pass
+    def generate_code(self, options):
+        if self.pin is None:
+            return ""
+        gpio = 0
+        if self.pin:
+            mp = msgproto.MessageParser()
+            mp.fill_enumerations(HandlerEnumerations.enumerations)
+            pinmap = mp.get_enumerations().get('pin', {})
+            if self.pin not in pinmap:
+                error("Pin %s is not available for this build" % (self.pin,))
+            reserved = []
+            for name, value in HandlerConstants.constants.items():
+                if name.upper().startswith("RESERVE_PINS"):
+                    reserved.extend([p.strip() for p in value.split(',')
+                                     if p.strip()])
+            if self.pin in reserved:
+                error("Pin %s is reserved by an active MCU peripheral"
+                      % (self.pin,))
+            allowed = HandlerConstants.constants.get("SERIAL_DE_PINS")
+            if allowed is not None:
+                allowed = [p.strip() for p in allowed.split(',') if p.strip()]
+                if self.pin not in allowed:
+                    error("Pin %s is not a hardware DE pin for the selected "
+                          "USART (valid pins: %s)"
+                          % (self.pin, ','.join(allowed)))
+            gpio = pinmap[self.pin]
+            HandlerConstants.set_value("RESERVE_PINS_serial_de", self.pin)
+        return '\nuint32_t serial_de_gpio = %d; // "%s"\n' % (
+            gpio, self.pin)
+
+Handlers.append(HandleSerialDEPin())
+
+
+######################################################################
 # Initial pins
 ######################################################################
 

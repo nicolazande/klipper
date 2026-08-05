@@ -17,10 +17,30 @@
 #define RX_BUFFER_SIZE 192
 
 static uint8_t receive_buf[RX_BUFFER_SIZE], receive_pos;
-static uint8_t transmit_buf[96], transmit_pos, transmit_max;
+#if CONFIG_STM32_SERIAL_RS485
+// Hold asynchronous responses until the host grants a half-duplex bus turn.
+#define TX_BUFFER_SIZE 255
+#define TX_COMMAND_RESERVE 96
+#define TX_ASYNC_LIMIT (TX_BUFFER_SIZE - TX_COMMAND_RESERVE)
+#else
+#define TX_BUFFER_SIZE 96
+#endif
+static uint8_t transmit_buf[TX_BUFFER_SIZE], transmit_pos, transmit_max;
+#if CONFIG_STM32_SERIAL_RS485
+// Reports generated while the final ACK is already on the wire belong to the
+// next bus turn. Keeping them separate avoids both a collision and lost
+// one-shot events (for example, an endstop or trsync state transition).
+static uint8_t deferred_buf[TX_BUFFER_SIZE], deferred_max;
+#endif
 
 DECL_CONSTANT("SERIAL_BAUD", CONFIG_SERIAL_BAUD);
+#if CONFIG_STM32_SERIAL_RS485
+// Limit the host to one outstanding packet on a half-duplex link.
+DECL_CONSTANT("RECEIVE_WINDOW", MESSAGE_MAX);
+DECL_CONSTANT("SERIAL_HALF_DUPLEX", 1);
+#else
 DECL_CONSTANT("RECEIVE_WINDOW", RX_BUFFER_SIZE);
+#endif
 
 // Rx interrupt - store read data
 void
@@ -70,12 +90,102 @@ console_pop_input(uint_fast8_t len)
     }
 }
 
+#if CONFIG_STM32_SERIAL_RS485
+static uint_fast8_t
+console_has_output(void)
+{
+    return readb(&transmit_pos) < readb(&transmit_max);
+}
+
+// Remove bytes already sent in the preceding turn. Call with IRQs disabled.
+static void
+console_compact_output(void)
+{
+    uint_fast8_t tpos = readb(&transmit_pos);
+    uint_fast8_t tmax = readb(&transmit_max);
+    if (tpos >= tmax) {
+        writeb(&transmit_max, 0);
+        writeb(&transmit_pos, 0);
+    } else if (tpos) {
+        tmax -= tpos;
+        memmove(transmit_buf, &transmit_buf[tpos], tmax);
+        writeb(&transmit_pos, 0);
+        writeb(&transmit_max, tmax);
+    }
+}
+
+// Leave room for the response to the next host command and its final ACK.
+// If the host has been disconnected for a long time, queued telemetry is
+// stale and may otherwise fill the bounded transmit buffer.
+static void
+console_prepare_output(void)
+{
+    irqstatus_t flag = irq_save();
+    console_compact_output();
+    uint_fast8_t tmax = readb(&transmit_max);
+    if (tmax > TX_ASYNC_LIMIT) {
+        writeb(&transmit_max, 0);
+        writeb(&transmit_pos, 0);
+        tmax = 0;
+    }
+    uint_fast8_t dmax = readb(&deferred_max);
+    uint_fast8_t dpos = 0;
+    while (dpos < dmax) {
+        uint_fast8_t msglen = deferred_buf[dpos];
+        if (msglen < MESSAGE_MIN || dpos + msglen > dmax) {
+            // A partial frame can only result from a prior buffer overflow.
+            dpos = dmax;
+            break;
+        }
+        if (tmax + msglen > TX_ASYNC_LIMIT)
+            break;
+        memcpy(&transmit_buf[tmax], &deferred_buf[dpos], msglen);
+        tmax += msglen;
+        dpos += msglen;
+    }
+    writeb(&transmit_max, tmax);
+    dmax -= dpos;
+    if (dmax)
+        memmove(deferred_buf, &deferred_buf[dpos], dmax);
+    writeb(&deferred_max, dmax);
+    irq_restore(flag);
+}
+#endif
+
 // Process any incoming commands
 void
 console_task(void)
 {
     uint_fast8_t rpos = readb(&receive_pos), pop_count;
+#if CONFIG_STM32_SERIAL_RS485
+    // command_find_block() may queue a NAK. Keep interrupts disabled until a
+    // negative result has started TX so no asynchronous report can be placed
+    // after that final NAK.
+    irqstatus_t find_flag = irq_save();
+    console_compact_output();
+    uint_fast8_t pre_find_max = readb(&transmit_max);
+#endif
     int_fast8_t ret = command_find_block(receive_buf, rpos, &pop_count);
+#if CONFIG_STM32_SERIAL_RS485
+    if (ret <= 0) {
+        if (ret < 0) {
+            if (CONFIG_HAVE_BOOTLOADER_REQUEST && pop_count == 32
+                && !memcmp(receive_buf,
+                           " \x1c Request Serial Bootloader!! ~", 32))
+                bootloader_request();
+            console_pop_input(pop_count);
+            // Transmit only if command_find_block() actually appended a NAK.
+            // A leading retransmit sync byte and later invalid fragments must
+            // not grant queued asynchronous data a response turn by accident.
+            if (readb(&transmit_max) > pre_find_max)
+                serial_enable_tx_irq();
+        }
+        irq_restore(find_flag);
+        return;
+    }
+    irq_restore(find_flag);
+    console_prepare_output();
+#endif
     if (ret > 0)
         command_dispatch(receive_buf, pop_count);
     if (ret) {
@@ -83,8 +193,27 @@ console_task(void)
             && !memcmp(receive_buf, " \x1c Request Serial Bootloader!! ~", 32))
             bootloader_request();
         console_pop_input(pop_count);
+#if CONFIG_STM32_SERIAL_RS485
+        // A shutdown report is normally asynchronous and could have occurred
+        // during the preceding transmit turn. Repeat it on the next host turn
+        // so a dropped best-effort response can never hide an MCU shutdown.
+        if (ret > 0 && sched_is_shutdown())
+            sched_report_shutdown();
+#endif
+#if CONFIG_STM32_SERIAL_RS485
+        // The host is the RS-485 bus master. Send queued asynchronous
+        // responses, command responses, and the final empty ACK as one turn.
+        // Queue the ACK and start hardware DE atomically so it is guaranteed
+        // to remain the final frame of this turn.
+        irqstatus_t ack_flag = irq_save();
+        command_send_ack();
+        if (console_has_output())
+            serial_enable_tx_irq();
+        irq_restore(ack_flag);
+#else
         if (ret > 0)
             command_send_ack();
+#endif
     }
 }
 DECL_TASK(console_task);
@@ -93,6 +222,22 @@ DECL_TASK(console_task);
 void
 console_sendf(const struct command_encoder *ce, va_list args)
 {
+#if CONFIG_STM32_SERIAL_RS485
+    if (serial_tx_is_active()) {
+        // The current turn's final ACK has already been queued. Defer this
+        // response instead of placing data after the ACK or dropping a
+        // potentially one-shot event.
+        uint_fast8_t dmax = readb(&deferred_max);
+        uint_fast8_t max_size = READP(ce->max_size);
+        if (dmax + max_size > sizeof(deferred_buf))
+            return;
+        uint8_t *dbuf = &deferred_buf[dmax];
+        uint_fast8_t msglen = command_encode_and_frame(dbuf, ce, args);
+        writeb(&deferred_max, dmax + msglen);
+        return;
+    }
+#endif
+
     // Verify space for message
     uint_fast8_t tpos = readb(&transmit_pos), tmax = readb(&transmit_max);
     if (tpos >= tmax) {
@@ -101,6 +246,13 @@ console_sendf(const struct command_encoder *ce, va_list args)
         writeb(&transmit_pos, 0);
     }
     uint_fast8_t max_size = READP(ce->max_size);
+#if CONFIG_STM32_SERIAL_RS485
+    if (max_size > MESSAGE_MIN
+        && tmax + max_size > sizeof(transmit_buf) - MESSAGE_MIN)
+        // Always preserve enough room for the final ACK. A missing best-effort
+        // response can be queried again; a missing ACK stalls the whole bus.
+        return;
+#endif
     if (tmax + max_size > sizeof(transmit_buf)) {
         if (tmax + max_size - tpos > sizeof(transmit_buf))
             // Not enough space for message
@@ -112,7 +264,9 @@ console_sendf(const struct command_encoder *ce, va_list args)
         memmove(&transmit_buf[0], &transmit_buf[tpos], tmax);
         writeb(&transmit_pos, 0);
         writeb(&transmit_max, tmax);
+#if !CONFIG_STM32_SERIAL_RS485
         serial_enable_tx_irq();
+#endif
     }
 
     // Generate message
@@ -121,5 +275,7 @@ console_sendf(const struct command_encoder *ce, va_list args)
 
     // Start message transmit
     writeb(&transmit_max, tmax + msglen);
+#if !CONFIG_STM32_SERIAL_RS485
     serial_enable_tx_irq();
+#endif
 }

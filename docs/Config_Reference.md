@@ -39,6 +39,12 @@ serial:
 #   This parameter must be provided when using a serial port.
 #baud: 250000
 #   The baud rate to use. The default is 250000.
+#serial_half_duplex: False
+#   Set to True when this serial port uses a two-wire half-duplex RS-485
+#   connection. This must be set when the MCU firmware was built with an
+#   RS-485 DE pin so that half-duplex handling is active while downloading
+#   the MCU data dictionary. The firmware also advertises the mode after the
+#   initial connection. The default is False.
 #canbus_uuid:
 #   If using a device connected to a CAN bus then this sets the unique
 #   chip identifier to connect to. This value must be provided when using

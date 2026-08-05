@@ -44,6 +44,7 @@ void serialqueue_send(struct serialqueue *sq, struct command_queue *cq
 void serialqueue_pull(struct serialqueue *sq, struct pull_queue_message *pqm);
 void serialqueue_set_wire_frequency(struct serialqueue *sq, double frequency);
 void serialqueue_set_receive_window(struct serialqueue *sq, int receive_window);
+void serialqueue_set_half_duplex(struct serialqueue *sq, int half_duplex);
 void serialqueue_set_clock_est(struct serialqueue *sq, double est_freq
                                , double conv_time, uint64_t conv_clock
                                , uint64_t last_clock);

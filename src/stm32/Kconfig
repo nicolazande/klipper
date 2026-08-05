@@ -486,6 +486,23 @@ choice
         depends on HAVE_STM32_USBCANBUS
         select USBCANBUS
 endchoice
+
+config STM32_SERIAL_DE_PIN
+    string "RS-485 DE pin (blank for normal USART)"
+    depends on MACH_STM32H7 && SERIAL
+    default ""
+    help
+        Optional active-high hardware USART driver-enable pin for a
+        half-duplex RS-485 transceiver. The pin is configured to the same
+        alternate function as the selected USART, and the USART peripheral
+        controls it automatically. It must be a hardware DE/RTS pin for that
+        USART, not an arbitrary GPIO. Leave this value blank for normal
+        full-duplex USART operation.
+
+config STM32_SERIAL_RS485
+    bool
+    default y if STM32_SERIAL_DE_PIN != ""
+
 choice
     prompt "CAN bus interface" if USBCANBUS
     config STM32_CMENU_CANBUS_PB8_PB9

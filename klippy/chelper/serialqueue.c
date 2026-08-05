@@ -48,8 +48,9 @@ struct serialqueue {
     pthread_cond_t cond;
     int receive_waiting;
     // Baud / clock tracking
-    int receive_window;
+    int receive_window, half_duplex, half_duplex_rx_data;
     double bittime_adjust, idle_time;
+    double half_duplex_poll_time;
     struct clock_estimate ce;
     double last_receive_sent_time;
     // Retransmit support
@@ -72,6 +73,7 @@ struct serialqueue {
     struct list_head old_sent, old_receive;
     // Stats
     uint32_t bytes_write, bytes_read, bytes_retransmit, bytes_invalid;
+    uint32_t half_duplex_polls;
 };
 
 #define SQPF_SERIAL 0
@@ -87,6 +89,8 @@ struct serialqueue {
 #define SQT_DEBUGFILE 'f'
 
 #define MIN_RTO 0.025
+#define HALF_DUPLEX_MIN_RTO 0.050
+#define HALF_DUPLEX_IDLE_POLL 0.250
 #define MAX_RTO 5.000
 #define MAX_PENDING_BLOCKS 12
 #define MIN_REQTIME_DELTA 0.250
@@ -199,8 +203,10 @@ update_receive_seq(struct serialqueue *sq, double eventtime, uint64_t rseq)
         if (rttvar4 < 0.001)
             rttvar4 = 0.001;
         sq->rto = sq->srtt + rttvar4;
-        if (sq->rto < MIN_RTO)
-            sq->rto = MIN_RTO;
+        double min_rto = (sq->half_duplex
+                          ? HALF_DUPLEX_MIN_RTO : MIN_RTO);
+        if (sq->rto < min_rto)
+            sq->rto = min_rto;
         else if (sq->rto > MAX_RTO)
             sq->rto = MAX_RTO;
         sq->rtt_sample_seq = 0;
@@ -225,6 +231,9 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     uint32_t rseq_delta = ((sq->input_buf[MESSAGE_POS_SEQ] - sq->receive_seq)
                            & MESSAGE_SEQ_MASK);
     uint64_t rseq = sq->receive_seq + rseq_delta;
+    double response_sent_time = sq->last_receive_sent_time;
+    if (sq->half_duplex && len > MESSAGE_MIN)
+        sq->half_duplex_rx_data = 1;
     if (rseq != sq->receive_seq) {
         // New sequence number
         if (rseq > sq->send_seq && sq->receive_seq != 1) {
@@ -233,7 +242,25 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
             pthread_mutex_unlock(&sq->lock);
             return;
         }
-        update_receive_seq(sq, eventtime, rseq);
+        // On a half-duplex link, non-empty response blocks may be followed by
+        // more MCU data. Only the final empty ACK ends the MCU transmit turn
+        // and permits the host to start another one.
+        if (!sq->half_duplex || len == MESSAGE_MIN) {
+            update_receive_seq(sq, eventtime, rseq);
+            if (sq->half_duplex) {
+                // Continue immediately while the MCU has data queued, then
+                // fall back to a low-rate idle poll once its turn is empty.
+                sq->half_duplex_poll_time = eventtime +
+                    (sq->half_duplex_rx_data ? 0. : HALF_DUPLEX_IDLE_POLL);
+                sq->half_duplex_rx_data = 0;
+            }
+        } else if (!list_empty(&sq->sent_queue)) {
+            // Keep the command outstanding until its final empty ACK, but
+            // retain the correct host transmit timestamp on data responses.
+            struct queue_message *sent = list_first_entry(
+                &sq->sent_queue, struct queue_message, node);
+            response_sent_time = sent->receive_time;
+        }
     }
     sq->bytes_read += len;
 
@@ -266,7 +293,7 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
         // Data message - add to receive queue
         struct queue_message *qm = message_fill(sq->input_buf, len);
         qm->sent_time = (rseq > sq->retransmit_seq
-                         ? sq->last_receive_sent_time : 0.);
+                         ? response_sent_time : 0.);
         qm->receive_time = get_monotonic(); // must be time post read()
         qm->receive_time -= calculate_bittime(sq, len);
         list_add_tail(&qm->node, &sq->receive_queue);
@@ -480,6 +507,9 @@ build_and_send_command(struct serialqueue *sq, uint8_t *buf, int pending
         }
     }
 
+    if (sq->half_duplex && len == MESSAGE_HEADER_SIZE)
+        sq->half_duplex_polls++;
+
     // Fill header / trailer
     len += MESSAGE_TRAILER_SIZE;
     buf[MESSAGE_POS_LEN] = len;
@@ -571,11 +601,20 @@ check_send_command(struct serialqueue *sq, int pending, double eventtime)
     uint64_t reqclock_delta = MIN_REQTIME_DELTA * sq->ce.est_freq;
     if (min_ready_clock <= ack_clock + reqclock_delta)
         return PR_NOW;
+    if (sq->half_duplex && !sq->ready_bytes
+        && sq->half_duplex_poll_time <= eventtime)
+        // Build a valid empty command block. It grants the MCU a response
+        // turn without adding a command to Python's time-sensitive queues.
+        return PR_NOW;
     uint64_t wantclock = min_ready_clock - reqclock_delta;
     if (min_stalled_clock < wantclock)
         wantclock = min_stalled_clock;
     sq->need_kick_clock = wantclock;
-    return idletime + (wantclock - ack_clock) / sq->ce.est_freq;
+    double waketime = idletime + (wantclock - ack_clock) / sq->ce.est_freq;
+    if (sq->half_duplex && !sq->ready_bytes
+        && sq->half_duplex_poll_time < waketime)
+        waketime = sq->half_duplex_poll_time;
+    return waketime;
 }
 
 // Callback timer to send data to the serial port
@@ -891,8 +930,32 @@ void __visible
 serialqueue_set_receive_window(struct serialqueue *sq, int receive_window)
 {
     pthread_mutex_lock(&sq->lock);
+    if (sq->half_duplex && receive_window > MESSAGE_MAX)
+        receive_window = MESSAGE_MAX;
     sq->receive_window = receive_window;
     pthread_mutex_unlock(&sq->lock);
+}
+
+void __visible
+serialqueue_set_half_duplex(struct serialqueue *sq, int half_duplex)
+{
+    pthread_mutex_lock(&sq->lock);
+    int mustwake = half_duplex && !sq->half_duplex;
+    sq->half_duplex = half_duplex;
+    if (half_duplex && (!sq->receive_window
+                        || sq->receive_window > MESSAGE_MAX))
+        // Enforce one host message per RS-485 bus turn, including while the
+        // firmware data dictionary is still being downloaded.
+        sq->receive_window = MESSAGE_MAX;
+    if (half_duplex && sq->rto < HALF_DUPLEX_MIN_RTO)
+        // This is only a lost-packet recovery timeout; it does not delay
+        // successful host or MCU transmissions.
+        sq->rto = HALF_DUPLEX_MIN_RTO;
+    if (mustwake)
+        sq->half_duplex_poll_time = get_monotonic();
+    pthread_mutex_unlock(&sq->lock);
+    if (mustwake)
+        kick_bg_thread(sq);
 }
 
 // Set the estimated clock rate of the mcu on the other end of the
@@ -928,12 +991,14 @@ serialqueue_get_stats(struct serialqueue *sq, char *buf, int len)
     memcpy(&stats, sq, sizeof(stats));
     pthread_mutex_unlock(&sq->lock);
 
-    snprintf(buf, len, "bytes_write=%u bytes_read=%u"
+    snprintf(buf, len, "bytes_write=%u bytes_read=%u half_duplex=%u"
+             " half_duplex_polls=%u"
              " bytes_retransmit=%u bytes_invalid=%u"
              " send_seq=%u receive_seq=%u retransmit_seq=%u"
              " srtt=%.3f rttvar=%.3f rto=%.3f"
              " ready_bytes=%u upcoming_bytes=%u"
-             , stats.bytes_write, stats.bytes_read
+             , stats.bytes_write, stats.bytes_read, stats.half_duplex
+             , stats.half_duplex_polls
              , stats.bytes_retransmit, stats.bytes_invalid
              , (int)stats.send_seq, (int)stats.receive_seq
              , (int)stats.retransmit_seq
