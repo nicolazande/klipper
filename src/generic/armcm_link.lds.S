@@ -47,6 +47,16 @@ SECTIONS
         _data_end = .;
     } > ram
 
+    // Variables that survive a warm reset (e.g. watchdog crash breadcrumbs).
+    // Must sit between .data and .bss: startup only initializes those two
+    // ranges, and the dynamic memory pool claims [_bss_end, _stack_start),
+    // so this is the only spot not zeroed, not copied, and not allocated.
+    .noinit (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.noinit .noinit.*)
+    } > ram
+
     .bss (NOLOAD) :
     {
         . = ALIGN(4);
@@ -55,15 +65,6 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;
-    } > ram
-
-    // Variables that survive a warm reset (e.g. watchdog crash breadcrumbs).
-    // Placed outside the .data/.bss ranges so startup does not initialize
-    // them; contents are only meaningful after validating a magic value.
-    .noinit (NOLOAD) :
-    {
-        . = ALIGN(4);
-        *(.noinit .noinit.*)
     } > ram
 
     _stack_start = CONFIG_RAM_START + CONFIG_RAM_SIZE - CONFIG_STACK_SIZE ;
