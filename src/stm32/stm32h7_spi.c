@@ -89,6 +89,21 @@ spi_prepare(struct spi_config config)
     spi->CFG2 |= (mode << SPI_CFG2_CPHA_Pos);
 }
 
+// A stalled SPI peripheral must shut down with a report rather than spin
+// with interrupts disabled until the independent watchdog hard-resets the
+// chip (a mid-session MCU reset desynchronizes the host serial link).
+#define SPI_WAIT_LOOPS 1000000
+
+static void
+spi_wait(SPI_TypeDef *spi, uint32_t mask)
+{
+    uint32_t loops = SPI_WAIT_LOOPS;
+    while ((spi->SR & mask) == 0) {
+        if (!--loops)
+            shutdown("Timeout waiting on stm32h7 spi");
+    }
+}
+
 void
 spi_transfer(struct spi_config config, uint8_t receive_data,
              uint8_t len, uint8_t *data)
@@ -103,7 +118,7 @@ spi_transfer(struct spi_config config, uint8_t receive_data,
 
     while (len--) {
         writeb((void *)&spi->TXDR, *data);
-        while((spi->SR & (SPI_SR_RXWNE | SPI_SR_RXPLVL)) == 0);
+        spi_wait(spi, SPI_SR_RXWNE | SPI_SR_RXPLVL);
         rdata = readb((void *)&spi->RXDR);
 
         if (receive_data) {
@@ -112,7 +127,7 @@ spi_transfer(struct spi_config config, uint8_t receive_data,
         data++;
     }
 
-    while ((spi->SR & SPI_SR_EOT) == 0);
+    spi_wait(spi, SPI_SR_EOT);
 
     // Clear flags and disable SPI
     SET_BIT(spi->IFCR, 0xFFFFFFFF);

@@ -71,7 +71,7 @@ class KeyboardReader:
                     % (message_count, version, build_versions))
         self.output("MCU config: %s" % (" ".join(
             ["%s=%s" % (k, v) for k, v in msgparser.get_constants().items()])))
-        self.clocksync.connect(self.ser)
+        self.clocksync.connect(self.ser, None)
         self.ser.handle_default = self.handle_default
         self.ser.register_response(self.handle_output, '#output')
         self.mcu_freq = msgparser.get_constant_float('CLOCK_FREQ')

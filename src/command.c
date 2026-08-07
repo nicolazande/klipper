@@ -215,6 +215,16 @@ command_encode_and_frame(uint8_t *buf, const struct command_encoder *ce
     return msglen;
 }
 
+// Rewrite an already-framed message with the current sequence number.  A
+// frame held over from an earlier transmit turn (half-duplex deferral)
+// carries that turn's sequence number; replaying it verbatim would make the
+// host discard it as out-of-window.
+void
+command_restamp_frame(uint8_t *buf)
+{
+    command_add_frame(buf, buf[MESSAGE_POS_LEN]);
+}
+
 static uint8_t in_sendf;
 
 // Encode and transmit a "response" message

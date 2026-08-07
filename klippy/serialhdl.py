@@ -45,6 +45,17 @@ class SerialReader:
             self.ffi_lib.serialqueue_pull(self.serialqueue, response)
             count = response.len
             if count < 0:
+                # The C reactor exited (device error/EOF).  Fail any
+                # pending waiters so no caller blocks forever on a link
+                # that can no longer deliver an acknowledgment.
+                pending = list(self.pending_notifications.values())
+                self.pending_notifications.clear()
+                if pending:
+                    logging.error(
+                        "%sSerial reader thread exited with %d pending"
+                        " notifications", self.warn_prefix, len(pending))
+                for pn in pending:
+                    self.reactor.async_complete(pn, None)
                 break
             if response.notify_id:
                 params = {'#sent_time': response.sent_time,
@@ -93,6 +104,14 @@ class SerialReader:
             serialqueue = self.ffi_lib.serialqueue_alloc_trace(
                 serial_dev.fileno(), serial_fd_type, client_id,
                 self.WIRE_TRACE_RECORDS)
+            if serialqueue == self.ffi_main.NULL:
+                # Trace buffer allocation failed - run without tracing
+                logging.warning("%sUnable to allocate serial wire trace"
+                                " buffer; continuing without trace",
+                                self.warn_prefix)
+                self.wire_trace_path = None
+                serialqueue = self.ffi_lib.serialqueue_alloc(
+                    serial_dev.fileno(), serial_fd_type, client_id)
         else:
             serialqueue = self.ffi_lib.serialqueue_alloc(
                 serial_dev.fileno(), serial_fd_type, client_id)
@@ -217,6 +236,17 @@ class SerialReader:
                              self.warn_prefix, e)
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
+            if half_duplex:
+                # FTDI adapters buffer received data for up to 16ms by
+                # default; a request/response protocol pays that on every
+                # bus turn.  Request the 1ms low-latency mode (best effort).
+                try:
+                    serial_dev.set_low_latency_mode(True)
+                    logging.info("%sSerial low latency mode enabled",
+                                 self.warn_prefix)
+                except Exception as e:
+                    logging.info("%sUnable to set serial low latency"
+                                 " mode: %s", self.warn_prefix, e)
             wire_trace_prefix = [] if wire_trace_path else None
             stk500v2_leave(serial_dev, self.reactor, wire_trace_prefix)
             ret = self._start_session(
@@ -310,7 +340,9 @@ class SerialReader:
             return ""
         self.ffi_lib.serialqueue_get_stats(self.serialqueue,
                                            self.stats_buf, len(self.stats_buf))
-        return str(self.ffi_main.string(self.stats_buf).decode())
+        return "%s pending_notify=%d" % (
+            str(self.ffi_main.string(self.stats_buf).decode()),
+            len(self.pending_notifications))
     def get_reactor(self):
         return self.reactor
     def get_msgparser(self):

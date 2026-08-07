@@ -140,6 +140,10 @@ console_prepare_output(void)
         if (tmax + msglen > TX_ASYNC_LIMIT)
             break;
         memcpy(&transmit_buf[tmax], &deferred_buf[dpos], msglen);
+        // The frame was encoded during an earlier transmit turn and carries
+        // that turn's sequence number; restamp it with the current one so
+        // the host does not discard it as out-of-window.
+        command_restamp_frame(&transmit_buf[tmax]);
         tmax += msglen;
         dpos += msglen;
     }
@@ -229,6 +233,12 @@ console_sendf(const struct command_encoder *ce, va_list args)
         // potentially one-shot event.
         uint_fast8_t dmax = readb(&deferred_max);
         uint_fast8_t max_size = READP(ce->max_size);
+        if (max_size <= MESSAGE_MIN)
+            // An ack/nak generated while a turn is already draining is
+            // stale the moment that turn ends; replaying it later would
+            // read as a spurious duplicate-ack NAK on the host.  Drop it -
+            // the host's retransmit timeout covers this case.
+            return;
         if (dmax + max_size > sizeof(deferred_buf))
             return;
         uint8_t *dbuf = &deferred_buf[dmax];

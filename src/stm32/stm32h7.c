@@ -233,12 +233,27 @@ bootloader_request(void)
  * Startup
  ****************************************************************/
 
+// Report why the chip last reset (IWDG vs software vs pin vs power).  The
+// flags accumulate in RCC->RSR until cleared, so capture-and-clear at boot
+// keeps each report specific to the most recent reset.
+static uint32_t reset_status;
+
+void
+command_get_reset_reason(uint32_t *args)
+{
+    sendf("reset_reason rsr=%u", reset_status);
+}
+DECL_COMMAND_FLAGS(command_get_reset_reason, HF_IN_SHUTDOWN,
+                   "get_reset_reason");
+
 // Main entry point - called from armcm_boot.c:ResetHandler()
 void
 armcm_main(void)
 {
     // Run SystemInit() and then restore VTOR
     SystemInit();
+    reset_status = RCC->RSR;
+    RCC->RSR |= RCC_RSR_RMVF;
     RCC->D1CCIPR = 0x00000000;
     RCC->D2CCIP1R = 0x00000000;
     RCC->D2CCIP2R = 0x00000000;

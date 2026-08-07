@@ -767,7 +767,7 @@ class MCU:
         dict_data = dfile.read()
         dfile.close()
         self._serial.connect_file(outfile, dict_data)
-        self._clocksync.connect_file(self._serial, pace)
+        self._clocksync.connect_file(self._serial, None, pace)
         # Handle pacing
         if not pace:
             def dummy_estimated_print_time(eventtime):
@@ -897,6 +897,27 @@ class MCU:
         log_info = self._log_info() + "\n" + move_msg
         self._printer.set_rollover_info(self._name, log_info, log=False)
         
+    def _log_reset_reason(self):
+        # Ask the MCU why it last reset (a mid-session watchdog or brownout
+        # reset otherwise looks like an unexplained communication loss).
+        mp = self._serial.get_msgparser()
+        if mp.messages_by_name.get('get_reset_reason') is None:
+            return
+        try:
+            params = self._serial.send_with_response(
+                'get_reset_reason', 'reset_reason')
+        except Exception:
+            logging.exception("MCU '%s' get_reset_reason failed", self._name)
+            return
+        rsr = params.get('rsr', 0)
+        # STM32H7 RCC_RSR flag bits
+        names = [(1 << 21, 'brownout'), (1 << 22, 'nrst_pin'),
+                 (1 << 23, 'power_on'), (1 << 24, 'software'),
+                 (1 << 26, 'iwdg_watchdog'), (1 << 28, 'wwdg_watchdog'),
+                 (1 << 30, 'low_power_error')]
+        flags = [name for bit, name in names if rsr & bit] or ['unknown']
+        logging.info("MCU '%s' last reset reason: %s (rsr=0x%08x)",
+                     self._name, '+'.join(flags), rsr)
     def _mcu_identify(self):
         '''
         Identify MCU.
@@ -935,6 +956,7 @@ class MCU:
                         raise serialhdl.error(
                             "MCU '%s' serial configuration mismatch: %s"
                             % (self._name, reason))
+                    self._log_reset_reason()
                 else:
                     self._serial.connect_pipe(self._serialport)
                 # connect to ethercat
@@ -1179,7 +1201,11 @@ class MCU:
             # Attempt reset via reset command
             logging.info("Attempting MCU '%s' reset command", self._name)
             self._reset_cmd.send()
-        self._reactor.pause(self._reactor.monotonic() + 0.015)
+        # On a half-duplex link the reset command may wait a full bus turn
+        # (or a retransmit interval) before reaching the wire; give it time
+        # before closing the port discards it.
+        grace = 0.100 if self._serial_half_duplex else 0.015
+        self._reactor.pause(self._reactor.monotonic() + grace)
         self._disconnect()
         
     def _restart_rpi_usb(self):

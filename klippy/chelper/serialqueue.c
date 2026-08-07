@@ -52,6 +52,7 @@ struct serialqueue {
     int receive_window, half_duplex, half_duplex_rx_data;
     double bittime_adjust, idle_time;
     double half_duplex_poll_time;
+    uint32_t half_duplex_resyncs;
     struct clock_estimate ce;
     double last_receive_sent_time;
     // Retransmit support
@@ -284,12 +285,25 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
         sq->half_duplex_rx_data = 1;
     if (rseq != sq->receive_seq) {
         // New sequence number
-        if (rseq > sq->send_seq && sq->receive_seq != 1) {
+        if (rseq > sq->send_seq && sq->receive_seq != 1 && !sq->half_duplex) {
             // An ack for a message not sent?  Out of order message?
             sq->bytes_invalid += len;
             pthread_mutex_unlock(&sq->lock);
             return;
         }
+        if (rseq > sq->send_seq && sq->receive_seq != 1 && sq->half_duplex
+            && len == MESSAGE_MIN)
+            // A CRC-valid empty frame beyond every sent block can only be a
+            // NAK from a peer whose sequence state diverged (an MCU reset
+            // zeroes its counter).  On a full-duplex link new host blocks
+            // eventually catch send_seq up to the peer, but the half-duplex
+            // one-block window freezes send_seq, so without accepting this
+            // frame the link livelocks in retransmit backoff forever.
+            // update_receive_seq() below realigns send_seq via its
+            // connection-init path; the peer's queued "starting" message
+            // (delivered as a data frame above/next turn) then lets the host
+            // report the MCU reset instead of stalling silently.
+            sq->half_duplex_resyncs++;
         // On a half-duplex link, non-empty response blocks may be followed by
         // more MCU data. Only the final empty ACK ends the MCU transmit turn
         // and permits the host to start another one.
@@ -312,6 +326,17 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     }
     sq->bytes_read += len;
 
+    if (sq->half_duplex && len > MESSAGE_MIN && !list_empty(&sq->sent_queue)) {
+        // The peer is actively transmitting its response turn.  Defer the
+        // lost-ack retransmit timer so it cannot fire into (and collide
+        // with) a long multi-frame turn; the final empty ACK re-arms or
+        // disarms it via update_receive_seq().
+        struct queue_message *sent = list_first_entry(
+            &sq->sent_queue, struct queue_message, node);
+        double nr = eventtime + sq->rto + calculate_bittime(sq, sent->len);
+        pollreactor_update_timer(sq->pr, SQPT_RETRANSMIT, nr);
+    }
+
     // Check for pending messages on notify_queue.  On a half-duplex link,
     // data frames do not end the MCU transmit turn and therefore do not
     // acknowledge the outstanding host block.  Waiting for the final empty
@@ -319,7 +344,11 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     // messages that carry the current (rather than next) sequence number.
     int must_wake = 0;
     if (!sq->half_duplex || len == MESSAGE_MIN) {
+        // On full-duplex links keep the mainline semantics: a data frame
+        // only proves receipt of blocks before the previous one.
         uint64_t wake_seq = rseq - 1;
+        if (!sq->half_duplex && len > MESSAGE_MIN)
+            wake_seq = rseq >= 2 ? rseq - 2 : 0;
         while (!list_empty(&sq->notify_queue)) {
             struct queue_message *qm = list_first_entry(
                 &sq->notify_queue, struct queue_message, node);
@@ -449,11 +478,21 @@ static void
 do_write(struct serialqueue *sq, void *buf, int buflen, int trace_kind)
 {
     if (sq->serial_fd_type != SQT_CAN) {
-        int ret = write(sq->serial_fd, buf, buflen);
-        int error = ret < 0 ? errno : 0;
-        trace_io(sq, trace_kind, buflen, ret, error, buf, buflen);
-        if (ret < 0)
-            report_errno("write", ret);
+        // Loop on short writes so a frame is never silently truncated
+        uint8_t *wbuf = buf;
+        while (buflen) {
+            int ret = write(sq->serial_fd, wbuf, buflen);
+            int error = ret < 0 ? errno : 0;
+            trace_io(sq, trace_kind, buflen, ret, error, wbuf, buflen);
+            if (ret < 0) {
+                if (error == EINTR)
+                    continue;
+                report_errno("write", ret);
+                return;
+            }
+            wbuf += ret;
+            buflen -= ret;
+        }
         return;
     }
     // Write to CAN fd
@@ -668,18 +707,19 @@ check_send_command(struct serialqueue *sq, int pending, double eventtime)
     uint64_t reqclock_delta = MIN_REQTIME_DELTA * sq->ce.est_freq;
     if (min_ready_clock <= ack_clock + reqclock_delta)
         return PR_NOW;
-    if (sq->half_duplex && !sq->ready_bytes
-        && sq->half_duplex_poll_time <= eventtime)
-        // Build a valid empty command block. It grants the MCU a response
-        // turn without adding a command to Python's time-sensitive queues.
+    if (sq->half_duplex && sq->half_duplex_poll_time <= eventtime)
+        // Grant the MCU a response turn.  The block is normally empty; a
+        // ready message scheduled for the near future may ride along early
+        // (it is queued on the MCU by its request clock anyway).  Gating
+        // this on ready_bytes would let one future-scheduled command
+        // suppress idle polling for its entire wait.
         return PR_NOW;
     uint64_t wantclock = min_ready_clock - reqclock_delta;
     if (min_stalled_clock < wantclock)
         wantclock = min_stalled_clock;
     sq->need_kick_clock = wantclock;
     double waketime = idletime + (wantclock - ack_clock) / sq->ce.est_freq;
-    if (sq->half_duplex && !sq->ready_bytes
-        && sq->half_duplex_poll_time < waketime)
+    if (sq->half_duplex && sq->half_duplex_poll_time < waketime)
         waketime = sq->half_duplex_poll_time;
     return waketime;
 }
@@ -1085,7 +1125,7 @@ serialqueue_get_stats(struct serialqueue *sq, char *buf, int len)
     pollreactor_get_stats(sq->pr, &prs);
 
     snprintf(buf, len, "bytes_write=%u bytes_read=%u half_duplex=%u"
-             " half_duplex_polls=%u"
+             " half_duplex_polls=%u half_duplex_resyncs=%u"
              " bytes_retransmit=%u bytes_invalid=%u"
              " send_seq=%u receive_seq=%u retransmit_seq=%u"
              " srtt=%.3f rttvar=%.3f rto=%.3f"
@@ -1094,7 +1134,7 @@ serialqueue_get_stats(struct serialqueue *sq, char *buf, int len)
              " poll_timeouts=%llu spin_loops=%llu timer_callbacks=%llu"
              " fd_callbacks=%llu"
              , stats.bytes_write, stats.bytes_read, stats.half_duplex
-             , stats.half_duplex_polls
+             , stats.half_duplex_polls, stats.half_duplex_resyncs
              , stats.bytes_retransmit, stats.bytes_invalid
              , (int)stats.send_seq, (int)stats.receive_seq
              , (int)stats.retransmit_seq
