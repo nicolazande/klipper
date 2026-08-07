@@ -151,7 +151,58 @@ reset) and rerun.
   restarts logged Aug 5 on both firmware generations) — the RS485 layer
   now detects and reports them instead of silently livelocking.
 
-## RESOLVED (2026-08-07): reboot trigger identified by config bisection
+## RESOLVED (2026-08-07): the reboots were a shutdown-path wedge
+
+**Root cause chain, proven end to end by on-target breadcrumbs:**
+
+1. An ADC input reads outside its configured min/max → `analog_in_event`
+   correctly calls `try_shutdown("ADC out of range")` from the SysTick
+   timer IRQ.
+2. That longjmps into `run_shutdown()` (breadcrumb showed entry but never
+   completion).
+3. `run_shutdown()` runs the `DECL_SHUTDOWN` handlers **with interrupts
+   disabled**. Breadcrumb named the offender: `serialservo_shutdown`.
+4. `serialservo_shutdown` → `serialservo_stop` → `tmc_set_position` →
+   `spidev_transfer(d->spi, ...)` where `d->spi` is **NULL** — the
+   `[serialservo_z]` section is configured but its `[tmc4671 …]` section
+   is commented out, so `config_serialservo_spi` is never sent.
+5. `spidev_transfer` dereferences the NULL device; the resulting nested
+   `shutdown()` longjmps unconditionally back into `run_shutdown()`,
+   which re-runs the same handler → **infinite loop, interrupts off**.
+6. The task loop never runs, so `watchdog_reset` never feeds the IWDG →
+   hard reset ~450 ms later. The host never receives the shutdown
+   message and only sees "MCU 'mcu' spontaneous restart".
+
+**This affected every shutdown cause, not just ADC range** — "Timer too
+close", "Rescheduled timer in the past", etc. would all have wedged the
+same way, which is why no MCU shutdown reason was ever visible in the log.
+
+**Fixes** (commit `d822d4f8`):
+- `src/serialservo.c`: `serialservo_stop` skips the TMC write when no SPI
+  bus is associated.
+- `src/sched.c`: `run_shutdown` runs the handler list at most once, so a
+  handler that raises `shutdown()` can never re-enter it.
+
+**Verified on hardware:** the MCU now emits
+`MCU 'mcu' shutdown: ADC out of range` and the reset reason no longer
+contains `iwdg_watchdog`.
+
+### PA1 experiments (answering "is PA1 special?") — it is not
+
+| Test | Result |
+| --- | --- |
+| PA1 as bare `temperature_sensor` (no heater/steppers) | crashes — isolates pure ADC sampling as the trigger |
+| PA2 + PA3 as `temperature_sensor` (other fan-PWM pins) | **also crash, identically** — not PA1-specific |
+| PB1 / PC5 (real NTC circuits) as ADC | stable 15+ min |
+| **PA1 as fan PWM, ramped 10% → 100%** | **completely stable, zero crashes** |
+
+PA1/PA2/PA3 are fan-PWM pins feeding SN74LVC1G17 Schmitt buffers with 10k
+pulldowns — not thermistor dividers. Sampling them as ADC legitimately
+reads out-of-range, which is *correct* behaviour; the MCU was right to
+raise "ADC out of range". The only defect was that raising it wedged the
+chip. In its intended PWM role PA1 is perfectly healthy.
+
+## Earlier bisection notes
 
 - Test A (all ADC sensors disabled, fan+tach active): 7+ min, zero
   reboots. Test B1 (both NTC sensors re-enabled, extruder still off):
