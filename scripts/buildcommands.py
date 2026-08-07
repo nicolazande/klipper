@@ -46,8 +46,20 @@ class HandleCallList:
             func_code = ['    extern void %s(void);\n    %s();' % (f, f)
                          for f in funcs]
             if funcname == 'ctr_run_taskfuncs':
+                # TEMPORARY DIAGNOSTIC (RS485 bring-up): record each task in
+                # a warm-reset-surviving breadcrumb so a watchdog reset can
+                # report which task was running.  Remove with the breadcrumb
+                # support in sched.c when no longer needed.
                 add_poll = '    irq_poll();\n'
-                func_code = [add_poll + fc for fc in func_code]
+                func_code = [add_poll
+                             + '    {\n'
+                             + '        extern void %s(void);\n' % (f,)
+                             + '        extern void'
+                             + ' sched_breadcrumb_task(void*);\n'
+                             + '        sched_breadcrumb_task((void*)%s);\n'
+                             % (f,)
+                             + '        %s();\n' % (f,)
+                             + '    }' for f in funcs]
                 func_code.append(add_poll)
             fmt = """
 void

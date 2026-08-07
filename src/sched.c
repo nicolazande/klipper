@@ -142,6 +142,21 @@ sched_del_timer(struct timer *del)
     irq_restore(flag);
 }
 
+// TEMPORARY DIAGNOSTIC (RS485 bring-up): breadcrumbs stored in memory that
+// survives a warm reset, so that after a watchdog reset the firmware can
+// report which timer callback and task were last dispatched (the watchdog
+// only fires when the task loop is starved >~450ms).  Remove together with
+// the hooks in scripts/buildcommands.py and the reporting in stm32h7.c.
+uint32_t sched_crumb_magic __attribute__((section(".noinit")));
+uint32_t sched_crumb_timer __attribute__((section(".noinit")));
+uint32_t sched_crumb_task __attribute__((section(".noinit")));
+
+void
+sched_breadcrumb_task(void *func)
+{
+    sched_crumb_task = (uint32_t)func;
+}
+
 // Invoke the next timer - called from board hardware irq code.
 unsigned int
 sched_timer_dispatch(void)
@@ -150,6 +165,7 @@ sched_timer_dispatch(void)
     struct timer *t = SchedStatus.timer_list;
     uint_fast8_t res;
     uint32_t updated_waketime;
+    sched_crumb_timer = (uint32_t)t->func;
     if (CONFIG_INLINE_STEPPER_HACK && likely(!t->func)) {
         res = stepper_event(t);
         updated_waketime = t->waketime;

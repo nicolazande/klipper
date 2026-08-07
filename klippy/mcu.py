@@ -921,8 +921,11 @@ class MCU:
                  (1 << 26, 'iwdg_watchdog'), (1 << 28, 'wwdg_watchdog'),
                  (1 << 30, 'low_power_error')]
         flags = [name for bit, name in names if rsr & bit] or ['unknown']
-        logging.info("MCU '%s' last reset reason: %s (rsr=0x%08x)",
-                     self._name, '+'.join(flags), rsr)
+        logging.info(
+            "MCU '%s' last reset reason: %s (rsr=0x%08x"
+            " crumb_timer=0x%08x crumb_task=0x%08x)",
+            self._name, '+'.join(flags), rsr,
+            params.get('crumb_timer', 0), params.get('crumb_task', 0))
     def _mcu_identify(self):
         '''
         Identify MCU.

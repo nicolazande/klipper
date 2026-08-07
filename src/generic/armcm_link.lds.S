@@ -57,6 +57,15 @@ SECTIONS
         _bss_end = .;
     } > ram
 
+    // Variables that survive a warm reset (e.g. watchdog crash breadcrumbs).
+    // Placed outside the .data/.bss ranges so startup does not initialize
+    // them; contents are only meaningful after validating a magic value.
+    .noinit (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.noinit .noinit.*)
+    } > ram
+
     _stack_start = CONFIG_RAM_START + CONFIG_RAM_SIZE - CONFIG_STACK_SIZE ;
     .stack _stack_start (NOLOAD) :
     {

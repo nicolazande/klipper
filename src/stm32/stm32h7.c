@@ -235,13 +235,18 @@ bootloader_request(void)
 
 // Report why the chip last reset (IWDG vs software vs pin vs power).  The
 // flags accumulate in RCC->RSR until cleared, so capture-and-clear at boot
-// keeps each report specific to the most recent reset.
-static uint32_t reset_status;
+// keeps each report specific to the most recent reset.  Also reports the
+// scheduler breadcrumbs captured before the reset (see sched.c) so a
+// watchdog reset identifies the code that starved the task loop.
+static uint32_t reset_status, prev_crumb_timer, prev_crumb_task;
+
+#define SCHED_CRUMB_MAGIC 0x42524d43
 
 void
 command_get_reset_reason(uint32_t *args)
 {
-    sendf("reset_reason rsr=%u", reset_status);
+    sendf("reset_reason rsr=%u crumb_timer=%u crumb_task=%u",
+          reset_status, prev_crumb_timer, prev_crumb_task);
 }
 DECL_COMMAND_FLAGS(command_get_reset_reason, HF_IN_SHUTDOWN,
                    "get_reset_reason");
@@ -254,6 +259,15 @@ armcm_main(void)
     SystemInit();
     reset_status = RCC->RSR;
     RCC->RSR |= RCC_RSR_RMVF;
+    // Capture scheduler breadcrumbs from before the reset (see sched.c),
+    // then rearm them for this boot.
+    extern uint32_t sched_crumb_magic, sched_crumb_timer, sched_crumb_task;
+    if (sched_crumb_magic == SCHED_CRUMB_MAGIC) {
+        prev_crumb_timer = sched_crumb_timer;
+        prev_crumb_task = sched_crumb_task;
+    }
+    sched_crumb_magic = SCHED_CRUMB_MAGIC;
+    sched_crumb_timer = sched_crumb_task = 0;
     RCC->D1CCIPR = 0x00000000;
     RCC->D2CCIP1R = 0x00000000;
     RCC->D2CCIP2R = 0x00000000;
