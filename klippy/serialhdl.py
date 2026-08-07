@@ -14,6 +14,11 @@ class error(Exception):
 class SerialReader:
     WIRE_TRACE_RECORDS = 131072
     WIRE_TRACE_CHUNK = 2048
+    # Cap on records written per dump.  A dump runs synchronously in the
+    # reactor (e.g. during disconnect on a restart), and formatting tens of
+    # thousands of records to the SD card added seconds to every restart;
+    # the most recent records are the diagnostically relevant ones.
+    WIRE_TRACE_DUMP_MAX = 8192
     def __init__(self, reactor, warn_prefix=""):
         self.reactor = reactor
         self.warn_prefix = warn_prefix
@@ -323,11 +328,12 @@ class SerialReader:
                         reason, self.wire_trace_start_wall, time.time()))
                 trace_file.write("# %s\n" % (
                     self.stats(self.reactor.monotonic()),))
+                skip = max(0, pending[0] - self.WIRE_TRACE_DUMP_MAX)
                 trace_file.write(
-                    "# capacity=%d pending=%d dropped=%d columns="
+                    "# capacity=%d pending=%d dropped=%d skipped=%d columns="
                     "event_id monotonic kind requested result errno offset "
                     "hex_data\n" % (
-                        capacity[0], pending[0], dropped[0]))
+                        capacity[0], pending[0], dropped[0], skip))
                 for event_id, eventtime, kind, requested, result, raw in (
                         self.wire_trace_prefix):
                     trace_file.write(
@@ -335,6 +341,14 @@ class SerialReader:
                             event_id, eventtime, kind, requested, result,
                             raw.hex()))
                     written += 1
+                while skip > 0:
+                    # Drain (without formatting) all but the newest records
+                    count = self.ffi_lib.serialqueue_extract_trace(
+                        self.serialqueue, records,
+                        min(skip, self.WIRE_TRACE_CHUNK))
+                    if not count:
+                        break
+                    skip -= count
                 while 1:
                     count = self.ffi_lib.serialqueue_extract_trace(
                         self.serialqueue, records, self.WIRE_TRACE_CHUNK)
