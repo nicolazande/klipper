@@ -40,6 +40,13 @@ class PVT_endstop:
         '''
         Build configuration.
         '''
+        if self._mcu._ethercat is None:
+            # EtherCAT disabled (enable_ethercat: False): skip the command
+            # lookups. Without this guard the lookups would fall back to
+            # the serial MCU dictionary, which defines identically named
+            # commands (src/stepper.c) - drive commands must never bind to
+            # the serial MCU. Homing on these rails errors out cleanly.
+            return
         # lookup commands
         self._home_cmd = self._mcu.lookup_command(
             msgformat="endstop_home oid=%c", #stepper oid
@@ -188,6 +195,9 @@ class EthercatServo:
               Step commands and generic commands are separated in this case,
               therefore there is no nneed to add a specific command tag.
         '''
+        if self._mcu._ethercat is None:
+            # EtherCAT disabled (enable_ethercat: False): see PVT_endstop.
+            return
         # command a reset clock from high to low level thread
         self._reset_cmd = self._mcu.lookup_command(
             msgformat="reset_step_clock oid=%c clock=%u",
@@ -301,6 +311,9 @@ class EthercatServo:
         '''
         Note homing end.
         '''
+        if self._mcu._ethercat is None:
+            # EtherCAT disabled (enable_ethercat: False)
+            return
         # reset the internal state of the ethercatservo_compress object
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.ethercatservo_compress_reset(self._stepqueue, 0)
@@ -316,6 +329,9 @@ class EthercatServo:
         Query mcu position.
         '''
         if self._mcu.is_fileoutput():
+            return
+        if self._mcu._ethercat is None:
+            # EtherCAT disabled (enable_ethercat: False)
             return
         # send request
         params = self._get_position_cmd.send([self._oid])

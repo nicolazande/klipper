@@ -1217,6 +1217,19 @@ ethercatqueue_init(struct ethercatqueue *sq)
     /* create ethercat master */
     master->master = ecrt_request_master(0);
 
+    /*
+     * Fail cleanly when the master cannot be reserved (device missing,
+     * permission denied, or still held by a previous session): every
+     * following ecrt_* call would dereference the NULL handle and crash
+     * the process. The caller (ethercathdl._start_session) checks the
+     * return code.
+     */
+    if (!master->master)
+    {
+        ret = -1;
+        goto fail;
+    }
+
     /* initialize ethercat slaves */
     for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
     {
@@ -1363,6 +1376,9 @@ fail:
 void __visible
 ethercatqueue_exit(struct ethercatqueue *sq)
 {
+    /* get ethercat master interface */
+    struct mastermonitor *master = &sq->masterifc;
+
     /* signal must exit */
     pollreactor_do_exit(sq->pr);
 
@@ -1375,6 +1391,34 @@ ethercatqueue_exit(struct ethercatqueue *sq)
     if (ret)
     {
         report_errno("pthread_join", ret);
+    }
+
+    /*
+     * Release the ethercat master reservation (ecrt_release_master also
+     * deactivates an activated master). Without this the kernel keeps the
+     * master reserved by this process, and the next in-process session
+     * (host restart) gets EBUSY from ecrt_request_master. All handles
+     * derived from the master are invalidated by the release, so clear
+     * them; ethercatqueue_init() recreates everything on the next connect.
+     */
+    if (master->master)
+    {
+        ecrt_release_master(master->master);
+        master->master = NULL;
+        for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
+        {
+            master->domains[i].domain = NULL;
+            master->domains[i].domain_pd = NULL;
+        }
+        for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+        {
+            struct slavemonitor *slave = &master->monitor[i];
+            slave->slave = NULL;
+            slave->interpolation_mode_sdo = NULL;
+            slave->operation_mode_sdo = NULL;
+            slave->homing_method_sdo = NULL;
+            slave->clear_buffer_sdo = NULL;
+        }
     }
 }
 

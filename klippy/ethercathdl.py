@@ -170,7 +170,15 @@ class EthercatReader:
         # load ethercat configuration
         self._load_ethercat_config('./canopen/config.json')
         # initialize and start low level thread
-        self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
+        init_ret = self.ffi_lib.ethercatqueue_init(self.ethercatqueue)
+        if init_ret:
+            # Master could not be reserved (missing device, permissions,
+            # or held by another process); fail the session so
+            # connect_ethercat() can retry/report instead of crashing.
+            logging.info("%sEthercat init failed (error %d).",
+                         self.warn_prefix, init_ret)
+            self.ethercatqueue = None
+            return False
         # create and start high level thread
         self.background_thread = threading.Thread(target=self._bg_thread)
         self.background_thread.start() #start high level background thread
@@ -212,6 +220,8 @@ class EthercatReader:
             if ret:
                 logging.info("%sEthercat connected.", self.warn_prefix)
                 break
+            # pause before retrying (same idiom as the serial connect loop)
+            self.reactor.pause(self.reactor.monotonic() + 1.)
         
     def set_clock_est(self, freq, conv_time, conv_clock, last_clock):
         '''

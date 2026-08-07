@@ -646,8 +646,16 @@ class MCU:
         wp = "mcu '%s': " % (self._name)
         # serial interface
         self._serial = serialhdl.SerialReader(self._reactor, warn_prefix=wp)
-        # ethercat interface
-        self._ethercat = ethercathdl.EthercatReader(self._reactor, warn_prefix=wp)
+        # ethercat interface. 'enable_ethercat: False' skips the EtherCAT
+        # master entirely (bench testing without drives / without the IgH
+        # master running); clocksync and the drive sync paths below all
+        # tolerate the resulting None.
+        self._enable_ethercat = config.getboolean('enable_ethercat', True)
+        if self._enable_ethercat:
+            self._ethercat = ethercathdl.EthercatReader(self._reactor,
+                                                        warn_prefix=wp)
+        else:
+            self._ethercat = None
         self._baud = 0
         self._serial_half_duplex = False
         self._serial_wire_trace = None
@@ -889,13 +897,16 @@ class MCU:
         # initialize (zero) steppersync internal time
         ffi_lib.steppersync_set_time(self._steppersync, 0., self._mcu_freq)
         # prepare ethercat sync structure (same number of steps as steppersync)
-        self._drivesync = ffi_main.gc(
-            ffi_lib.drivesync_alloc(self._ethercat.get_ethercatqueue(),
-                                    self._pvtqueues, len(self._pvtqueues),
-                                    move_count - self._reserved_move_slots),
-            ffi_lib.drivesync_free)
-        # initialize (zero) drivesync internal time (no concurrency risk)
-        ffi_lib.drivesync_set_time(self._drivesync, 0., self._mcu_freq)
+        if self._ethercat is not None:
+            self._drivesync = ffi_main.gc(
+                ffi_lib.drivesync_alloc(self._ethercat.get_ethercatqueue(),
+                                        self._pvtqueues, len(self._pvtqueues),
+                                        move_count - self._reserved_move_slots),
+                ffi_lib.drivesync_free)
+            # initialize (zero) drivesync internal time (no concurrency risk)
+            ffi_lib.drivesync_set_time(self._drivesync, 0., self._mcu_freq)
+        else:
+            self._drivesync = None
         # log config information
         move_msg = "Configured MCU '%s' (%d moves)" % (self._name, move_count)
         logging.info(move_msg)
@@ -974,10 +985,11 @@ class MCU:
                 else:
                     self._serial.connect_pipe(self._serialport)
                 # connect to ethercat
-                self._ethercat.connect_ethercat()
+                if self._ethercat is not None:
+                    self._ethercat.connect_ethercat()
                 # connect clock synchronizer for both serial and ethercat (indirectly)
                 self._clocksync.connect(self._serial, self._ethercat)
-            except serialhdl.error as e:
+            except (serialhdl.error, ethercathdl.error) as e:
                 # use serail module for ethercat harror handling
                 raise error(str(e))
         logging.info(self._log_info())
@@ -1278,9 +1290,11 @@ class MCU:
 	    # clear history
         clear_history_clock = max(0, self.print_time_to_clock(clear_history_time))
         # flush ethercat moves
-        ret = self._ffi_lib.drivesync_flush(self._drivesync, clock, clear_history_clock)
-        if ret:
-            raise error("Internal error in MCU '%s' ethercatservo_compress" % (self._name,))
+        if self._drivesync is not None:
+            ret = self._ffi_lib.drivesync_flush(self._drivesync, clock,
+                                                clear_history_clock)
+            if ret:
+                raise error("Internal error in MCU '%s' ethercatservo_compress" % (self._name,))
 	    # flush serial moves
         ret = self._ffi_lib.steppersync_flush(self._steppersync, clock, clear_history_clock)
         if ret:
@@ -1298,7 +1312,8 @@ class MCU:
         # set steppersync time
         self._ffi_lib.steppersync_set_time(self._steppersync, offset, freq)
         # set drivesync time
-        self._ffi_lib.drivesync_set_time(self._drivesync, offset, freq)
+        if self._drivesync is not None:
+            self._ffi_lib.drivesync_set_time(self._drivesync, offset, freq)
         if (self._clocksync.is_active() or self.is_fileoutput() or self._is_timeout):
             return
         self._is_timeout = True
