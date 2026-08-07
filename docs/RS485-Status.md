@@ -107,6 +107,11 @@ Katapult (`~/katapult/scripts/flashtool.py`, local clone):
 | Wire trace file | `/home/ubuntu/printer_data/logs/mcu-rs485-wire.trace` | Delete (appends forever; no rotation). |
 | `pollreactor` diagnostic counters | enabled only when tracing | Nothing to do — off when trace is off. |
 | `get_reset_reason` + connect log line | firmware + `mcu.py` | Keep (cheap, generally useful) or drop for upstream parity. |
+| Scheduler/task breadcrumbs | `sched.c`, `scripts/buildcommands.py`, `stm32h7.c`, `armcm_link.lds.S` (.noinit) | Remove after the reboot cause is fixed (one store per task/timer dispatch). |
+| Fault breadcrumb | `armcm_boot.c` DefaultHandler | Remove with the breadcrumbs. |
+| Timer spin-wait bound | `armcm_timer.c` | Remove after the reboot cause is fixed (or keep — negligible cost, converts a watchdog reset into a reported shutdown). |
+| ADC stuck-conversion recovery | `stm32h7_adc.c` | Keep — genuine robustness fix (never fired so far, so not the reboot cause). |
+| `#BISECT#` comments (Test A: ADC sensors disabled) | `printer.cfg` | Restore from scratchpad backup after bisection concludes. |
 
 ## Known-good flash procedure (from this Pi)
 
@@ -146,12 +151,29 @@ reset) and rerun.
   restarts logged Aug 5 on both firmware generations) — the RS485 layer
   now detects and reports them instead of silently livelocking.
 
-## Open questions / next steps
+## RESOLVED (2026-08-07): reboot trigger identified by config bisection
 
-1. **Identify the wedge** using the fault breadcrumb from the next
-   occurrence: `fault=0xFA0000xx` = trapped exception xx (3=hard fault;
-   cfsr decodes the cause; 0 = no trap → true livelock in the
-   timer/scheduler path).
+- Test A (all ADC sensors disabled, fan+tach active): 7+ min, zero
+  reboots. Test B1 (both NTC sensors re-enabled, extruder still off):
+  8+ min, zero reboots — including a user fan ramp to 36% with working
+  tachometer. Previously the MCU never survived 3 minutes.
+- Per the board pinout, **PA1 is "Rear Extraction Fan PWM" (TIM5_CH2)
+  circuitry — not a thermistor input**. The `[extruder]` config section
+  is a placeholder from different hardware: `sensor_pin: PA1` makes the
+  ADC continuously sample a pin wired into unpowered fan gate-drive
+  circuitry (readings 1000-2200C), and doing so repeatedly wedges the
+  chip (scheduler livelock, no fault trapped — consistent with analog
+  injection/disturbance rather than a software defect). Its other pins
+  also collide with this board (`heater_pin PF11` = NTC circuit 2 ADC
+  input; `dir_pin PC2` = MAX31865 SPI2_MISO; `step_pin PC3` = unused
+  PC3_C pad).
+- Fault breadcrumb from an instrumented crash: `fault=0 cfsr=0` — no
+  exception; breadcrumbs froze at `analog_in_event` dispatch on 4/4
+  crashes, consistent with the ADC-sampling trigger.
+- Resolution: keep `[extruder]` commented out until real extruder
+  hardware is wired (MAX31865 SPI circuits 1-6 or NTC circuits 1-6 per
+  the pinout). The breadcrumb/spin-bound diagnostics remain in the
+  firmware to catch any recurrence.
 2. The fork's klippy process segfaults in the EtherCAT chelper on every
    in-process restart when `/dev/EtherCAT0` is missing/busy
    (`Failed to reserve master` → SIGSEGV) — 11 crashes in the Aug 5 logs.
