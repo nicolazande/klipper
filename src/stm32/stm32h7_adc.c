@@ -273,16 +273,42 @@ gpio_adc_setup(uint32_t pin)
     return (struct gpio_adc){ .adc = adc, .chan = chan };
 }
 
+// A conversion normally completes in a few microseconds.  If ADSTART is
+// still set after many consecutive polls (each ~20us apart) the conversion
+// has wedged; every sampling timer would then reschedule forever, starving
+// the task loop until the watchdog resets the chip.  Abort the conversion
+// instead and let the next poll restart it.
+#define ADC_STUCK_LIMIT 100
+
+static uint8_t
+adc_unit_idx(ADC_TypeDef *adc)
+{
+    if (adc == ADC1)
+        return 0;
+    if (adc == ADC2)
+        return 1;
+    return 2;
+}
+
 // Try to sample a value. Returns zero if sample ready, otherwise
 // returns the number of clock ticks the caller should wait before
 // retrying this function.
 uint32_t
 gpio_adc_sample(struct gpio_adc g)
 {
+    static uint8_t adc_stuck[3];
     ADC_TypeDef *adc = g.adc;
     uint32_t cr = adc->CR;
-    if (cr & ADC_CR_ADSTART)
+    if (cr & ADC_CR_ADSTART) {
+        uint8_t u = adc_unit_idx(adc);
+        if (++adc_stuck[u] >= ADC_STUCK_LIMIT) {
+            adc_stuck[u] = 0;
+            adc->CR = (cr & ~ADC_CR_ADSTART) | ADC_CR_ADSTP;
+            output("stm32h7 adc unit %c conversion stuck - aborted", u);
+        }
         goto need_delay;
+    }
+    adc_stuck[adc_unit_idx(adc)] = 0;
     if (adc->ISR & ADC_ISR_EOC) {
         if (adc->SQR1 == (g.chan << ADC_SQR1_SQ1_Pos))
             return 0;
