@@ -122,12 +122,36 @@ Works whether the board is in Katapult or running Klipper (auto-entry).
 If the application is hard-wedged, enter Katapult manually (double-tap
 reset) and rerun.
 
+## MCU reboot investigation (2026-08-07, ongoing)
+
+- Reset reason confirmed on three independent occurrences:
+  **iwdg_watchdog** — the task loop starves >450ms and the independent
+  watchdog resets the chip. Not electrical.
+- Scheduler breadcrumbs (noinit RAM, reported via `get_reset_reason`)
+  froze at `crumb_timer=analog_in_event`, `crumb_task=console_task` on all
+  three crashes. `analog_in_event` and the H7 `gpio_adc_sample` are
+  loop-free, and an added stuck-ADC-conversion recovery (`ADSTP` abort
+  after ~2ms, with an `output()` log line) never fired — so a stuck ADC
+  conversion is ruled out.
+- Remaining candidates: a hard fault trapped during the ADC timer's
+  dispatch/reschedule (DefaultHandler spins until the watchdog fires —
+  indistinguishable from a livelock without more data, hence the new
+  fault breadcrumb recording IPSR+CFSR), or corruption of the timer list
+  walked after `analog_in_event` returns.
+- Symbol maps for every flashed build are in the session scratchpad
+  (`klipper-<version>.symbols`); resolve crumbs with the build that was
+  RUNNING when the reboot happened (the build named in the *previous*
+  session's "Loaded MCU" line).
+- Note: these reboots predate all RS485 work (identical spontaneous
+  restarts logged Aug 5 on both firmware generations) — the RS485 layer
+  now detects and reports them instead of silently livelocking.
+
 ## Open questions / next steps
 
-1. **Why does the MCU reboot?** Next stall will log the reset reason at
-   reconnect. If `iwdg_watchdog`: something wedges the main loop >450ms —
-   instrument further (task breadcrumbs). If `nrst_pin`/`brownout`:
-   electrical — look at the AC fan, wiring, PSU.
+1. **Identify the wedge** using the fault breadcrumb from the next
+   occurrence: `fault=0xFA0000xx` = trapped exception xx (3=hard fault;
+   cfsr decodes the cause; 0 = no trap → true livelock in the
+   timer/scheduler path).
 2. The fork's klippy process segfaults in the EtherCAT chelper on every
    in-process restart when `/dev/EtherCAT0` is missing/busy
    (`Failed to reserve master` → SIGSEGV) — 11 crashes in the Aug 5 logs.

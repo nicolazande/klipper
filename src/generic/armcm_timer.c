@@ -145,9 +145,18 @@ timer_dispatch_many(void)
         }
 
         // Next timer in the past or near future - wait for it to be ready
+        // The wait is bounded: it should last under ~2us, so a huge
+        // iteration count means the time base wedged - shut down with a
+        // report instead of spinning until the watchdog resets the chip.
+        uint32_t spins = 0;
         irq_enable();
-        while (unlikely(diff > 0))
+        while (unlikely(diff > 0)) {
             diff = next - timer_read_time();
+            if (unlikely(++spins > 1000000)) {
+                try_shutdown("Timer spin wait stuck");
+                break;
+            }
+        }
         irq_disable();
     }
 }
