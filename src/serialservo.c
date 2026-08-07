@@ -378,8 +378,12 @@ static void serialservo_stop(struct trsync_signal *tss, uint8_t reason)
     d->interpolation_steps = d->count = 0;
     d->flags |= DF_NEED_RESET; //stop accepting new moves
 
-    /* stop the motor by setting velocity to zero */
-    tmc_set_position(d, 0);
+    /* stop the motor by setting velocity to zero.  Skip when no SPI bus has
+       been associated (config_serialservo_spi never sent): spidev_transfer()
+       would dereference a NULL device, and because this runs from the
+       shutdown path a fault or nested shutdown there wedges the MCU. */
+    if (d->spi)
+        tmc_set_position(d, 0);
 
     while (!move_queue_empty(&d->mq))
     {

@@ -344,8 +344,17 @@ run_shutdown(int reason)
         SchedStatus.shutdown_reason = reason;
     SchedStatus.shutdown_status = 2;
     sched_timer_reset();
-    extern void ctr_run_shutdownfuncs(void);
-    ctr_run_shutdownfuncs();
+    // A shutdown handler that itself raises shutdown() longjmps back here.
+    // Re-running the handler list would loop forever with interrupts
+    // disabled, starving the watchdog and hiding the original reason, so
+    // run the handlers at most once per shutdown.
+    static uint8_t in_shutdown_funcs;
+    if (!in_shutdown_funcs) {
+        in_shutdown_funcs = 1;
+        extern void ctr_run_shutdownfuncs(void);
+        ctr_run_shutdownfuncs();
+        in_shutdown_funcs = 0;
+    }
     SchedStatus.shutdown_status = 1;
     irq_enable();
 
