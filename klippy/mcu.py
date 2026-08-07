@@ -921,13 +921,16 @@ class MCU:
                  (1 << 26, 'iwdg_watchdog'), (1 << 28, 'wwdg_watchdog'),
                  (1 << 30, 'low_power_error')]
         flags = [name for bit, name in names if rsr & bit] or ['unknown']
+        shcsr = params.get('shcsr', 0)
         logging.info(
             "MCU '%s' last reset reason: %s (rsr=0x%08x"
             " crumb_timer=0x%08x crumb_task=0x%08x fault=0x%08x"
-            " cfsr=0x%08x)",
+            " cfsr=0x%08x shutdown=0x%08x shcsr=0x%08x%s)",
             self._name, '+'.join(flags), rsr,
             params.get('crumb_timer', 0), params.get('crumb_task', 0),
-            params.get('fault', 0), params.get('cfsr', 0))
+            params.get('fault', 0), params.get('cfsr', 0),
+            params.get('shutdown', 0), shcsr,
+            " SYSTICK-STUCK-ACTIVE" if shcsr & (1 << 11) else "")
     def _mcu_identify(self):
         '''
         Identify MCU.

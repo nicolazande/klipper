@@ -15,6 +15,12 @@
 void
 watchdog_reset(void)
 {
+    // TEMPORARY DIAGNOSTIC (RS485 bring-up): sample the exception state from
+    // task (thread) context on every watchdog feed.  A SysTick still marked
+    // active here means a longjmp left its exception unwound, so it can
+    // never fire again.  Remove with the other sched breadcrumbs.
+    extern void sched_breadcrumb_shcsr(void);
+    sched_breadcrumb_shcsr();
     IWDG->KR = 0xAAAA;
 }
 DECL_TASK(watchdog_reset);

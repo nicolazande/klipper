@@ -152,6 +152,21 @@ uint32_t sched_crumb_timer __attribute__((section(".noinit")));
 uint32_t sched_crumb_task __attribute__((section(".noinit")));
 uint32_t sched_crumb_fault __attribute__((section(".noinit")));
 uint32_t sched_crumb_cfsr __attribute__((section(".noinit")));
+// Shutdown progress: 0x5D000000 | reason once sched_shutdown() longjmps,
+// | 0x10000 once run_shutdown() is entered, | 0x20000 once it returns.
+// Klipper shuts down by longjmp-ing out of whatever context detected the
+// fault; from a timer IRQ on Cortex-M that leaves the exception active.
+uint32_t sched_crumb_shutdown __attribute__((section(".noinit")));
+// System Handler Control and State (SCB->SHCSR) sampled from task context;
+// bit 11 (SYSTICKACT) set while in thread mode proves SysTick is stuck
+// active and can therefore never fire again.
+uint32_t sched_crumb_shcsr __attribute__((section(".noinit")));
+
+void
+sched_breadcrumb_shcsr(void)
+{
+    sched_crumb_shcsr = *(volatile uint32_t *)0xE000ED24;
+}
 
 void
 sched_breadcrumb_task(void *func)
@@ -315,6 +330,7 @@ static void
 run_shutdown(int reason)
 {
     irq_disable();
+    sched_crumb_shutdown |= 0x10000;
     uint32_t cur = timer_read_time();
     if (!SchedStatus.shutdown_status)
         SchedStatus.shutdown_reason = reason;
@@ -327,6 +343,7 @@ run_shutdown(int reason)
 
     sendf("shutdown clock=%u static_string_id=%hu", cur
           , SchedStatus.shutdown_reason);
+    sched_crumb_shutdown |= 0x20000;
 }
 
 // Report the last shutdown reason code
@@ -351,6 +368,7 @@ void
 sched_shutdown(uint_fast8_t reason)
 {
     irq_disable();
+    sched_crumb_shutdown = 0x5D000000 | reason;
     longjmp(shutdown_jmp, reason);
 }
 
