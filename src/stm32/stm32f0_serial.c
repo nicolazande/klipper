@@ -240,7 +240,9 @@ serial_init(void)
     enable_pclock((uint32_t)USARTx);
 
 #if CONFIG_STM32_SERIAL_RS485
-    gpio_peripheral(serial_de_gpio, USARTx_FUNCTION, 0);
+    // Pull-down keeps the transceiver driver disabled while the pin is not
+    // actively driven (reset, bootloader hand-off).
+    gpio_peripheral(serial_de_gpio, USARTx_FUNCTION, -1);
 #endif
 
     uint32_t pclk = get_pclock_frequency((uint32_t)USARTx);

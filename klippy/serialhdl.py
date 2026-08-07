@@ -239,14 +239,37 @@ class SerialReader:
             if half_duplex:
                 # FTDI adapters buffer received data for up to 16ms by
                 # default; a request/response protocol pays that on every
-                # bus turn.  Request the 1ms low-latency mode (best effort).
+                # bus turn.  Request the 1ms low-latency mode (best effort;
+                # older pyserial lacks set_low_latency_mode, so fall back
+                # to the sysfs knob, which a udev rule can make writable).
+                tty = os.path.basename(os.path.realpath(serialport))
+                lt_path = ("/sys/bus/usb-serial/devices/%s/latency_timer"
+                           % (tty,))
                 try:
-                    serial_dev.set_low_latency_mode(True)
-                    logging.info("%sSerial low latency mode enabled",
+                    with open(lt_path) as f:
+                        current_latency = int(f.read().strip())
+                except Exception:
+                    current_latency = None
+                if current_latency is not None and current_latency > 1:
+                    try:
+                        serial_dev.set_low_latency_mode(True)
+                        logging.info("%sSerial low latency mode enabled",
+                                     self.warn_prefix)
+                    except Exception as e:
+                        try:
+                            with open(lt_path, "w") as f:
+                                f.write("1")
+                            logging.info("%sSerial latency_timer set to 1ms"
+                                         " via sysfs", self.warn_prefix)
+                        except Exception as e2:
+                            logging.info(
+                                "%sSerial latency_timer is %sms; unable to"
+                                " lower it (%s; sysfs: %s). Consider a udev"
+                                " rule setting it to 1.", self.warn_prefix,
+                                current_latency, e, e2)
+                elif current_latency == 1:
+                    logging.info("%sSerial latency_timer already 1ms",
                                  self.warn_prefix)
-                except Exception as e:
-                    logging.info("%sUnable to set serial low latency"
-                                 " mode: %s", self.warn_prefix, e)
             wire_trace_prefix = [] if wire_trace_path else None
             stk500v2_leave(serial_dev, self.reactor, wire_trace_prefix)
             ret = self._start_session(
