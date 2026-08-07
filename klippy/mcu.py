@@ -742,6 +742,11 @@ class MCU:
         
     def _handle_starting(self, params):
         if not self._is_shutdown:
+            # The freshly-rebooted MCU is responsive; capture why it reset
+            # (get_reset_reason works in shutdown state) before anything
+            # else resets it again and destroys the evidence.
+            self._reactor.register_async_callback(
+                (lambda e, s=self: s._log_reset_reason()))
             self._printer.invoke_async_shutdown("MCU '%s' spontaneous restart" % (self._name,))
             
     def _check_restart(self, reason):
