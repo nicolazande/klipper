@@ -241,6 +241,7 @@ bootloader_request(void)
 static uint32_t reset_status, prev_crumb_timer, prev_crumb_task;
 static uint32_t prev_crumb_fault, prev_crumb_cfsr;
 static uint32_t prev_crumb_shutdown, prev_crumb_shcsr;
+static uint32_t prev_crumb_sdfunc;
 
 #define SCHED_CRUMB_MAGIC 0x42524d43
 
@@ -248,10 +249,10 @@ void
 command_get_reset_reason(uint32_t *args)
 {
     sendf("reset_reason rsr=%u crumb_timer=%u crumb_task=%u"
-          " fault=%u cfsr=%u shutdown=%u shcsr=%u",
+          " fault=%u cfsr=%u shutdown=%u shcsr=%u sdfunc=%u",
           reset_status, prev_crumb_timer, prev_crumb_task,
           prev_crumb_fault, prev_crumb_cfsr,
-          prev_crumb_shutdown, prev_crumb_shcsr);
+          prev_crumb_shutdown, prev_crumb_shcsr, prev_crumb_sdfunc);
 }
 DECL_COMMAND_FLAGS(command_get_reset_reason, HF_IN_SHUTDOWN,
                    "get_reset_reason");
@@ -269,6 +270,7 @@ armcm_main(void)
     extern uint32_t sched_crumb_magic, sched_crumb_timer, sched_crumb_task;
     extern uint32_t sched_crumb_fault, sched_crumb_cfsr;
     extern uint32_t sched_crumb_shutdown, sched_crumb_shcsr;
+    extern uint32_t sched_crumb_shutdown_func;
     if (sched_crumb_magic == SCHED_CRUMB_MAGIC) {
         prev_crumb_timer = sched_crumb_timer;
         prev_crumb_task = sched_crumb_task;
@@ -276,11 +278,13 @@ armcm_main(void)
         prev_crumb_cfsr = sched_crumb_cfsr;
         prev_crumb_shutdown = sched_crumb_shutdown;
         prev_crumb_shcsr = sched_crumb_shcsr;
+        prev_crumb_sdfunc = sched_crumb_shutdown_func;
     }
     sched_crumb_magic = SCHED_CRUMB_MAGIC;
     sched_crumb_timer = sched_crumb_task = 0;
     sched_crumb_fault = sched_crumb_cfsr = 0;
     sched_crumb_shutdown = sched_crumb_shcsr = 0;
+    sched_crumb_shutdown_func = 0;
     RCC->D1CCIPR = 0x00000000;
     RCC->D2CCIP1R = 0x00000000;
     RCC->D2CCIP2R = 0x00000000;

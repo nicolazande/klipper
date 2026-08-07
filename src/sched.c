@@ -162,10 +162,18 @@ uint32_t sched_crumb_shutdown __attribute__((section(".noinit")));
 // active and can therefore never fire again.
 uint32_t sched_crumb_shcsr __attribute__((section(".noinit")));
 
+uint32_t sched_crumb_shutdown_func __attribute__((section(".noinit")));
+
 void
 sched_breadcrumb_shcsr(void)
 {
     sched_crumb_shcsr = *(volatile uint32_t *)0xE000ED24;
+}
+
+void
+sched_breadcrumb_shutdown_func(void *func)
+{
+    sched_crumb_shutdown_func = (uint32_t)func;
 }
 
 void

@@ -45,6 +45,18 @@ class HandleCallList:
         for funcname, funcs in self.call_lists.items():
             func_code = ['    extern void %s(void);\n    %s();' % (f, f)
                          for f in funcs]
+            if funcname == 'ctr_run_shutdownfuncs':
+                # TEMPORARY DIAGNOSTIC (RS485 bring-up): name the shutdown
+                # handler being run, so a hang inside run_shutdown() (which
+                # executes with interrupts disabled) is attributable.
+                func_code = ['    {\n'
+                             + '        extern void %s(void);\n' % (f,)
+                             + '        extern void'
+                             + ' sched_breadcrumb_shutdown_func(void*);\n'
+                             + '        sched_breadcrumb_shutdown_func('
+                             + '(void*)%s);\n' % (f,)
+                             + '        %s();\n' % (f,)
+                             + '    }' for f in funcs]
             if funcname == 'ctr_run_taskfuncs':
                 # TEMPORARY DIAGNOSTIC (RS485 bring-up): record each task in
                 # a warm-reset-surviving breadcrumb so a watchdog reset can
