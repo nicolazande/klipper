@@ -150,6 +150,8 @@ sched_del_timer(struct timer *del)
 uint32_t sched_crumb_magic __attribute__((section(".noinit")));
 uint32_t sched_crumb_timer __attribute__((section(".noinit")));
 uint32_t sched_crumb_task __attribute__((section(".noinit")));
+uint32_t sched_crumb_fault __attribute__((section(".noinit")));
+uint32_t sched_crumb_cfsr __attribute__((section(".noinit")));
 
 void
 sched_breadcrumb_task(void *func)

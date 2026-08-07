@@ -124,6 +124,15 @@ DECL_ARMCM_IRQ(ResetHandler, -15);
 void
 DefaultHandler(void)
 {
+    // TEMPORARY DIAGNOSTIC (RS485 bring-up): record which exception fired
+    // and the fault status in warm-reset-surviving memory (see sched.c);
+    // the watchdog reset that follows this spin reports it via
+    // get_reset_reason, distinguishing a fault from a livelock.
+    extern uint32_t sched_crumb_fault, sched_crumb_cfsr;
+    uint32_t ipsr;
+    asm volatile("mrs %0, ipsr" : "=r"(ipsr));
+    sched_crumb_fault = 0xFA000000 | (ipsr & 0x1ff);
+    sched_crumb_cfsr = *(volatile uint32_t *)0xE000ED28; // SCB->CFSR
     for (;;)
         ;
 }

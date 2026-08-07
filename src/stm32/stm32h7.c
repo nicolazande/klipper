@@ -239,14 +239,17 @@ bootloader_request(void)
 // scheduler breadcrumbs captured before the reset (see sched.c) so a
 // watchdog reset identifies the code that starved the task loop.
 static uint32_t reset_status, prev_crumb_timer, prev_crumb_task;
+static uint32_t prev_crumb_fault, prev_crumb_cfsr;
 
 #define SCHED_CRUMB_MAGIC 0x42524d43
 
 void
 command_get_reset_reason(uint32_t *args)
 {
-    sendf("reset_reason rsr=%u crumb_timer=%u crumb_task=%u",
-          reset_status, prev_crumb_timer, prev_crumb_task);
+    sendf("reset_reason rsr=%u crumb_timer=%u crumb_task=%u"
+          " fault=%u cfsr=%u",
+          reset_status, prev_crumb_timer, prev_crumb_task,
+          prev_crumb_fault, prev_crumb_cfsr);
 }
 DECL_COMMAND_FLAGS(command_get_reset_reason, HF_IN_SHUTDOWN,
                    "get_reset_reason");
@@ -262,12 +265,16 @@ armcm_main(void)
     // Capture scheduler breadcrumbs from before the reset (see sched.c),
     // then rearm them for this boot.
     extern uint32_t sched_crumb_magic, sched_crumb_timer, sched_crumb_task;
+    extern uint32_t sched_crumb_fault, sched_crumb_cfsr;
     if (sched_crumb_magic == SCHED_CRUMB_MAGIC) {
         prev_crumb_timer = sched_crumb_timer;
         prev_crumb_task = sched_crumb_task;
+        prev_crumb_fault = sched_crumb_fault;
+        prev_crumb_cfsr = sched_crumb_cfsr;
     }
     sched_crumb_magic = SCHED_CRUMB_MAGIC;
     sched_crumb_timer = sched_crumb_task = 0;
+    sched_crumb_fault = sched_crumb_cfsr = 0;
     RCC->D1CCIPR = 0x00000000;
     RCC->D2CCIP1R = 0x00000000;
     RCC->D2CCIP2R = 0x00000000;

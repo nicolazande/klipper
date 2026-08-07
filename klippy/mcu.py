@@ -923,9 +923,11 @@ class MCU:
         flags = [name for bit, name in names if rsr & bit] or ['unknown']
         logging.info(
             "MCU '%s' last reset reason: %s (rsr=0x%08x"
-            " crumb_timer=0x%08x crumb_task=0x%08x)",
+            " crumb_timer=0x%08x crumb_task=0x%08x fault=0x%08x"
+            " cfsr=0x%08x)",
             self._name, '+'.join(flags), rsr,
-            params.get('crumb_timer', 0), params.get('crumb_task', 0))
+            params.get('crumb_timer', 0), params.get('crumb_task', 0),
+            params.get('fault', 0), params.get('cfsr', 0))
     def _mcu_identify(self):
         '''
         Identify MCU.
