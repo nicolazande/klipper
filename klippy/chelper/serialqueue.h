@@ -25,9 +25,25 @@ struct pull_queue_message {
     uint64_t notify_id;
 };
 
+#define SERIALQUEUE_TRACE_DATA_MAX 64
+#define SQ_TRACE_READ 1
+#define SQ_TRACE_WRITE 2
+#define SQ_TRACE_RETRANSMIT 3
+#define SQ_TRACE_FLUSH 4
+
+struct serialqueue_trace {
+    uint64_t event_id;
+    double eventtime;
+    int kind, requested, result, error, offset, data_len;
+    uint8_t data[SERIALQUEUE_TRACE_DATA_MAX];
+};
+
 struct serialqueue;
 struct serialqueue *serialqueue_alloc(int serial_fd, char serial_fd_type
                                       , int client_id);
+struct serialqueue *serialqueue_alloc_trace(int serial_fd, char serial_fd_type
+                                            , int client_id
+                                            , int trace_capacity);
 void serialqueue_exit(struct serialqueue *sq);
 void serialqueue_free(struct serialqueue *sq);
 struct command_queue *serialqueue_alloc_commandqueue(void);
@@ -53,5 +69,9 @@ void serialqueue_get_clock_est(struct serialqueue *sq
 void serialqueue_get_stats(struct serialqueue *sq, char *buf, int len);
 int serialqueue_extract_old(struct serialqueue *sq, int sentq
                             , struct pull_queue_message *q, int max);
+void serialqueue_get_trace_stats(struct serialqueue *sq, uint64_t *dropped
+                                 , int *pending, int *capacity);
+int serialqueue_extract_trace(struct serialqueue *sq
+                              , struct serialqueue_trace *q, int max);
 
 #endif // serialqueue.h

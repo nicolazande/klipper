@@ -650,6 +650,7 @@ class MCU:
         self._ethercat = ethercathdl.EthercatReader(self._reactor, warn_prefix=wp)
         self._baud = 0
         self._serial_half_duplex = False
+        self._serial_wire_trace = None
         self._canbus_iface = None
         canbus_uuid = config.get('canbus_uuid', None)
         if canbus_uuid is not None:
@@ -665,6 +666,8 @@ class MCU:
                 self._baud = config.getint('baud', 250000, minval=2400)
                 self._serial_half_duplex = config.getboolean(
                     'serial_half_duplex', False)
+                self._serial_wire_trace = config.get(
+                    'serial_wire_trace', None)
         # restarts
         restart_methods = [None, 'arduino', 'cheetah', 'command', 'rpi_usb']
         self._restart_method = 'command'
@@ -917,7 +920,7 @@ class MCU:
                     rts = (resmeth != "cheetah")
                     self._serial.connect_uart(
                         self._serialport, self._baud, rts,
-                        self._serial_half_duplex)
+                        self._serial_half_duplex, self._serial_wire_trace)
                     firmware_half_duplex = bool(
                         self._serial.get_msgparser().get_constant_int(
                             'SERIAL_HALF_DUPLEX', 0))
@@ -1259,7 +1262,10 @@ class MCU:
         if (self._clocksync.is_active() or self.is_fileoutput() or self._is_timeout):
             return
         self._is_timeout = True
-        logging.info("Timeout with MCU '%s' (eventtime=%f)", self._name, eventtime)
+        logging.info("Timeout with MCU '%s' (eventtime=%f): %s\n%s",
+                     self._name, eventtime, self._serial.stats(eventtime),
+                     self._clocksync.dump_debug())
+        self._serial.dump_wire_trace("mcu communication timeout")
         self._printer.invoke_shutdown("Lost communication with MCU '%s'" % (self._name,))
 
     def is_fileoutput(self):

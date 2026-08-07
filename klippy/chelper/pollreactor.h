@@ -8,6 +8,8 @@
 #ifndef POLLREACTOR_H
 #define POLLREACTOR_H
 
+#include <stdint.h>
+
 /****************************************************************
  * Includes
  ****************************************************************/
@@ -18,6 +20,11 @@
  ****************************************************************/
 #define PR_NOW   0.
 #define PR_NEVER 9999999999999999.
+
+struct pollreactor_stats {
+    uint64_t run_loops, poll_calls, poll_wakeups, poll_timeouts;
+    uint64_t spin_loops, timer_callbacks, fd_callbacks;
+};
 
 
 /****************************************************************
@@ -50,6 +57,13 @@ void pollreactor_do_exit(struct pollreactor *pr);
 
 /** check if a pollreactor loop has been requested to exit */
 int pollreactor_is_exit(struct pollreactor *pr);
+
+/** enable low-level reactor diagnostic counters */
+void pollreactor_enable_stats(struct pollreactor *pr);
+
+/** return diagnostic counters for the reactor */
+void pollreactor_get_stats(struct pollreactor *pr,
+                           struct pollreactor_stats *stats);
 
 /** set file descriptor in non blocking mode */
 int fd_set_non_blocking(int fd);

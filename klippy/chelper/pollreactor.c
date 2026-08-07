@@ -42,7 +42,14 @@ struct pollreactor
     struct pollfd *fds;
     void (**fd_callbacks)(void *data, double eventtime);
     struct pollreactor_timer *timers;
+    int stats_enabled;
+    struct pollreactor_stats stats;
 };
+
+#define PR_COUNT(pr, field) do {                                        \
+    if ((pr)->stats_enabled)                                            \
+        __atomic_fetch_add(&(pr)->stats.field, 1, __ATOMIC_RELAXED);    \
+} while (0)
 
 
 /****************************************************************
@@ -151,6 +158,7 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime, int busy)
             {
                 /* execute timer callback and update timer */
                 busy = 1;
+                PR_COUNT(pr, timer_callbacks);
                 t = timer->callback(pr->callback_data, eventtime);
                 timer->waketime = t;
             }
@@ -197,6 +205,7 @@ pollreactor_run(struct pollreactor *pr)
 
     while (!pr->must_exit)
     {
+        PR_COUNT(pr, run_loops);
         /* check timers and update timeout */
         int timeout = pollreactor_check_timers(pr, eventtime, busy);
         busy = 0;
@@ -208,7 +217,12 @@ pollreactor_run(struct pollreactor *pr)
          */
         if (timeout > pr->offset)
         {
+            PR_COUNT(pr, poll_calls);
             ret = poll(pr->fds, pr->num_fds, timeout);
+        }
+        else
+        {
+            PR_COUNT(pr, spin_loops);
         }
 
         /* update event time */
@@ -217,15 +231,21 @@ pollreactor_run(struct pollreactor *pr)
         /* check for async commands on fd */
         if (ret > 0)
         {
+            PR_COUNT(pr, poll_wakeups);
             busy = 1;
             for (int i = 0; i < pr->num_fds; i++)
             {
                 if (pr->fds[i].revents)
                 {
                     /* execute async callbacks */
+                    PR_COUNT(pr, fd_callbacks);
                     pr->fd_callbacks[i](pr->callback_data, eventtime);
                 }
             }
+        }
+        else if (!ret && timeout > pr->offset)
+        {
+            PR_COUNT(pr, poll_timeouts);
         }
         else if (ret < 0)
         {
@@ -249,6 +269,33 @@ int
 pollreactor_is_exit(struct pollreactor *pr)
 {
     return pr->must_exit;
+}
+
+/** enable low-level reactor diagnostic counters */
+void
+pollreactor_enable_stats(struct pollreactor *pr)
+{
+    pr->stats_enabled = 1;
+}
+
+/** return diagnostic counters for the reactor */
+void
+pollreactor_get_stats(struct pollreactor *pr, struct pollreactor_stats *stats)
+{
+    stats->run_loops = __atomic_load_n(&pr->stats.run_loops,
+                                       __ATOMIC_RELAXED);
+    stats->poll_calls = __atomic_load_n(&pr->stats.poll_calls,
+                                        __ATOMIC_RELAXED);
+    stats->poll_wakeups = __atomic_load_n(&pr->stats.poll_wakeups,
+                                          __ATOMIC_RELAXED);
+    stats->poll_timeouts = __atomic_load_n(&pr->stats.poll_timeouts,
+                                           __ATOMIC_RELAXED);
+    stats->spin_loops = __atomic_load_n(&pr->stats.spin_loops,
+                                        __ATOMIC_RELAXED);
+    stats->timer_callbacks = __atomic_load_n(&pr->stats.timer_callbacks,
+                                             __ATOMIC_RELAXED);
+    stats->fd_callbacks = __atomic_load_n(&pr->stats.fd_callbacks,
+                                          __ATOMIC_RELAXED);
 }
 
 /** set file descriptor in non blocking mode */

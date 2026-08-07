@@ -64,11 +64,13 @@ class PrinterStats:
             reactor = self.printer.get_reactor()
             reactor.update_timer(self.stats_timer, reactor.NOW)
     def generate_stats(self, eventtime):
-        if self.active:
-            stats = [cb(eventtime) for cb in self.stats_cb]
-            if max([s[0] for s in stats]):
-                logging.info("Stats %.1f: %s", eventtime,
-                            ' '.join([s[1] for s in stats]))
+        # Stats callbacks also perform required periodic maintenance, such as
+        # MCU communication checks and clock calibration.  The active option
+        # controls log output only; disabling logs must not disable safety.
+        stats = [cb(eventtime) for cb in self.stats_cb]
+        if self.active and max([s[0] for s in stats]):
+            logging.info("Stats %.1f: %s", eventtime,
+                         ' '.join([s[1] for s in stats]))
         return eventtime + 1.
 
 def load_config(config):

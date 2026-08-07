@@ -3,7 +3,7 @@
 # Copyright (C) 2016-2021  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import logging, threading, os
+import logging, threading, os, time
 import serial
 
 import msgproto, chelper, util
@@ -12,6 +12,8 @@ class error(Exception):
     pass
 
 class SerialReader:
+    WIRE_TRACE_RECORDS = 131072
+    WIRE_TRACE_CHUNK = 2048
     def __init__(self, reactor, warn_prefix=""):
         self.reactor = reactor
         self.warn_prefix = warn_prefix
@@ -33,6 +35,10 @@ class SerialReader:
         # Sent message notification tracking
         self.last_notify_id = 0
         self.pending_notifications = {}
+        # Optional raw serial diagnostic trace (kept in C memory while live).
+        self.wire_trace_path = None
+        self.wire_trace_start_wall = None
+        self.wire_trace_prefix = []
     def _bg_thread(self):
         response = self.ffi_main.new('struct pull_queue_message *')
         while 1:
@@ -77,11 +83,21 @@ class SerialReader:
                     return identify_data
                 identify_data += msgdata
     def _start_session(self, serial_dev, serial_fd_type=b'u', client_id=0,
-                       half_duplex=False):
+                       half_duplex=False, wire_trace_path=None,
+                       wire_trace_prefix=None):
         self.serial_dev = serial_dev
+        self.wire_trace_path = wire_trace_path
+        self.wire_trace_start_wall = time.time()
+        self.wire_trace_prefix = wire_trace_prefix or []
+        if wire_trace_path:
+            serialqueue = self.ffi_lib.serialqueue_alloc_trace(
+                serial_dev.fileno(), serial_fd_type, client_id,
+                self.WIRE_TRACE_RECORDS)
+        else:
+            serialqueue = self.ffi_lib.serialqueue_alloc(
+                serial_dev.fileno(), serial_fd_type, client_id)
         self.serialqueue = self.ffi_main.gc(
-            self.ffi_lib.serialqueue_alloc(serial_dev.fileno(),
-                                           serial_fd_type, client_id),
+            serialqueue,
             self.ffi_lib.serialqueue_free)
         if half_duplex:
             self.ffi_lib.serialqueue_set_half_duplex(self.serialqueue, 1)
@@ -92,6 +108,7 @@ class SerialReader:
         identify_data = completion.wait(self.reactor.monotonic() + 10.)
         if identify_data is None:
             logging.info("%sTimeout on connect", self.warn_prefix)
+            self.dump_wire_trace("identify timeout")
             self.disconnect()
             return False
         msgparser = msgproto.MessageParser(warn_prefix=self.warn_prefix)
@@ -181,7 +198,8 @@ class SerialReader:
             ret = self._start_session(serial_dev)
             if ret:
                 break
-    def connect_uart(self, serialport, baud, rts=True, half_duplex=False):
+    def connect_uart(self, serialport, baud, rts=True, half_duplex=False,
+                     wire_trace_path=None):
         # Initial connection
         logging.info("%sStarting serial connect", self.warn_prefix)
         start_time = self.reactor.monotonic()
@@ -199,8 +217,12 @@ class SerialReader:
                              self.warn_prefix, e)
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
-            stk500v2_leave(serial_dev, self.reactor)
-            ret = self._start_session(serial_dev, half_duplex=half_duplex)
+            wire_trace_prefix = [] if wire_trace_path else None
+            stk500v2_leave(serial_dev, self.reactor, wire_trace_prefix)
+            ret = self._start_session(
+                serial_dev, half_duplex=half_duplex,
+                wire_trace_path=wire_trace_path,
+                wire_trace_prefix=wire_trace_prefix)
             if ret:
                 break
     def connect_file(self, debugoutput, dictionary, pace=False):
@@ -217,6 +239,7 @@ class SerialReader:
             self.ffi_lib.serialqueue_exit(self.serialqueue)
             if self.background_thread is not None:
                 self.background_thread.join()
+            self.dump_wire_trace("serial disconnect")
             self.background_thread = self.serialqueue = None
         if self.serial_dev is not None:
             self.serial_dev.close()
@@ -224,6 +247,64 @@ class SerialReader:
         for pn in self.pending_notifications.values():
             pn.complete(None)
         self.pending_notifications.clear()
+    def dump_wire_trace(self, reason):
+        if self.serialqueue is None or not self.wire_trace_path:
+            return
+        dropped = self.ffi_main.new('uint64_t *')
+        pending = self.ffi_main.new('int *')
+        capacity = self.ffi_main.new('int *')
+        self.ffi_lib.serialqueue_get_trace_stats(
+            self.serialqueue, dropped, pending, capacity)
+        if not pending[0] and not self.wire_trace_prefix:
+            return
+        path = os.path.abspath(os.path.expanduser(self.wire_trace_path))
+        records = self.ffi_main.new(
+            'struct serialqueue_trace[%d]' % (self.WIRE_TRACE_CHUNK,))
+        kind_names = {1: 'RX', 2: 'TX', 3: 'TX_RETRANSMIT', 4: 'TX_FLUSH'}
+        written = 0
+        try:
+            with open(path, 'a', buffering=1024 * 1024) as trace_file:
+                trace_file.write(
+                    "# klipper_serial_wire_trace version=1 reason=%r "
+                    "start_wall=%.6f dump_wall=%.6f\n" % (
+                        reason, self.wire_trace_start_wall, time.time()))
+                trace_file.write("# %s\n" % (
+                    self.stats(self.reactor.monotonic()),))
+                trace_file.write(
+                    "# capacity=%d pending=%d dropped=%d columns="
+                    "event_id monotonic kind requested result errno offset "
+                    "hex_data\n" % (
+                        capacity[0], pending[0], dropped[0]))
+                for event_id, eventtime, kind, requested, result, raw in (
+                        self.wire_trace_prefix):
+                    trace_file.write(
+                        "pre%d %.9f %s %d %d 0 0 %s\n" % (
+                            event_id, eventtime, kind, requested, result,
+                            raw.hex()))
+                    written += 1
+                while 1:
+                    count = self.ffi_lib.serialqueue_extract_trace(
+                        self.serialqueue, records, self.WIRE_TRACE_CHUNK)
+                    if not count:
+                        break
+                    for i in range(count):
+                        rec = records[i]
+                        raw = bytes(self.ffi_main.buffer(
+                            rec.data, rec.data_len)).hex()
+                        trace_file.write(
+                            "%d %.9f %s %d %d %d %d %s\n" % (
+                                rec.event_id, rec.eventtime,
+                                kind_names.get(rec.kind, 'UNKNOWN_%d' % (
+                                    rec.kind,)), rec.requested, rec.result,
+                                rec.error, rec.offset, raw))
+                    written += count
+        except Exception:
+            logging.exception("%sUnable to write serial wire trace to %s",
+                              self.warn_prefix, path)
+            return
+        self.wire_trace_prefix = []
+        logging.info("%sWrote %d raw serial trace records to %s",
+                     self.warn_prefix, written, path)
     def stats(self, eventtime):
         if self.serialqueue is None:
             return ""
@@ -271,6 +352,18 @@ class SerialReader:
         return self.ffi_main.gc(self.ffi_lib.serialqueue_alloc_commandqueue(),
                                 self.ffi_lib.serialqueue_free_commandqueue)
     # Dumping debug lists
+    def _format_debug_message(self, msg):
+        data = msg.msg[0:msg.len]
+        if msg.len == msgproto.MESSAGE_MIN:
+            # Empty protocol frames are ACK/NAK blocks and contain no msgid
+            # for MessageParser.dump() to decode.
+            return "seq: %02x, ack/nak" % (data[msgproto.MESSAGE_POS_SEQ],)
+        try:
+            return ', '.join(self.msgparser.dump(data))
+        except Exception as e:
+            # A diagnostic dump must never hide the original MCU failure.
+            raw = bytes(self.ffi_main.buffer(msg.msg, msg.len)).hex()
+            return "decode_error=%r raw=%s" % (e, raw)
     def dump_debug(self):
         out = []
         out.append("Dumping serial stats: %s" % (
@@ -284,15 +377,15 @@ class SerialReader:
         out.append("Dumping send queue %d messages" % (scount,))
         for i in range(scount):
             msg = sdata[i]
-            cmds = self.msgparser.dump(msg.msg[0:msg.len])
             out.append("Sent %d %f %f %d: %s" % (
-                i, msg.receive_time, msg.sent_time, msg.len, ', '.join(cmds)))
+                i, msg.receive_time, msg.sent_time, msg.len,
+                self._format_debug_message(msg)))
         out.append("Dumping receive queue %d messages" % (rcount,))
         for i in range(rcount):
             msg = rdata[i]
-            cmds = self.msgparser.dump(msg.msg[0:msg.len])
             out.append("Receive: %d %f %f %d: %s" % (
-                i, msg.receive_time, msg.sent_time, msg.len, ', '.join(cmds)))
+                i, msg.receive_time, msg.sent_time, msg.len,
+                self._format_debug_message(msg)))
         return '\n'.join(out)
     # Default message handlers
     def _handle_unknown_init(self, params):
@@ -338,22 +431,34 @@ class SerialRetryCommand:
             retry_delay *= 2.
 
 # Attempt to place an AVR stk500v2 style programmer into normal mode
-def stk500v2_leave(ser, reactor):
+def stk500v2_leave(ser, reactor, wire_trace=None):
     logging.debug("Starting stk500v2 leave programmer sequence")
+    def trace(kind, requested, result=0, data=b''):
+        if wire_trace is not None:
+            wire_trace.append((len(wire_trace) + 1, reactor.monotonic(), kind,
+                               requested, result, bytes(data)))
     util.clear_hupcl(ser.fileno())
     origbaud = ser.baudrate
     # Request a dummy speed first as this seems to help reset the port
     ser.baudrate = 2400
-    ser.read(1)
+    trace('SET_BAUD', 2400)
+    res = ser.read(1)
+    trace('PRE_RX', 1, len(res), res)
     # Send stk500v2 leave programmer sequence
     ser.baudrate = 115200
+    trace('SET_BAUD', 115200)
     reactor.pause(reactor.monotonic() + 0.100)
-    ser.read(4096)
-    ser.write(b'\x1b\x01\x00\x01\x0e\x11\x04')
+    res = ser.read(4096)
+    trace('PRE_RX', 4096, len(res), res)
+    msg = b'\x1b\x01\x00\x01\x0e\x11\x04'
+    ret = ser.write(msg)
+    trace('PRE_TX', len(msg), ret, msg)
     reactor.pause(reactor.monotonic() + 0.050)
     res = ser.read(4096)
+    trace('PRE_RX', 4096, len(res), res)
     logging.debug("Got %s from stk500v2", repr(res))
     ser.baudrate = origbaud
+    trace('SET_BAUD', origbaud)
 
 def cheetah_reset(serialport, reactor):
     # Fysetc Cheetah v1.2 boards have a weird stateful circuitry for

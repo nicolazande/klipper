@@ -13,6 +13,7 @@
 // background thread is launched to do this work and minimize latency.
 
 #include <linux/can.h> // // struct can_frame
+#include <errno.h> // errno
 #include <math.h> // fabs
 #include <pthread.h> // pthread_mutex_lock
 #include <stddef.h> // offsetof
@@ -71,6 +72,10 @@ struct serialqueue {
     struct list_head fast_readers;
     // Debugging
     struct list_head old_sent, old_receive;
+    pthread_mutex_t trace_lock;
+    struct serialqueue_trace *trace_records;
+    int trace_capacity, trace_first, trace_count;
+    uint64_t trace_event_id, trace_dropped;
     // Stats
     uint32_t bytes_write, bytes_read, bytes_retransmit, bytes_invalid;
     uint32_t half_duplex_polls;
@@ -99,6 +104,49 @@ struct serialqueue {
 
 #define DEBUG_QUEUE_SENT 100
 #define DEBUG_QUEUE_RECEIVE 100
+#define TRACE_RECORDS_MAX 262144
+
+// Add a raw serial operation to the optional in-memory diagnostic trace.
+// The serial thread never performs trace file IO. Large reads and writes are
+// split into fixed-size records that share one event_id and timestamp.
+static void
+trace_io(struct serialqueue *sq, int kind, int requested, int result,
+         int error, const void *data, int data_len)
+{
+    if (!sq->trace_records)
+        return;
+    double eventtime = get_monotonic();
+    pthread_mutex_lock(&sq->trace_lock);
+    uint64_t event_id = ++sq->trace_event_id;
+    int offset = 0;
+    do {
+        int chunk = data_len - offset;
+        if (chunk > SERIALQUEUE_TRACE_DATA_MAX)
+            chunk = SERIALQUEUE_TRACE_DATA_MAX;
+        if (chunk < 0)
+            chunk = 0;
+        if (sq->trace_count == sq->trace_capacity) {
+            sq->trace_first = (sq->trace_first + 1) % sq->trace_capacity;
+            sq->trace_count--;
+            sq->trace_dropped++;
+        }
+        int pos = (sq->trace_first + sq->trace_count) % sq->trace_capacity;
+        struct serialqueue_trace *tr = &sq->trace_records[pos];
+        tr->event_id = event_id;
+        tr->eventtime = eventtime;
+        tr->kind = kind;
+        tr->requested = requested;
+        tr->result = result;
+        tr->error = error;
+        tr->offset = offset;
+        tr->data_len = chunk;
+        if (chunk)
+            memcpy(tr->data, (const uint8_t *)data + offset, chunk);
+        sq->trace_count++;
+        offset += chunk;
+    } while (offset < data_len);
+    pthread_mutex_unlock(&sq->trace_lock);
+}
 
 // Create a series of empty messages and add them to a list
 static void
@@ -264,21 +312,27 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     }
     sq->bytes_read += len;
 
-    // Check for pending messages on notify_queue
+    // Check for pending messages on notify_queue.  On a half-duplex link,
+    // data frames do not end the MCU transmit turn and therefore do not
+    // acknowledge the outstanding host block.  Waiting for the final empty
+    // ACK also avoids unsigned sequence underflow on initial asynchronous
+    // messages that carry the current (rather than next) sequence number.
     int must_wake = 0;
-    while (!list_empty(&sq->notify_queue)) {
-        struct queue_message *qm = list_first_entry(
-            &sq->notify_queue, struct queue_message, node);
-        uint64_t wake_seq = rseq - 1 - (len > MESSAGE_MIN ? 1 : 0);
-        uint64_t notify_msg_sent_seq = qm->req_clock;
-        if (notify_msg_sent_seq > wake_seq)
-            break;
-        list_del(&qm->node);
-        qm->len = 0;
-        qm->sent_time = sq->last_receive_sent_time;
-        qm->receive_time = eventtime;
-        list_add_tail(&qm->node, &sq->receive_queue);
-        must_wake = 1;
+    if (!sq->half_duplex || len == MESSAGE_MIN) {
+        uint64_t wake_seq = rseq - 1;
+        while (!list_empty(&sq->notify_queue)) {
+            struct queue_message *qm = list_first_entry(
+                &sq->notify_queue, struct queue_message, node);
+            uint64_t notify_msg_sent_seq = qm->req_clock;
+            if (notify_msg_sent_seq > wake_seq)
+                break;
+            list_del(&qm->node);
+            qm->len = 0;
+            qm->sent_time = sq->last_receive_sent_time;
+            qm->receive_time = eventtime;
+            list_add_tail(&qm->node, &sq->receive_queue);
+            must_wake = 1;
+        }
     }
 
     // Process message
@@ -329,6 +383,9 @@ input_event(struct serialqueue *sq, double eventtime)
     if (sq->serial_fd_type == SQT_CAN) {
         struct can_frame cf;
         int ret = read(sq->serial_fd, &cf, sizeof(cf));
+        int error = ret < 0 ? errno : 0;
+        trace_io(sq, SQ_TRACE_READ, sizeof(cf), ret, error,
+                 &cf, ret > 0 ? ret : 0);
         if (ret <= 0) {
             report_errno("can read", ret);
             pollreactor_do_exit(sq->pr);
@@ -339,8 +396,12 @@ input_event(struct serialqueue *sq, double eventtime)
         memcpy(&sq->input_buf[sq->input_pos], cf.data, cf.can_dlc);
         sq->input_pos += cf.can_dlc;
     } else {
-        int ret = read(sq->serial_fd, &sq->input_buf[sq->input_pos]
-                       , sizeof(sq->input_buf) - sq->input_pos);
+        int requested = sizeof(sq->input_buf) - sq->input_pos;
+        uint8_t *readbuf = &sq->input_buf[sq->input_pos];
+        int ret = read(sq->serial_fd, readbuf, requested);
+        int error = ret < 0 ? errno : 0;
+        trace_io(sq, SQ_TRACE_READ, requested, ret, error,
+                 readbuf, ret > 0 ? ret : 0);
         if (ret <= 0) {
             if(ret < 0)
                 report_errno("read", ret);
@@ -385,10 +446,12 @@ kick_event(struct serialqueue *sq, double eventtime)
 
 // OS write of data to be sent to the mcu
 static void
-do_write(struct serialqueue *sq, void *buf, int buflen)
+do_write(struct serialqueue *sq, void *buf, int buflen, int trace_kind)
 {
     if (sq->serial_fd_type != SQT_CAN) {
         int ret = write(sq->serial_fd, buf, buflen);
+        int error = ret < 0 ? errno : 0;
+        trace_io(sq, trace_kind, buflen, ret, error, buf, buflen);
         if (ret < 0)
             report_errno("write", ret);
         return;
@@ -401,6 +464,8 @@ do_write(struct serialqueue *sq, void *buf, int buflen)
         cf.can_dlc = size;
         memcpy(cf.data, buf, size);
         int ret = write(sq->serial_fd, &cf, sizeof(cf));
+        int error = ret < 0 ? errno : 0;
+        trace_io(sq, trace_kind, sizeof(cf), ret, error, &cf, sizeof(cf));
         if (ret < 0) {
             report_errno("can write", ret);
             double curtime = get_monotonic();
@@ -424,6 +489,8 @@ retransmit_event(struct serialqueue *sq, double eventtime)
 {
     if (sq->serial_fd_type == SQT_UART) {
         int ret = tcflush(sq->serial_fd, TCOFLUSH);
+        int error = ret < 0 ? errno : 0;
+        trace_io(sq, SQ_TRACE_FLUSH, 0, ret, error, NULL, 0);
         if (ret < 0)
             report_errno("tcflush", ret);
     }
@@ -441,7 +508,7 @@ retransmit_event(struct serialqueue *sq, double eventtime)
         if (!first_buflen)
             first_buflen = qm->len + 1;
     }
-    do_write(sq, buf, buflen);
+    do_write(sq, buf, buflen, SQ_TRACE_RETRANSMIT);
     sq->bytes_retransmit += buflen;
 
     // Update rto
@@ -630,7 +697,7 @@ command_event(struct serialqueue *sq, double eventtime)
         if (waketime != PR_NOW || buflen + MESSAGE_MAX > sizeof(buf)) {
             if (buflen) {
                 // Write message blocks
-                do_write(sq, buf, buflen);
+                do_write(sq, buf, buflen, SQ_TRACE_WRITE);
                 sq->bytes_write += buflen;
                 double idletime = (eventtime > sq->idle_time
                                    ? eventtime : sq->idle_time);
@@ -663,6 +730,13 @@ background_thread(void *data)
 // Create a new 'struct serialqueue' object
 struct serialqueue * __visible
 serialqueue_alloc(int serial_fd, char serial_fd_type, int client_id)
+{
+    return serialqueue_alloc_trace(serial_fd, serial_fd_type, client_id, 0);
+}
+
+struct serialqueue * __visible
+serialqueue_alloc_trace(int serial_fd, char serial_fd_type, int client_id,
+                        int trace_capacity)
 {
     struct serialqueue *sq = malloc(sizeof(*sq));
     memset(sq, 0, sizeof(*sq));
@@ -719,6 +793,21 @@ serialqueue_alloc(int serial_fd, char serial_fd_type, int client_id)
     ret = pthread_mutex_init(&sq->fast_reader_dispatch_lock, NULL);
     if (ret)
         goto fail;
+    ret = pthread_mutex_init(&sq->trace_lock, NULL);
+    if (ret)
+        goto fail;
+    if (trace_capacity > TRACE_RECORDS_MAX)
+        trace_capacity = TRACE_RECORDS_MAX;
+    if (trace_capacity > 0) {
+        sq->trace_records = calloc(trace_capacity,
+                                   sizeof(*sq->trace_records));
+        if (!sq->trace_records) {
+            ret = errno ? errno : ENOMEM;
+            goto fail;
+        }
+        sq->trace_capacity = trace_capacity;
+        pollreactor_enable_stats(sq->pr);
+    }
     ret = pthread_create(&sq->tid, NULL, background_thread, sq);
     if (ret)
         goto fail;
@@ -763,6 +852,7 @@ serialqueue_free(struct serialqueue *sq)
         message_queue_free(&cq->upcoming_queue);
     }
     pthread_mutex_unlock(&sq->lock);
+    free(sq->trace_records);
     pollreactor_free(sq->pr);
     free(sq);
 }
@@ -991,19 +1081,32 @@ serialqueue_get_stats(struct serialqueue *sq, char *buf, int len)
     memcpy(&stats, sq, sizeof(stats));
     pthread_mutex_unlock(&sq->lock);
 
+    struct pollreactor_stats prs;
+    pollreactor_get_stats(sq->pr, &prs);
+
     snprintf(buf, len, "bytes_write=%u bytes_read=%u half_duplex=%u"
              " half_duplex_polls=%u"
              " bytes_retransmit=%u bytes_invalid=%u"
              " send_seq=%u receive_seq=%u retransmit_seq=%u"
              " srtt=%.3f rttvar=%.3f rto=%.3f"
              " ready_bytes=%u upcoming_bytes=%u"
+             " reactor_loops=%llu poll_calls=%llu poll_wakeups=%llu"
+             " poll_timeouts=%llu spin_loops=%llu timer_callbacks=%llu"
+             " fd_callbacks=%llu"
              , stats.bytes_write, stats.bytes_read, stats.half_duplex
              , stats.half_duplex_polls
              , stats.bytes_retransmit, stats.bytes_invalid
              , (int)stats.send_seq, (int)stats.receive_seq
              , (int)stats.retransmit_seq
              , stats.srtt, stats.rttvar, stats.rto
-             , stats.ready_bytes, stats.upcoming_bytes);
+             , stats.ready_bytes, stats.upcoming_bytes
+             , (unsigned long long)prs.run_loops
+             , (unsigned long long)prs.poll_calls
+             , (unsigned long long)prs.poll_wakeups
+             , (unsigned long long)prs.poll_timeouts
+             , (unsigned long long)prs.spin_loops
+             , (unsigned long long)prs.timer_callbacks
+             , (unsigned long long)prs.fd_callbacks);
 }
 
 // Extract old messages stored in the debug queues
@@ -1042,4 +1145,35 @@ serialqueue_extract_old(struct serialqueue *sq, int sentq
         message_free(qm);
     }
     return pos;
+}
+
+// Return raw trace capacity and loss information.
+void __visible
+serialqueue_get_trace_stats(struct serialqueue *sq, uint64_t *dropped,
+                            int *pending, int *capacity)
+{
+    pthread_mutex_lock(&sq->trace_lock);
+    *dropped = sq->trace_dropped;
+    *pending = sq->trace_count;
+    *capacity = sq->trace_capacity;
+    pthread_mutex_unlock(&sq->trace_lock);
+}
+
+// Remove and return the oldest raw serial trace records.
+int __visible
+serialqueue_extract_trace(struct serialqueue *sq, struct serialqueue_trace *q,
+                          int max)
+{
+    pthread_mutex_lock(&sq->trace_lock);
+    int count = sq->trace_count < max ? sq->trace_count : max;
+    int i;
+    for (i = 0; i < count; i++) {
+        int pos = (sq->trace_first + i) % sq->trace_capacity;
+        memcpy(&q[i], &sq->trace_records[pos], sizeof(q[i]));
+    }
+    if (sq->trace_capacity)
+        sq->trace_first = (sq->trace_first + count) % sq->trace_capacity;
+    sq->trace_count -= count;
+    pthread_mutex_unlock(&sq->trace_lock);
+    return count;
 }

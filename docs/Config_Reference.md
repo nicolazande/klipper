@@ -45,6 +45,12 @@ serial:
 #   RS-485 DE pin so that half-duplex handling is active while downloading
 #   the MCU data dictionary. The firmware also advertises the mode after the
 #   initial connection. The default is False.
+#serial_wire_trace:
+#   Optional path for a temporary raw UART diagnostic trace. When set, each
+#   OS read, write, retransmit, and output flush is timestamped in a bounded
+#   in-memory buffer and written to this file on a connection timeout or
+#   disconnect. No trace file IO occurs in the serial thread. This option is
+#   intended only for troubleshooting and has no default.
 #canbus_uuid:
 #   If using a device connected to a CAN bus then this sets the unique
 #   chip identifier to connect to. This value must be provided when using
