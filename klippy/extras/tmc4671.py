@@ -252,6 +252,36 @@ PWM_CHOP_OFF = 0x00000100
 PWM_CHOP_ON_MASK = 0x07
 
 
+class ServoBrakePin:
+    # Refcount-shared brake output: logical 1 = brake released.  The
+    # pin starts and shuts down engaged (spring applied), so any mcu
+    # shutdown drops the axis onto the brake independent of the host.
+    def __init__(self, mcu_brake):
+        self.mcu_brake = mcu_brake
+        self.release_count = 0
+    def release(self, print_time):
+        if not self.release_count:
+            self.mcu_brake.set_digital(print_time, 1)
+        self.release_count += 1
+    def engage(self, print_time):
+        self.release_count -= 1
+        if not self.release_count:
+            self.mcu_brake.set_digital(print_time, 0)
+
+def lookup_brake_pin(config, pin):
+    ppins = config.get_printer().lookup_object('pins')
+    pin_params = ppins.lookup_pin(pin, can_invert=True,
+                                  share_type='tmc4671_brake')
+    brake = pin_params.get('class')
+    if brake is not None:
+        return brake
+    mcu_brake = pin_params['chip'].setup_pin('digital_out', pin_params)
+    mcu_brake.setup_max_duration(0.)
+    mcu_brake.setup_start_value(0, 0)
+    brake = pin_params['class'] = ServoBrakePin(mcu_brake)
+    return brake
+
+
 class MCU_TMC4671_SPI:
     # SPI access with single-frame reads (the TMC4671 replies within
     # the same 40 bit datagram) and verify-with-retry writes
@@ -371,6 +401,16 @@ class TMC4671:
                                            minval=100, maxval=8000)
         self.align_delay = config.getfloat('align_delay', 1.0,
                                            minval=0.2, maxval=5.)
+        # Electromagnetic holding brake (optional, shareable between
+        # the Z servos): released while any sharing servo is enabled,
+        # engaged before de-energizing and on any shutdown
+        self.brake = None
+        brake_pin = config.get('brake_pin', None)
+        if brake_pin is not None:
+            self.brake = lookup_brake_pin(config, brake_pin)
+        self.brake_engage_time = config.getfloat('brake_engage_time',
+                                                 0.200, minval=0.,
+                                                 maxval=2.)
         # Board-specific analog frontend configuration
         self.adc_i_select = int(config.get('adc_i_select',
                                            '0x18000100'), 0)
@@ -530,7 +570,7 @@ class TMC4671:
         enable_line.register_state_callback(self._handle_stepper_enable)
     def _handle_stepper_enable(self, print_time, is_enable):
         if is_enable:
-            cb = (lambda ev: self._do_enable())
+            cb = (lambda ev: self._do_enable(print_time))
         else:
             cb = (lambda ev: self._do_disable(print_time))
         self.printer.get_reactor().register_callback(cb)
@@ -710,7 +750,7 @@ class TMC4671:
         actual = getr("PID_POSITION_ACTUAL")
         self.mcu_tmc.set_register("PID_POSITION_ACTUAL", actual,
                                   verify=False)
-    def _do_enable(self):
+    def _do_enable(self, print_time=None):
         # Fast path: power stage on and closed loop entry.  ADC
         # calibration and alignment already happened at connect.
         try:
@@ -733,6 +773,9 @@ class TMC4671:
                 self.mcu_tmc.set_register("PID_VELOCITY_OFFSET", 0,
                                           verify=False)
                 self._set_motion_mode(MODE_POSITION)
+                if self.brake is not None and print_time is not None:
+                    # Loop is closed and holding - release the brake
+                    self.brake.release(print_time)
                 self.enabled = True
                 self.fault_strikes = 0
             self._start_checks()
@@ -755,12 +798,18 @@ class TMC4671:
                    is not None:
                     return
                 setr = self.mcu_tmc.set_register
-                self._set_motion_mode(MODE_STOPPED, print_time=print_time)
-                setr("PID_VELOCITY_OFFSET", 0, print_time=print_time,
+                off_time = print_time
+                if self.brake is not None and print_time is not None:
+                    # Engage the brake while still holding torque,
+                    # then de-energize once it has settled
+                    self.brake.engage(print_time)
+                    off_time = print_time + self.brake_engage_time
+                self._set_motion_mode(MODE_STOPPED, print_time=off_time)
+                setr("PID_VELOCITY_OFFSET", 0, print_time=off_time,
                      verify=False)
-                setr("UQ_UD_EXT", 0, print_time=print_time, verify=False)
-                setr("PWM_SV_CHOP", PWM_CHOP_OFF, print_time=print_time,
-                     verify=(print_time is None))
+                setr("UQ_UD_EXT", 0, print_time=off_time, verify=False)
+                setr("PWM_SV_CHOP", PWM_CHOP_OFF, print_time=off_time,
+                     verify=(off_time is None))
             logging.info("TMC4671 %s: disabled (power stage off)",
                          self.name)
         except self.printer.command_error as e:
