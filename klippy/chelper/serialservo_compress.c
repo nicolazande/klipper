@@ -1,122 +1,110 @@
-/**
- * \file stepcompress.c
- *
- * \brief Step buffering and synchronization.
- * 
- * Take a set of steps, buffer and reorder (synchronize) them.
- */
+// Serialservo setpoint buffering and unit/clock conversion
+//
+// Copyright (C) 2024  Nicola Zandegiacomo <nicola.zandegiacomo@flyingbasket.com>
+// Copyright (C) 2026  Warmbird
+//
+// This file may be distributed under the terms of the GNU GPLv3 license.
 
-/****************************************************************
- * Includes
- ****************************************************************/
-#include <math.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "compiler.h"
-#include "pyhelper.h"
-#include "serialqueue.h"
-#include "serialservo_compress.h"
+#include <math.h> // llrint
+#include <stddef.h> // offsetof
+#include <stdint.h> // uint32_t
+#include <stdlib.h> // malloc
+#include <string.h> // memset
+#include "compiler.h" // __visible
+#include "pyhelper.h" // errorf
+#include "serialqueue.h" // struct queue_message
+#include "serialservo_compress.h" // serialservo_compress_append
+#include "stepcompress.h" // ERROR_RET
 
+// Each queued message tells the MCU "be at target_position with
+// target_velocity at clock" - the end state of one constant
+// acceleration segment sampled from the trapq.  Wire units are the
+// TMC4671 register units established by the chip configuration:
+// position in 1/65536 of an electrical revolution (16.16 multi-turn),
+// velocity in electrical rpm.  Wire positions are in the MCU frame:
+// the toolhead frame offset is applied here so kinematic re-bases
+// (homing) never produce a physical jump.
 
-/****************************************************************
- * Defines
- ****************************************************************/
-#define HISTORY_EXPIRE (30.0) //history time window in seconds
-#define CLOCK_DIFF_MAX (3<<28) //maximium clock delta between messages in the queue
+#define HISTORY_EXPIRE (30.0) // history time window in seconds
 
-
-/****************************************************************
- * Custom data types
- ****************************************************************/
-/*
- * The stepcompress object is used to represent each drive state,
- * to track timing and scheduled steps.
- */
-struct stepcompress 
-{
-    // Buffer management
+// This struct must stay layout-compatible with struct stepcompress in
+// stepcompress.c up to and including history_list: these objects are
+// registered with the stock steppersync, whose set_time/flush code
+// accesses mcu_time_offset, mcu_freq, msg_queue and the (empty) step
+// queue pointers through that layout.  Serialservo-specific fields
+// extend the struct after the shared prefix.
+struct stepcompress {
+    // Stock stepcompress layout (do not reorder)
     uint32_t *queue, *queue_end, *queue_pos, *queue_next;
-    // Internal tracking
     uint32_t max_error;
     double mcu_time_offset, mcu_freq, last_step_print_time;
-    // Message generation
     uint64_t last_step_clock;
     struct list_head msg_queue;
     uint32_t oid;
     int32_t queue_step_msgtag, set_next_step_dir_msgtag;
-    union
-    {
-        int sdir;
-        int polePairs; //number of pole pairs on motor
-    };
-    union
-    {
-        int invert_sdir;
-        int scaler; //integer scaler for position and velocity
-    };
-    // Step+dir+step filter
+    int sdir, invert_sdir;
     uint64_t next_step_clock;
     int next_step_dir;
-    // History tracking
-    double last_position;
+    int64_t stock_last_position;
     struct list_head history_list;
+    // Serialservo extension
+    int pole_pairs;
+    double rotation_distance; // mm of travel per mechanical motor rev
+    double units_per_mm; // wire position lsb per mm
+    double vel_units_per_mms; // wire velocity lsb per mm/s
+    double position_offset; // mcu frame minus toolhead frame (mm)
+    double last_position; // last streamed mcu-frame position (mm)
 };
 
-struct history_steps 
-{
+struct history_steps {
     struct list_node node;
-    uint64_t first_clock;
-    uint64_t last_clock;
-    double start_position;
-    double velocity;
+    uint64_t first_clock, last_clock;
+    double start_position; // mcu-frame mm at first_clock
+    double velocity; // mean mm/s across the segment
 };
 
-/****************************************************************
- * Private function prototypes
- ****************************************************************/
-/** determine the print time of the last scheduled step */
-static inline void calc_last_step_print_time(struct stepcompress *sc);
-
-/** free items from the history list up to end_clock */
-static inline void free_history(struct stepcompress *sc, uint64_t end_clock);
-
 
 /****************************************************************
- * Private functions
+ * Internal helpers
  ****************************************************************/
-static inline void
+
+// Determine the print time of the last scheduled setpoint
+static void
 calc_last_step_print_time(struct stepcompress *sc)
-{    
-    /* last drive step clock */
+{
     double lsc = sc->last_step_clock;
-
-    /* convert it to host print time */
     sc->last_step_print_time = sc->mcu_time_offset + (lsc - .5) / sc->mcu_freq;
 }
 
-static inline void
+// Free items from the history list up to end_clock
+static void
 free_history(struct stepcompress *sc, uint64_t end_clock)
 {
-    while (!list_empty(&sc->history_list))
-    {
-        struct history_steps *hs = list_last_entry(&sc->history_list, struct history_steps, node);
+    while (!list_empty(&sc->history_list)) {
+        struct history_steps *hs = list_last_entry(
+            &sc->history_list, struct history_steps, node);
         if (hs->last_clock > end_clock)
-        {
             break;
-        }
         list_del(&hs->node);
         free(hs);
     }
 }
 
+// Expire old history entries
+static void
+clean_history(struct stepcompress *sc)
+{
+    uint64_t hist_ticks = HISTORY_EXPIRE * sc->mcu_freq;
+    if (sc->last_step_clock > hist_ticks)
+        free_history(sc, sc->last_step_clock - hist_ticks);
+}
+
 
 /****************************************************************
- * Public functions
+ * Allocation and configuration
  ****************************************************************/
-/** allocate a new stepcompress object */
+
+// Allocate a new serialservo compressor
 struct stepcompress * __visible
 serialservo_compress_alloc(uint32_t oid)
 {
@@ -128,29 +116,35 @@ serialservo_compress_alloc(uint32_t oid)
     return sc;
 }
 
-/** fill message id information */
+// Fill message id and unit conversion information
 void __visible
-serialservo_compress_fill(struct stepcompress *sc,
-                          int32_t queue_step_msgtag,
-                          int32_t polePairs,
-                          int32_t scaler)
+serialservo_compress_fill(struct stepcompress *sc, int32_t queue_step_msgtag
+                          , int32_t pole_pairs, double rotation_distance)
 {
     sc->queue_step_msgtag = queue_step_msgtag;
-    sc->polePairs = polePairs;
-    sc->scaler = scaler;
+    sc->pole_pairs = pole_pairs;
+    sc->rotation_distance = rotation_distance;
+    sc->units_per_mm = pole_pairs * 65536. / rotation_distance;
+    sc->vel_units_per_mms = pole_pairs * 60. / rotation_distance;
 }
 
-/** free memory associated with a stepcompress object */
+// Set the mcu frame offset applied to outgoing positions
+void __visible
+serialservo_compress_set_position_offset(struct stepcompress *sc
+                                         , double offset)
+{
+    sc->position_offset = offset;
+}
+
+// Free memory associated with a compressor
 void __visible
 serialservo_compress_free(struct stepcompress *sc)
 {
     if (!sc)
-    {
         return;
-    }
-    while (!list_empty(&sc->msg_queue))
-    {
-        struct queue_message *qm = list_first_entry(&sc->msg_queue, struct queue_message, node);
+    while (!list_empty(&sc->msg_queue)) {
+        struct queue_message *qm = list_first_entry(
+            &sc->msg_queue, struct queue_message, node);
         list_del(&qm->node);
         free(qm);
     }
@@ -158,14 +152,80 @@ serialservo_compress_free(struct stepcompress *sc)
     free(sc);
 }
 
-/** get object id of a stepcompress object */
 uint32_t
 serialservo_compress_get_oid(struct stepcompress *sc)
 {
     return sc->oid;
 }
 
-/** reset the internal state of the stepcompress object */
+
+/****************************************************************
+ * Setpoint generation
+ ****************************************************************/
+
+// Queue one segment-end setpoint.  pose describes the state at the
+// END of the segment (pose->time absolute print time), move_time is
+// the segment duration.
+int
+serialservo_compress_append(struct stepcompress *sc, struct pose *pose
+                            , double move_time)
+{
+    double mcu_pos_mm = pose->position + sc->position_offset;
+    double end_time = pose->time - sc->mcu_time_offset;
+    double clock_end_d = end_time * sc->mcu_freq;
+    double clock_start_d = (end_time - move_time) * sc->mcu_freq;
+    if (!(clock_start_d >= 0. && clock_end_d < 9e18)) {
+        errorf("serialservo clock conversion out of range oid=%d"
+               " time=%.3f", sc->oid, pose->time);
+        return ERROR_RET;
+    }
+    double pos_units = mcu_pos_mm * sc->units_per_mm;
+    double vel_units = pose->velocity * sc->vel_units_per_mms;
+    if (!(pos_units > -2147483647. && pos_units < 2147483647.)
+        || !(vel_units > -2147483647. && vel_units < 2147483647.)) {
+        errorf("serialservo setpoint out of range oid=%d pos=%.3f"
+               " vel=%.3f", sc->oid, mcu_pos_mm, pose->velocity);
+        return ERROR_RET;
+    }
+    uint64_t clock_start = (uint64_t)clock_start_d;
+    uint64_t clock_end = (uint64_t)clock_end_d;
+    uint32_t msg[5] = {
+        (uint32_t)sc->queue_step_msgtag, sc->oid,
+        (uint32_t)(int32_t)llrint(pos_units),
+        (uint32_t)(int32_t)llrint(vel_units),
+        (uint32_t)clock_end,
+    };
+    struct queue_message *qm = message_alloc_and_encode(msg, ARRAY_SIZE(msg));
+    qm->min_clock = sc->last_step_clock;
+    qm->req_clock = clock_start;
+    list_add_tail(&qm->node, &sc->msg_queue);
+    // History entry (mcu frame, mean velocity is exact for linear-V)
+    struct history_steps *hs = malloc(sizeof(*hs));
+    hs->first_clock = clock_start;
+    hs->last_clock = clock_end;
+    hs->start_position = sc->last_position;
+    hs->velocity = move_time > 0.
+        ? (mcu_pos_mm - sc->last_position) / move_time : 0.;
+    list_add_head(&hs->node, &sc->history_list);
+    sc->last_position = mcu_pos_mm;
+    sc->last_step_clock = clock_end;
+    calc_last_step_print_time(sc);
+    clean_history(sc);
+    return 0;
+}
+
+// Queue an mcu command to go out in order with setpoint commands
+int __visible
+serialservo_compress_queue_msg(struct stepcompress *sc, uint32_t *data
+                               , int len)
+{
+    struct queue_message *qm = message_alloc_and_encode(data, len);
+    qm->min_clock = qm->req_clock = sc->last_step_clock;
+    list_add_tail(&qm->node, &sc->msg_queue);
+    return 0;
+}
+
+// Reset the internal state of the compressor
 int __visible
 serialservo_compress_reset(struct stepcompress *sc, uint64_t last_step_clock)
 {
@@ -174,13 +234,18 @@ serialservo_compress_reset(struct stepcompress *sc, uint64_t last_step_clock)
     return 0;
 }
 
-/** set last_position in the stepcompress object */
+
+/****************************************************************
+ * Position tracking
+ ****************************************************************/
+
+// Note the actual mcu position (wire units) measured at clock
 double __visible
-serialservo_compress_set_last_position(struct stepcompress *sc, uint64_t clock, int64_t last_position)
+serialservo_compress_set_last_position(struct stepcompress *sc
+                                       , uint64_t clock
+                                       , int64_t last_position)
 {
-    /* update last position */
-    sc->last_position  = ((double)last_position * sc->scaler) / (65536.0 * 1000 * sc->polePairs);
-    /* add a marker to the history list */
+    sc->last_position = (double)last_position / sc->units_per_mm;
     struct history_steps *hs = malloc(sizeof(*hs));
     memset(hs, 0, sizeof(*hs));
     hs->first_clock = hs->last_clock = clock;
@@ -189,178 +254,49 @@ serialservo_compress_set_last_position(struct stepcompress *sc, uint64_t clock, 
     return sc->last_position;
 }
 
-/** search history of moves to find a past position at a given clock */
+// Search history of moves to find the mcu position at a given clock
 double __visible
-serialservo_compress_find_past_position(struct stepcompress *sc, uint64_t clock)
+serialservo_compress_find_past_position(struct stepcompress *sc
+                                        , uint64_t clock)
 {
     double last_position = sc->last_position;
     struct history_steps *hs;
-
-    /* loop over history steps */
-    list_for_each_entry(hs, &sc->history_list, node)
-    {
-        if (clock < hs->first_clock)
-        {
-            /* move back to previous step */
+    list_for_each_entry(hs, &sc->history_list, node) {
+        if (clock < hs->first_clock) {
             last_position = hs->start_position;
             continue;
         }
         if (clock >= hs->last_clock)
-        {
-            /* 
-             * Last step or high delay between steps. since thre is not the
-             * next step, it is not possible to linearize between them, for
-             * this reason the best option is to return the last known
-             * move step start position.
-             */
-            return hs->start_position;
-        }
-
-        /* linearize in between first and last clock (constant velocity) */
-        double interval = (clock - hs->first_clock)/sc->mcu_freq;
-        return hs->start_position + interval*hs->velocity;
+            return hs->start_position + hs->velocity
+                * (double)(hs->last_clock - hs->first_clock) / sc->mcu_freq;
+        double interval = (double)(clock - hs->first_clock) / sc->mcu_freq;
+        return hs->start_position + interval * hs->velocity;
     }
-    /* last position, clock is too recent */
     return last_position;
 }
 
-/** 
- * Return history of queue_step commands.
- */
+// Return history of queued setpoints (positions in wire units)
 int __visible
-serialservo_compress_extract_old(struct stepcompress *sc,
-                                 struct pull_history_serialservo_steps *p,
-                                 int max,
-                                 uint64_t start_clock,
-                                 uint64_t end_clock)
+serialservo_compress_extract_old(struct stepcompress *sc
+                                 , struct pull_history_serialservo_steps *p
+                                 , int max, uint64_t start_clock
+                                 , uint64_t end_clock)
 {
-    /* data */
     int res = 0;
     struct history_steps *hs;
-
-    /* loop over step history queue */
-    list_for_each_entry(hs, &sc->history_list, node)
-    {
-        if ((start_clock >= hs->last_clock) || (res >= max))
-        {
-            /* stop (no more steps in time window) */
+    list_for_each_entry(hs, &sc->history_list, node) {
+        if (start_clock >= hs->last_clock || res >= max)
             break;
-        }
         if (end_clock <= hs->first_clock)
-        {
-            /* move backwords */
             continue;
-        }
-
-        /* populate new entry of step history pull array (moving backwards) */
         p->first_clock = hs->first_clock;
         p->last_clock = hs->last_clock;
-        p->start_position = hs->start_position;
-
-        /* update */
-        p++; //move forward in step history pull array
-        res++; //increase step counter
+        p->start_position = (int64_t)llrint(
+            hs->start_position * sc->units_per_mm);
+        p->velocity = (int64_t)llrint(
+            hs->velocity * sc->vel_units_per_mms);
+        p++;
+        res++;
     }
-
     return res;
-}
-
-/** append step to compessor */
-void
-serialservo_compress_append(struct stepcompress *sc, struct pose *pose, double move_time)
-{
-    /* update next move clock (wrt main mcu clock) */
-    double first_offset = pose->time - sc->last_step_print_time;
-    double last_offset = first_offset + move_time;
-
-    /* get time interval for the move */
-    uint64_t first_clock = sc->last_step_clock;
-    uint64_t last_clock = first_clock + (uint64_t)(last_offset * sc->mcu_freq);
-
-    /**
-     * Position conversion calculation:
-     *   scaler    = [mm / mechanicalRotation]
-     *   polePairs = [electricalRotation / mechanicalRotation]
-     *   internal  = [1/65536 * electricalRotation]
-     *   
-     *   linear                              = [mm]
-     *   linear / scaler                     = [mechanicalRotation]
-     *   linear / scaler * polePairs         = [electricalRotation]
-     *   linear / scaler * polePairs * 65536 = [1/65536 * electricalRotation]   
-     */
-    int32_t mcu_position = (int32_t)(pose->position * 1000 * 65536 * sc->polePairs / sc->scaler);
-
-    /**
-     * Velocity onversion calculation:
-	 *   scaler    = [mm / mechanicalRotation]
-	 *   time:       [60s / minute]
-     *   internal  = [mechanicalRotation / minute]
-	 *
-	 *   linear               = [mm / s]
-	 *   linear / scaler      = [mechanicalRotation / s]
-	 *   linear / scaler * 60 = [mechanicalRotation / minute]
-     */
-    int32_t mcu_velocity = (int32_t)(pose->velocity * 1000 * 60. / sc->scaler);
-
-    /* move time in mcu ticks */
-    uint32_t mcu_time = (uint32_t)/*(move_time * sc->mcu_freq); */sc->last_step_clock;
-
-    /* create and queue a queue step command */
-    uint32_t msg[] = 
-    {
-        sc->queue_step_msgtag,
-        sc->oid,
-        mcu_position,
-        mcu_velocity,
-        mcu_time
-    };
-
-    /* allocate new queue mesage */
-    struct queue_message *qm = message_alloc_and_encode(msg, ARRAY_SIZE(msg));
-
-    /* assign min clock and required clock (same during initialization) */
-    qm->min_clock = sc->last_step_clock;
-    qm->req_clock = sc->last_step_clock;
-
-    // errorf("-> serialservo [tag = %i, len = %u]: p = %i, v = %i, t = %u",
-    // sc->queue_step_msgtag, (uint32_t)qm->len, (int32_t)qm->msg[2], (int32_t)qm->msg[3], qm->req_clock);
-
-    /* take into account high delay between steps */
-    uint64_t first_clock_offset = (uint64_t)((first_offset - .5) * sc->mcu_freq);
-    if (first_clock_offset > CLOCK_DIFF_MAX)
-    {
-        /* 
-         * The delta time between current and last step is too high to
-         * be ignored, therefore move forward the required clock and
-         * accept a delay between steps (this happens for both X and Y
-         * axis --> no positioning error).
-         */
-        qm->req_clock = first_clock + first_clock_offset;
-    }
-
-    /* add message to queue */
-    list_add_tail(&qm->node, &sc->msg_queue);
-
-    /* update stepcompress time (start of next move) */
-    sc->last_step_clock = last_clock;
-
-    /* create and store move in history tracking */
-    struct history_steps *hs = malloc(sizeof(*hs));
-    hs->first_clock = first_clock;
-    hs->last_clock = last_clock;
-    hs->start_position = pose->position;
-    hs->velocity = pose->velocity;
-    list_add_head(&hs->node, &sc->history_list);
-
-    /* open loop update of step print time */
-    calc_last_step_print_time(sc);
-}
-
-int __visible
-serialservo_compress_queue_msg(struct stepcompress *sc, uint32_t *data, int len)
-{
-    struct queue_message *qm = message_alloc_and_encode(data, len);
-    qm->req_clock = sc->last_step_clock;
-    list_add_tail(&qm->node, &sc->msg_queue);
-    return 0;
 }

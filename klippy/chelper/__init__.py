@@ -34,6 +34,7 @@ DEST_LIB = "c_helper.so"
 OTHER_FILES = [
     'command.h',
     'ethercatqueue.h', 'ethercatmsg.h', 'ethercatservo_compress.h',
+    'ethercatservo_solve.h', 'copley.h', 'servo_solve.h',
     'serialservo_compress.h', 'serialservo_solve.h',
     'list.h', 'serialqueue.h', 'stepcompress.h', 'itersolve.h', 'pyhelper.h',
     'trapq.h', 'pollreactor.h', 'msgblock.h'
@@ -50,11 +51,13 @@ defs_serialservo_compress = """
     struct stepcompress *serialservo_compress_alloc(uint32_t oid);
     void serialservo_compress_fill(struct stepcompress *sc,
                                int32_t queue_step_msgtag,
-                               int32_t polePairs,
-                               int32_t scaler);
+                               int32_t pole_pairs,
+                               double rotation_distance);
+    void serialservo_compress_set_position_offset(struct stepcompress *sc,
+                               double offset);
     void serialservo_compress_free(struct stepcompress *sc);
     uint32_t serialservo_compress_get_oid(struct stepcompress *sc);
-    void serialservo_compress_append(struct stepcompress *sc, struct pose *pose, double move_time);
+    int serialservo_compress_append(struct stepcompress *sc, struct pose *pose, double move_time);
     int serialservo_compress_reset(struct stepcompress *sc, uint64_t last_step_clock);
     double serialservo_compress_set_last_position(struct stepcompress *sc, uint64_t clock, int64_t last_position);
     double serialservo_compress_find_past_position(struct stepcompress *sc, uint64_t clock);

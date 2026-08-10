@@ -57,36 +57,30 @@ gen_steps_range(struct serialservo_kinematics *sk, struct move *m, double abs_st
         end = m->move_t;
     }
 
-    /* simulation pose (initilaize with previous step values) */
-    struct pose pose =
-    {
-        .position = sk->commanded_pos,
-        .velocity = 0.,
-        .time = sk->last_move_time
-    };
-
-    /* run simulation (avoid zero moves) */
+    /*
+     * Sample the move at fixed intervals.  Each sample describes the
+     * state at the END of its interval ("be at P with V at T") - with
+     * position and velocity taken from the same constant-acceleration
+     * trapq move, the mcu's linear-velocity interpolation reproduces
+     * the profile exactly between samples.
+     */
     while (start + MIN_MOVE_TIME <= end)
     {
-        /**
-         * Smooth stop check. NOTE: the delta time needs to be a positive
-         * integer multiple of 1ms in order for the drive to perform a
-         * proper interpolation, therfore try to always round up time.
-         */
+        /* merge a short final remainder into one longer segment */
         if (end - start < 2. * dt)
         {
-            /* adapt last step time duration */
             dt = end - start;
         }
 
-        /* 
-         * Calculate current pose using incremental simulation time in order
-         * to avoid cumulative error due to approximation.
-         */
-        pose = sk->kinematics_cb(m, start);
+        /* segment end state */
+        struct pose pose = sk->kinematics_cb(m, start + dt);
 
-        /* append move to message queue */
-        serialservo_compress_append(sk->sc, &pose, dt);
+        /* append segment to message queue */
+        int32_t ret = serialservo_compress_append(sk->sc, &pose, dt);
+        if (ret)
+        {
+            return ret;
+        }
 
         /* update start time and move on */
         start += dt;
