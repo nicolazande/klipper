@@ -20,6 +20,11 @@ class PrinterFanGeneric:
         if master_fan_short_name:
             master_fan_full_name = f"fan_generic {master_fan_short_name}"
             master_fan = fan_objects.get(master_fan_full_name)
+            if master_fan is not None \
+               and master_fan.printer is not self.printer:
+                # Stale entry from a previous session (the module dict
+                # survives a soft RESTART); never bind across sessions
+                master_fan = None
             if master_fan is None:
                 raise config.error(f"Master fan '{master_fan_short_name}' not found")
             if not isinstance(master_fan, fan.Fan):

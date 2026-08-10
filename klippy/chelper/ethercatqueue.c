@@ -469,7 +469,8 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
                       qm->oid);
             list_del(&qm->node);
             sq->ready_bytes -= qm->len;
-            emsg_free(&sq->msgpool, qm, 0);
+            /* deliberately leaked: the pool slot index comes from the
+               (corrupt) oid, so freeing it could damage the ring */
             continue;
         }
 
