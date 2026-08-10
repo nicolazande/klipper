@@ -150,6 +150,7 @@ defs_ethercatqueue = """
         ec_pdo_entry_info_t *entries;
     } ec_pdo_info_t;
     void ethercatqueue_config_cpu(struct ethercatqueue *sq, int cpu);
+    void ethercatqueue_config_debug(struct ethercatqueue *sq, int level);
     void ethercatqueue_slave_config(struct ethercatqueue *sq,
                                     uint8_t index,
                                     uint16_t alias,

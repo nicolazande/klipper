@@ -145,14 +145,15 @@ class SerialServo:
     def set_stepper_kinematics(self, sk):
         # Only kinematics allocated via setup_itersolve share the
         # serialservo solver ABI; reject foreign objects (FORCE_MOVE
-        # style swaps) instead of corrupting memory
+        # style swaps) with a gcode error instead of corrupting memory
         if sk is not None and sk not in self._known_kinematics:
-            raise error("serialservo %s does not support external"
-                        " kinematics (FORCE_MOVE)" % (self._name,))
+            raise self._mcu.get_printer().command_error(
+                "serialservo %s does not support FORCE_MOVE/STEPPER_BUZZ"
+                % (self._name,))
         old_sk = self._stepper_kinematics
         mcu_pos = 0.
         if old_sk is not None:
-            mcu_pos = self.get_mcu_position()
+            mcu_pos = self._get_mcu_position_mm()
         self._stepper_kinematics = sk
         self._ffi_lib.serialservo_solve_set_stepcompress(
             sk, self._stepqueue, self._sampling_time)
@@ -163,29 +164,37 @@ class SerialServo:
         return self._ffi_lib.serialservo_solve_calc_position_from_coord(
             self._stepper_kinematics, coord[0], coord[1], coord[2])
     def set_position(self, coord):
-        mcu_pos = self.get_mcu_position()
+        mcu_pos = self._get_mcu_position_mm()
         self._ffi_lib.serialservo_solve_set_position(
             self._stepper_kinematics, coord[0], coord[1], coord[2])
         self._set_mcu_position(mcu_pos)
     def get_commanded_position(self):
         return self._ffi_lib.serialservo_solve_get_commanded_pos(
             self._stepper_kinematics)
+    def _get_mcu_position_mm(self):
+        # Internal drive-frame position in mm
+        return self.get_commanded_position() + self._mcu_position_offset
     def get_mcu_position(self, cmd_pos=None):
-        # "mcu position" for a servo axis is in mm (drive frame)
+        # Positions reported to the homing code ("mcu positions") are
+        # expressed in units of HOMING_SAMPLE_DIST: homing.py
+        # multiplies mcu position offsets by get_step_dist(), so this
+        # keeps its algebra exact in mm while the endstop poll rate
+        # stays fine grained.
         if cmd_pos is None:
             cmd_pos = self.get_commanded_position()
-        return cmd_pos + self._mcu_position_offset
+        return (cmd_pos + self._mcu_position_offset) / HOMING_SAMPLE_DIST
     def _set_mcu_position(self, mcu_pos):
         self._mcu_position_offset = mcu_pos - self.get_commanded_position()
         # Outgoing wire positions are generated in the mcu frame
         self._ffi_lib.serialservo_compress_set_position_offset(
             self._stepqueue, self._mcu_position_offset)
     def mcu_to_commanded_position(self, mcu_pos):
-        return mcu_pos - self._mcu_position_offset
+        return mcu_pos * HOMING_SAMPLE_DIST - self._mcu_position_offset
     def get_past_mcu_position(self, print_time):
         clock = self._mcu.print_time_to_clock(print_time)
-        return self._ffi_lib.serialservo_compress_find_past_position(
+        pos = self._ffi_lib.serialservo_compress_find_past_position(
             self._stepqueue, clock)
+        return pos / HOMING_SAMPLE_DIST
     def dump_steps(self, count, start_clock, end_clock):
         data = self._ffi_main.new('struct pull_history_serialservo_steps[]',
                                   count)

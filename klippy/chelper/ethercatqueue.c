@@ -325,6 +325,14 @@ emit_timestamp_records(struct ethercatqueue *sq)
             slave->stamp_pending = 0;
             continue;
         }
+        if (slave->stamp_contig < 2)
+        {
+            /* the just-prior record must be a real segment with a
+               trustworthy time_table entry: post-idle first segments
+               carry early-send req clocks and post-resync slots are
+               stale, so wait for a contiguous stream */
+            continue;
+        }
         if (slave->operation_mode != COE_OPERATION_MODE_INTERPOLATION)
         {
             continue;
@@ -469,10 +477,23 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             double req_time = clock_to_time(&sq->ce, qm->req_clock);
             slave->time_table[nseq] = req_time;
 
+            /* stream flow diagnostic (ethercat_debug config option) */
+            if (sq->debug)
+            {
+                errorf("ethercat seg->drive: oid=%u seq=%u pos=%d"
+                       " vel=%d t=%u", qm->oid, slave->seq_num,
+                       (int)move->position, (int)move->velocity,
+                       (unsigned)move->time);
+            }
+
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
 
             /* periodic absolute-time anchor (copley 0x85 timestamp) */
+            if (slave->stamp_contig < 255)
+            {
+                slave->stamp_contig++;
+            }
             if (++slave->segs_since_stamp >= ETHERCAT_TIMESTAMP_PERIOD)
             {
                 slave->stamp_pending = 1;
@@ -549,6 +570,31 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
         /* update stats */
         sq->upcoming_bytes -= qm->len;
         sq->ready_bytes += qm->len;
+    }
+
+    /* stream gating diagnostic (ethercat_debug config option) */
+    if (sq->debug)
+    {
+        static uint16_t diag_cnt;
+        if (++diag_cnt >= 100)
+        {
+            diag_cnt = 0;
+            if (!list_empty(&sq->upcoming_queue)
+                || !list_empty(&sq->ready_queue))
+            {
+                struct move_segment_msg *first = NULL;
+                if (!list_empty(&sq->upcoming_queue))
+                    first = list_first_entry(&sq->upcoming_queue,
+                                             struct move_segment_msg, node);
+                errorf("ethercat flow: upcoming=%d ready=%d ack=%llu"
+                       " min=%llu req=%llu freq=%.0f",
+                       sq->upcoming_bytes, sq->ready_bytes,
+                       (unsigned long long)ack_clock,
+                       first ? (unsigned long long)first->min_clock : 0,
+                       first ? (unsigned long long)first->req_clock : 0,
+                       sq->ce.est_freq);
+            }
+        }
     }
 
     /* check updated ready queue */
@@ -860,8 +906,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     move->command.type = COE_SEGMENT_MODE_CMD;
                     /* update slave sequence */
                     slave->seq_num = status->next_id;
-                    /* re-anchor the stream after the resync */
+                    /* re-anchor once a fresh contiguous stream exists */
                     slave->stamp_pending = 1;
+                    slave->stamp_contig = 0;
                     /* notify buffer problem */
                     errorf("Ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
                             slave->oid, status->seq_error, status->overflow,  status->underflow);
@@ -916,8 +963,10 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
             {
                 if (!cw->signal)
                 {
-                    /* fresh motion burst: anchor it with a timestamp */
+                    /* fresh motion burst: anchor it with a timestamp
+                       once the stream is contiguous again */
                     slave->stamp_pending = 1;
+                    slave->stamp_contig = 0;
                 }
                 cw->signal = 1;
             }
@@ -946,6 +995,8 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                     int fill_ms = (int)llround(1000. * stop_delta);
                     if (fill_ms < 1)
                         fill_ms = 1;
+                    else if (fill_ms > 255)
+                        fill_ms = 255;
                     move->time = (uint8_t)fill_ms;
 
                     /* update step timing table */
@@ -1233,6 +1284,13 @@ void __visible
 ethercatqueue_config_cpu(struct ethercatqueue *sq, int cpu)
 {
     sq->cpu = cpu;
+}
+
+/** configure ethercat debug logging (0 = off, 1 = stream diagnostics) */
+void __visible
+ethercatqueue_config_debug(struct ethercatqueue *sq, int level)
+{
+    sq->debug = level;
 }
 
 /** initialize ethercat slave */

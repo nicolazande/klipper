@@ -98,6 +98,7 @@ struct slavemonitor
     int16_t pvt_time_error;   //last 0x2014 readout (drive servo cycles)
     uint8_t pvt_error_wait;   //cycles until the next 0x2014 poll
     uint8_t stamp_supported;  //set after a successful 0x2014 read (fw >= 5.08)
+    uint8_t stamp_contig;     //real segments written since idle/resync
     uint16_t segs_since_stamp; //buffer segments since the last timestamp record
     uint8_t stamp_pending;    //emit a timestamp record before the next segment
     /* monitoring */
@@ -153,6 +154,7 @@ struct ethercatqueue
     struct pollreactor *pr; //ethercat low level reactor
     /* threading */
     int cpu; //ethercat low level thread dedicated cpu
+    int debug; //debug log level (0 = off, 1 = stream flow diagnostics)
     pthread_t tid; //ethercat low level thread id
     pthread_attr_t sched_policy; //thread scheduling policy
     struct sched_param sched_param; //thread schedulting parameters (priority)

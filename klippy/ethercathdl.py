@@ -10,12 +10,13 @@ class error(Exception):
     pass
 
 class EthercatReader:
-    def __init__(self, reactor, warn_prefix=""):
+    def __init__(self, reactor, warn_prefix="", debug=0):
         '''
         Ethercat reader.
         '''
         self.reactor = reactor #main reactor
         self.warn_prefix = warn_prefix
+        self.debug = debug #stream diagnostics log level (0 = off)
         # message parser (ethercat specific)
         self.msgparser = msgproto.MessageParser(warn_prefix=warn_prefix)
         # C interface
@@ -98,6 +99,9 @@ class EthercatReader:
             self.ffi_lib.ethercatqueue_config_cpu(self.ethercatqueue, cpu)
         else:
             logging.exception("EtherCAT hardware not supported")
+        # stream diagnostics logging ([mcu] ethercat_debug option)
+        self.ffi_lib.ethercatqueue_config_debug(self.ethercatqueue,
+                                                self.debug)
         # get master and slaves data
         master = identify_data["master"]
         slaves = identify_data["slaves"]

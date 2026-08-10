@@ -535,6 +535,11 @@ ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *po
     else if (wire_ms > 255)
         wire_ms = 255;
     sc->wire_time_carry = wire_time - wire_ms / 1000.;
+    /* bound the carry so a clamped segment cannot grow it without limit */
+    if (sc->wire_time_carry > 0.128)
+        sc->wire_time_carry = 0.128;
+    else if (sc->wire_time_carry < -0.128)
+        sc->wire_time_carry = -0.128;
     move->time = (uint8_t)wire_ms; //move time duration [ms] (up to next pose)
 
     /*

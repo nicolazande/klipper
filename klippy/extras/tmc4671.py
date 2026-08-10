@@ -209,7 +209,8 @@ Fields["PID_POSITION_LIMIT_LOW"] = {
 Fields["PID_POSITION_LIMIT_HIGH"] = {
     "pid_position_limit_high": 0xffffffff << 0 }
 Fields["MODE_RAMP_MODE_MOTION"] = {
-    "mode_motion": 0xff << 0, "mode_pid_smpl": 0x7f << 24,
+    "mode_motion": 0xff << 0, "mode_ff": 0xff << 16,
+    "mode_pid_smpl": 0x7f << 24,
     "mode_pid_type": 0x01 << 31,
 }
 Fields["PID_POSITION_ACTUAL"] = {
@@ -271,9 +272,10 @@ class MCU_TMC4671_SPI:
         params = self.spi.spi_transfer([reg & 0x7f, 0, 0, 0, 0])
         pr = bytearray(params['response'])
         return (pr[1] << 24) | (pr[2] << 16) | (pr[3] << 8) | pr[4]
-    def _do_write(self, reg, val):
+    def _do_write(self, reg, val, minclock=0):
         self.spi.spi_send([(reg | 0x80) & 0xff, (val >> 24) & 0xff,
-                           (val >> 16) & 0xff, (val >> 8) & 0xff, val & 0xff])
+                           (val >> 16) & 0xff, (val >> 8) & 0xff,
+                           val & 0xff], minclock=minclock)
     def get_register(self, reg_name):
         reg = self.name_to_reg[reg_name]
         if self.printer.get_start_args().get('debugoutput') is not None:
@@ -282,13 +284,17 @@ class MCU_TMC4671_SPI:
             return self._do_read(reg)
     def set_register(self, reg_name, val, print_time=None, verify=None):
         reg = self.name_to_reg[reg_name]
+        minclock = 0
+        if print_time is not None:
+            minclock = self.spi.get_mcu().print_time_to_clock(print_time)
+            verify = False  # a scheduled write cannot be read back now
         if verify is None:
             verify = reg_name in VerifyRegisters
         if self.printer.get_start_args().get('debugoutput') is not None:
             verify = False
         with self.mutex:
             for retry in range(5):
-                self._do_write(reg, val)
+                self._do_write(reg, val, minclock)
                 if not verify:
                     return
                 if self._do_read(reg) == val & 0xffffffff:
@@ -328,6 +334,7 @@ class TMC4671:
         self.stepper_enable = self.printer.load_object(config,
                                                        "stepper_enable")
         self.enabled = False
+        self.config_failed = False
         self.adc_calibrated = False
         self.aligned = False
         self.fault_strikes = 0
@@ -361,9 +368,10 @@ class TMC4671:
         self.align_delay = config.getfloat('align_delay', 1.0,
                                            minval=0.2, maxval=5.)
         # Board-specific analog frontend configuration
-        self.adc_i_select = config.getint('adc_i_select', 0x18000100)
-        self.analog_input_cfg = config.getint('analog_input_stage_cfg',
-                                              0x00044400)
+        self.adc_i_select = int(config.get('adc_i_select',
+                                           '0x18000100'), 0)
+        self.analog_input_cfg = int(config.get('analog_input_stage_cfg',
+                                               '0x00044400'), 0)
         self._setup_register_defaults(config)
         # Event handlers
         self.printer.register_event_handler("klippy:mcu_identify",
@@ -490,6 +498,7 @@ class TMC4671:
         set_config_field(config, "pid_position_limit_high", 0x7fffffff)
         # Motion mode: stopped, parallel PI, no ramp bits (dead on -LA)
         setf("mode_motion", MODE_STOPPED)
+        set_config_field(config, "mode_ff", 1)
         set_config_field(config, "mode_pid_smpl", 0)
         set_config_field(config, "mode_pid_type", 0)
     def _handle_mcu_identify(self):
@@ -519,7 +528,7 @@ class TMC4671:
         if is_enable:
             cb = (lambda ev: self._do_enable())
         else:
-            cb = (lambda ev: self._do_disable())
+            cb = (lambda ev: self._do_disable(print_time))
         self.printer.get_reactor().register_callback(cb)
     def _init_registers(self):
         # Full safe (de-energized) chip configuration.  Explicit
@@ -546,29 +555,32 @@ class TMC4671:
             setr(reg_name, val)
         for reg_name, val in self.reg_overrides.items():
             setr(reg_name, val)
-    def _handle_connect(self):
-        # Full bring-up happens at connect while nothing can move:
-        # safe register init, per-boot ADC offset calibration and
+    def _full_bringup(self):
+        # Safe register init, per-boot ADC offset calibration and
         # encoder alignment (the forced method can rotate the motor by
         # up to half an electrical revolution - use align_mode: hall
-        # or manual for zero-motion connects once commissioned).
-        # Enable/disable afterwards only toggles power stage and mode.
+        # or manual for zero-motion bring-up once commissioned).
+        with self.mutex:
+            self._init_registers()
+            if self.printer.get_start_args().get('debugoutput') is None:
+                self._calibrate_adc_offsets()
+                if self.align_mode != 'manual':
+                    self._stage_on()
+                    try:
+                        if self.align_mode == 'hall':
+                            self._align_encoder_hall()
+                        else:
+                            self._align_encoder_forced()
+                    finally:
+                        self._stage_off()
+        self.config_failed = False
+    def _handle_connect(self):
+        # Full bring-up happens at connect while nothing can move;
+        # enable/disable afterwards only toggles power stage and mode.
         try:
-            with self.mutex:
-                self._init_registers()
-                if self.printer.get_start_args().get('debugoutput') \
-                   is None:
-                    self._calibrate_adc_offsets()
-                    if self.align_mode != 'manual':
-                        self._stage_on()
-                        try:
-                            if self.align_mode == 'hall':
-                                self._align_encoder_hall()
-                            else:
-                                self._align_encoder_forced()
-                        finally:
-                            self._stage_off()
+            self._full_bringup()
         except self.printer.command_error as e:
+            self.config_failed = True
             logging.info("TMC4671 %s failed to init: %s", self.name, str(e))
             return
         # Hand the SPI device to the serialservo mcu code for runtime
@@ -579,6 +591,10 @@ class TMC4671:
         except Exception:
             logging.exception("TMC4671 %s: serialservo spi setup failed",
                               self.name)
+    def _set_motion_mode(self, mode, print_time=None):
+        reg_val = self.fields.set_field("mode_motion", mode)
+        self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION", reg_val,
+                                  print_time=print_time, verify=False)
     def _stage_on(self):
         chop = (self.fields.registers["PWM_SV_CHOP"] & ~0xff) \
             | PWM_CHOP_ON_MASK
@@ -636,7 +652,7 @@ class TMC4671:
         setr("PHI_E_SELECTION", PHI_E_EXT_SEL, verify=False)
         setr("PHI_E_EXT", 0, verify=False)
         setr("UQ_UD_EXT", 0, verify=False)
-        setr("MODE_RAMP_MODE_MOTION", MODE_UQ_UD_EXT, verify=False)
+        self._set_motion_mode(MODE_UQ_UD_EXT)
         # Ramp UD to the alignment voltage
         steps = 8
         for i in range(1, steps + 1):
@@ -647,7 +663,7 @@ class TMC4671:
         setr("ABN_DECODER_COUNT", 0, verify=False)
         setr("ABN_DECODER_PHI_E_PHI_M_OFFSET", 0, verify=False)
         setr("UQ_UD_EXT", 0, verify=False)
-        setr("MODE_RAMP_MODE_MOTION", MODE_STOPPED, verify=False)
+        self._set_motion_mode(MODE_STOPPED)
         setr("PHI_E_SELECTION", PHI_E_ABN, verify=False)
         self.aligned = True
         logging.info("TMC4671 %s: forced encoder alignment complete",
@@ -691,6 +707,10 @@ class TMC4671:
                    is not None:
                     self.enabled = True
                     return
+                if self.config_failed:
+                    raise self.printer.command_error(
+                        "TMC4671 %s: bring-up failed, fix and run"
+                        " INIT_TMC4671 before enabling" % (self.name,))
                 if self.align_mode != 'manual' and not self.aligned:
                     raise self.printer.command_error(
                         "TMC4671 %s: encoder not aligned" % (self.name,))
@@ -698,8 +718,7 @@ class TMC4671:
                 self._seed_position()
                 self.mcu_tmc.set_register("PID_VELOCITY_OFFSET", 0,
                                           verify=False)
-                self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
-                                          MODE_POSITION, verify=False)
+                self._set_motion_mode(MODE_POSITION)
                 self.enabled = True
                 self.fault_strikes = 0
             self._start_checks()
@@ -708,7 +727,10 @@ class TMC4671:
         except self.printer.command_error as e:
             logging.error("TMC4671 %s enable failed: %s", self.name, str(e))
             self.printer.invoke_shutdown(str(e))
-    def _do_disable(self):
+    def _do_disable(self, print_time=None):
+        # De-energize writes are scheduled at print_time (the end of
+        # buffered motion) so M84 after buffered moves cannot cut the
+        # power stage mid-motion.
         try:
             self._stop_checks()
             with self.mutex:
@@ -719,10 +741,12 @@ class TMC4671:
                    is not None:
                     return
                 setr = self.mcu_tmc.set_register
-                setr("MODE_RAMP_MODE_MOTION", MODE_STOPPED, verify=False)
-                setr("PID_VELOCITY_OFFSET", 0, verify=False)
-                setr("UQ_UD_EXT", 0, verify=False)
-                setr("PWM_SV_CHOP", PWM_CHOP_OFF, verify=True)
+                self._set_motion_mode(MODE_STOPPED, print_time=print_time)
+                setr("PID_VELOCITY_OFFSET", 0, print_time=print_time,
+                     verify=False)
+                setr("UQ_UD_EXT", 0, print_time=print_time, verify=False)
+                setr("PWM_SV_CHOP", PWM_CHOP_OFF, print_time=print_time,
+                     verify=(print_time is None))
             logging.info("TMC4671 %s: disabled (power stage off)",
                          self.name)
         except self.printer.command_error as e:
@@ -786,11 +810,17 @@ class TMC4671:
         if self.enabled:
             raise gcmd.error("TMC4671 %s: disable the motor before"
                              " INIT_TMC4671" % (self.name,))
-        with self.mutex:
-            self._init_registers()
+        self.printer.lookup_object('toolhead').wait_moves()
         self.aligned = False
-        gcmd.respond_info("TMC4671 %s initialized (motor de-energized)"
-                          % (self.name,))
+        try:
+            self._full_bringup()
+        except self.printer.command_error as e:
+            self.config_failed = True
+            raise gcmd.error(str(e))
+        gcmd.respond_info("TMC4671 %s re-initialized (calibrated%s,"
+                          " motor de-energized)"
+                          % (self.name, ", aligned" if self.aligned
+                             else ""))
     cmd_SET_TMC4671_FIELD_help = "Set a TMC4671 register field"
     def cmd_SET_TMC4671_FIELD(self, gcmd):
         field_name = gcmd.get('FIELD').lower()
@@ -853,6 +883,7 @@ class TMC4671:
         if not self.enabled:
             raise gcmd.error("TMC4671 %s: enable the motor first (power"
                              " stage must be on)" % (self.name,))
+        self.printer.lookup_object('toolhead').wait_moves()
         with self.mutex:
             self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
                                       MODE_STOPPED, verify=False)

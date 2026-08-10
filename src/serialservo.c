@@ -301,6 +301,8 @@ void
 command_serialservo_queue_step(uint32_t *args)
 {
     struct serialservo *s = serialservo_oid_lookup(args[0]);
+    if (!s->spi)
+        shutdown("serialservo spi not configured");
     struct serialservo_move *m = move_alloc();
     m->target_position = args[1];
     m->target_velocity = args[2];
@@ -333,6 +335,7 @@ command_serialservo_queue_step(uint32_t *args)
         s->t1 = m->clock;
         move_free(m);
         s->flags = (flags | SF_ACTIVE | SF_HAVE_TIME);
+        s->ferror_last = now;
         s->time.waketime = now + s->interp_ticks;
         sched_add_timer(&s->time);
     }
@@ -412,7 +415,8 @@ serialservo_shutdown(void)
     struct serialservo *s;
     foreach_oid(oid, s, command_config_serialservo) {
         sched_del_timer(&s->time);
-        s->flags = (s->flags & ~(SF_ACTIVE|SF_HAVE_TIME)) | SF_NEED_RESET;
+        s->flags = (s->flags & ~(SF_ACTIVE|SF_HAVE_TIME|SF_STOP_PENDING))
+            | SF_NEED_RESET;
         move_queue_clear(&s->mq);
     }
 }

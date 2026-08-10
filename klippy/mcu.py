@@ -661,9 +661,11 @@ class MCU:
         # master running); clocksync and the drive sync paths below all
         # tolerate the resulting None.
         self._enable_ethercat = config.getboolean('enable_ethercat', True)
+        ethercat_debug = config.getint('ethercat_debug', 0, minval=0,
+                                       maxval=1)
         if self._enable_ethercat:
-            self._ethercat = ethercathdl.EthercatReader(self._reactor,
-                                                        warn_prefix=wp)
+            self._ethercat = ethercathdl.EthercatReader(
+                self._reactor, warn_prefix=wp, debug=ethercat_debug)
         else:
             self._ethercat = None
         self._baud = 0
