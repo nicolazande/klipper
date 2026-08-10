@@ -637,6 +637,7 @@ class TMC4671:
                 raise self.printer.command_error(
                     "TMC4671 %s: motor enabled during bring-up -"
                     " disable and retry" % (self.name,))
+            self.aligned = False
             self._init_registers()
             if self.printer.get_start_args().get('debugoutput') is None:
                 self._calibrate_adc_offsets()
@@ -913,11 +914,16 @@ class TMC4671:
             raise gcmd.error("TMC4671 %s: disable the motor before"
                              " INIT_TMC4671" % (self.name,))
         self.printer.lookup_object('toolhead').wait_moves()
-        self.aligned = False
         try:
             self._full_bringup()
         except self.printer.command_error as e:
-            self.config_failed = True
+            # The enabled-refusal raises before touching the chip: a
+            # deferred enable won the race and the axis is running
+            # normally - do not poison its state (config_failed=True
+            # plus aligned=False would turn the next enable into an
+            # invoke_shutdown on a healthy axis)
+            if not self.enabled:
+                self.config_failed = True
             raise gcmd.error(str(e))
         # Re-bind the SPI device to the serialservo mcu streamer and
         # re-anchor the host frame (mirrors the connect flow - without
