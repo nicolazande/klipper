@@ -70,11 +70,6 @@
 - [input_shaper] with hash kinematics aborts connect (shaper swaps
   stepper kinematics; servo objects reject foreign solvers) - guard or
   support decision needed before shaper use.
-- INIT_TMC4671 checks self.enabled before wait_moves yields, racing
-  the deferred enable callback.
-- A host RESTART drops minclock-held de-energize writes (chip stays
-  energized until the next connect's safe-state init re-runs; brief
-  window, engaged brake covers the axis).
 - ethercatqueue_init retry after a post-thread-create failure leaks a
   busy-spin thread; pthread mutex/cond re-init on an initialized
   object is UB (works on glibc) - restructure init stages.
@@ -85,6 +80,24 @@
 - Re-enable within brake_engage_time of a disable produces a brief
   power-stage off/on transient when the held writes flush (FIFO order
   proven correct; steady state fine).
+
+## Deferred review-3 findings (unverified lows, tracked)
+
+- ethercatqueue_exit does not clear pvt_error_sdo (the SDO request
+  object belongs to the released master; next session re-creates it,
+  but a stale pointer briefly survives the teardown).
+- STATUS_MASK is written at init but filtered out of the periodic
+  scrub list (not in fields.registers or reg_overrides); a corrupted
+  mask would silently disable hardware fault reporting.
+- The request_restart handler pauses unconditionally per [tmc4671]
+  section (multi-servo restarts stack pauses) and the pause length
+  is not tied to the actual scheduled write clocks.
+- Extreme wire velocities near the int32 boundary rely on
+  implementation-defined conversion (llrint result truncated); the
+  range guards make this unreachable in practice.
+- The cyclic thread's bare 'except' around callbacks can swallow
+  GreenletExit during shutdown teardown (masks a clean exit path,
+  no observed misbehavior).
 
 ## EtherCAT decision agenda (with Nicola / Copley)
 
