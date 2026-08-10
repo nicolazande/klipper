@@ -1046,11 +1046,12 @@ class TMC4671:
                     " and retry" % (self.name,))
             # Verify the physical stage, not just the host flag (the
             # mirror of the stage-off assertion in ADC calibration)
-            chop = self.mcu_tmc.get_register("PWM_SV_CHOP")
-            if (chop & 0xff) != PWM_CHOP_ON_MASK:
-                raise gcmd.error(
-                    "TMC4671 %s: power stage is off - enable and"
-                    " retry" % (self.name,))
+            if self.printer.get_start_args().get('debugoutput') is None:
+                chop = self.mcu_tmc.get_register("PWM_SV_CHOP")
+                if (chop & 0xff) != PWM_CHOP_ON_MASK:
+                    raise gcmd.error(
+                        "TMC4671 %s: power stage is off - enable and"
+                        " retry" % (self.name,))
             self._set_motion_mode(MODE_STOPPED)
             if mode == 'hall':
                 self._align_encoder_hall()
