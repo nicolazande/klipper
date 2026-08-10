@@ -107,12 +107,17 @@ class ForceMove:
         dist, speed = BUZZ_DISTANCE, BUZZ_VELOCITY
         if stepper.units_in_radians():
             dist, speed = BUZZ_RADIANS_DISTANCE, BUZZ_RADIANS_VELOCITY
-        for i in range(10):
-            self.manual_move(stepper, dist, speed)
-            toolhead.dwell(.050)
-            self.manual_move(stepper, -dist, speed)
-            toolhead.dwell(.450)
-        self._restore_enable(stepper, was_enable)
+        try:
+            for i in range(10):
+                self.manual_move(stepper, dist, speed)
+                toolhead.dwell(.050)
+                self.manual_move(stepper, -dist, speed)
+                toolhead.dwell(.450)
+        finally:
+            # Restore the enable state even when manual_move raises
+            # (e.g. steppers that reject external kinematics) so a
+            # failed buzz does not leave the motor energized
+            self._restore_enable(stepper, was_enable)
     cmd_FORCE_MOVE_help = "Manually move a stepper; invalidates kinematics"
     def cmd_FORCE_MOVE(self, gcmd):
         stepper = self._lookup_stepper(gcmd)
@@ -121,8 +126,14 @@ class ForceMove:
         accel = gcmd.get_float('ACCEL', 0., minval=0.)
         logging.info("FORCE_MOVE %s distance=%.3f velocity=%.3f accel=%.3f",
                      stepper.get_name(), distance, speed, accel)
-        self._force_enable(stepper)
-        self.manual_move(stepper, distance, speed, accel)
+        was_enable = self._force_enable(stepper)
+        try:
+            self.manual_move(stepper, distance, speed, accel)
+        except:
+            # On failure restore the prior enable state (on success
+            # the motor stays enabled, matching stock behavior)
+            self._restore_enable(stepper, was_enable)
+            raise
     cmd_SET_KINEMATIC_POSITION_help = "Force a low-level kinematic position"
     def cmd_SET_KINEMATIC_POSITION(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
