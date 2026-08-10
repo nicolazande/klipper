@@ -61,6 +61,33 @@
     the IgH library at chelper build time (hosts without it cannot
     start klippy).
 
+## Deferred review-2 findings (unverified mediums/lows, tracked)
+
+- Residual end-velocity at a mid-move stop can defeat the burst
+  anchor's zero-motion property (src/serialservo.c interpolation from
+  a nonzero held v1 across an idle gap) - bench-verify with a
+  deliberate mid-move abort.
+- [input_shaper] with hash kinematics aborts connect (shaper swaps
+  stepper kinematics; servo objects reject foreign solvers) - guard or
+  support decision needed before shaper use.
+- INIT_TMC4671 checks self.enabled before wait_moves yields, racing
+  the deferred enable callback.
+- A host RESTART drops minclock-held de-energize writes (chip stays
+  energized until the next connect's safe-state init re-runs; brief
+  window, engaged brake covers the axis).
+- ethercatqueue_init retry after a post-thread-create failure leaks a
+  busy-spin thread; pthread mutex/cond re-init on an initialized
+  object is UB (works on glibc) - restructure init stages.
+- Per-restart pollreactor allocation and queued-message leaks (known,
+  bounded per restart).
+- rt_errorf writes to stderr while holding sq->lock: journald
+  backpressure could stall a cycle (diagnostics are off by default).
+- STEPPER_BUZZ/FORCE_MOVE on a servo energizes via _force_enable then
+  raises, leaving the enable line on until M84.
+- Re-enable within brake_engage_time of a disable produces a brief
+  power-stage off/on transient when the held writes flush (FIFO order
+  proven correct; steady state fine).
+
 ## EtherCAT decision agenda (with Nicola / Copley)
 
 Full detail in EtherCAT-Sync-Gaps.md.  Headlines: record
