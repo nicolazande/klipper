@@ -1,740 +1,945 @@
+# TMC4671 FOC servo controller - configuration and supervision
 #
-# TMC4671 configuration with Position Control and Velocity Feed-Forward
+# Copyright (C) 2024  Nicola Zandegiacomo <nicola.zandegiacomo@flyingbasket.com>
+# Copyright (C) 2026  Warmbird
 #
-import math, logging
+# This file may be distributed under the terms of the GNU GPLv3 license.
+#
+# The TMC4671 closes the torque/velocity/position loops in hardware;
+# runtime setpoint streaming is done by the serialservo mcu code (see
+# src/serialservo.c).  This module owns chip bring-up and supervision:
+# safe connect-time configuration (motor never energized), per-boot ADC
+# offset calibration, encoder alignment, enable/disable sequencing,
+# fault polling with static register scrubbing, and shutdown-safe
+# de-energize messages replayed by the mcu on any shutdown.
+#
+# Register values follow the TMC4671-LA datasheet (rev 2.x) and the
+# tuned TMCL-IDE reference for the DMM DST640 (docs/serialservo/).
+
+import logging
 from . import bus, tmc
 
-# frequency specific for TMC4671
 TMC_FREQUENCY = 25000000.
 
-# TMC4671 registers
 Registers = {
-    "CHIPINFO_DATA" : 0x00,
-    "CHIPINFO_ADDR" : 0x01,
-    "ADC_RAW_DATA" : 0x02,
-    "ADC_RAW_ADDR" : 0x03,
-    "dsADC_MCFG_B_MCFG_A" : 0x04,
-    "dsADC_MCLK_A" : 0x05,
-    "dsADC_MCLK_B" : 0x06,
-    "dsADC_MDEC_B_MDEC_A" : 0x07,
-    "ADC_I1_SCALE_OFFSET" : 0x08,
-    "ADC_I0_SCALE_OFFSET" : 0x09,
-    "ADC_I_SELECT" : 0x0A,
-    "ADC_I1_I0_EXT" : 0x0B,
-    "DS_ANALOG_INPUT_STAGE_CFG" : 0x0C,
-    "AENC_0_SCALE_OFFSET" : 0x0D,
-    "AENC_1_SCALE_OFFSET" : 0x0E,
-    "AENC_2_SCALE_OFFSET" : 0x0F,
-    "AENC_SELECT" : 0x11,
-    "ADC_IWY_IUX" : 0x12,
-    "ADC_IV" : 0x13,
-    "AENC_WY_UX" : 0x15,
-    "AENC_VN" : 0x16,
-    "PWM_POLARITIES" : 0x17,
-    "PWM_MAXCNT" : 0x18,
-    "PWM_BBM_H_BBM_L" : 0x19,
-    "PWM_SV_CHOP" : 0x1A,
-    "MOTOR_TYPE_N_POLE_PAIRS" : 0x1B,
-    "PHI_E_EXT" : 0x1C,
-    "OPENLOOP_MODE" : 0x1F,
-    "OPENLOOP_ACCELERATION" : 0x20,
-    "OPENLOOP_VELOCITY_TARGET" : 0x21,
-    "OPENLOOP_VELOCITY_ACTUAL" : 0x22,
-    "UQ_UD_EXT" : 0x24,
-    "ABN_DECODER_MODE" : 0x25,
-    "ABN_DECODER_PPR" : 0x26,
-    "ABN_DECODER_COUNT" : 0x27,
-    "ABN_DECODER_COUNT_N" : 0x28,
-    "ABN_DECODER_PHI_E_PHI_M_OFFSET" : 0x29,
-    "ABN_DECODER_PHI_E_PHI_M" : 0x2A,
-    "ABN_2_DECODER_MODE" : 0x2C,
-    "ABN_2_DECODER_PPR" : 0x2D,
-    "ABN_2_DECODER_COUNT" : 0x2E,
-    "ABN_2_DECODER_COUNT_N" : 0x2F,
-    "ABN_2_DECODER_PHI_M_OFFSET" : 0x30,
-    "ABN_2_DECODER_PHI_M" : 0x31,
-    "HALL_MODE" : 0x33,
-    "HALL_POSITION_060_000" : 0x34,
-    "HALL_POSITION_180_120" : 0x35,
-    "HALL_POSITION_300_240" : 0x36,
-    "HALL_PHI_E_PHI_M_OFFSET" : 0x37,
-    "HALL_DPHI_MAX" : 0x38,
-    "HALL_PHI_E_INTERPOLATED_PHI_E" : 0x39,
-    "HALL_PHI_M" : 0x3A,
-    "AENC_DECODER_MODE" : 0x3B,
-    "AENC_DECODER_N_THRESHOLD" : 0x3C,
-    "AENC_DECODER_PHI_A_RAW" : 0x3D,
-    "AENC_DECODER_PHI_A_OFFSET" : 0x3E,
-    "AENC_DECODER_PHI_A" : 0x3F,
-    "AENC_DECODER_PPR" : 0x40,
-    "AENC_DECODER_COUNT" : 0x41,
-    "AENC_DECODER_COUNT_N" : 0x42,
-    "AENC_DECODER_PHI_E_PHI_M_OFFSET" : 0x45,
-    "AENC_DECODER_PHI_E_PHI_M" : 0x46,
-    "CONFIG_DATA" : 0x4D,
-    "CONFIG_ADDR" : 0x4E,
-    "VELOCITY_SELECTION" : 0x50,
-    "POSITION_SELECTION" : 0x51,
-    "PHI_E_SELECTION" : 0x52,
-    "PHI_E" : 0x53,
-    "PID_FLUX_P_FLUX_I" : 0x54,
-    "PID_TORQUE_P_TORQUE_I" : 0x56,
-    "PID_VELOCITY_P_VELOCITY_I" : 0x58,
-    "PID_POSITION_P_POSITION_I" : 0x5A,
-    "PIDOUT_UQ_UD_LIMITS" : 0x5D,
-    "PID_TORQUE_FLUX_LIMITS" : 0x5E,
-    "PID_VELOCITY_LIMIT" : 0x60,
-    "PID_POSITION_LIMIT_LOW" : 0x61,
-    "PID_POSITION_LIMIT_HIGH" : 0x62,
-    "MODE_RAMP_MODE_MOTION" : 0x63,
-    "PID_TORQUE_FLUX_TARGET" : 0x64,
-    "PID_TORQUE_FLUX_OFFSET" : 0x65,
-    "PID_VELOCITY_TARGET" : 0x66,
-    "PID_VELOCITY_OFFSET" : 0x67,
-    "PID_POSITION_TARGET" : 0x68,
-    "PID_TORQUE_FLUX_ACTUAL" : 0x69,
-    "PID_VELOCITY_ACTUAL" : 0x6A,
-    "PID_POSITION_ACTUAL" : 0x6B,
-    "PID_ERROR_DATA" : 0x6C,
-    "PID_ERROR_ADDR" : 0x6D,
-    "INTERIM_DATA" : 0x6E,
-    "INTERIM_ADDR" : 0x6F,
-    "ADC_VM_LIMITS" : 0x75,
-    "TMC4671_INPUTS_RAW" : 0x76,
-    "TMC4671_OUTPUTS_RAW" : 0x77,
-    "STEP_WIDTH" : 0x78,
-    "UART_BPS" : 0x79,
-    "GPIO_dsADCI_CONFIG" : 0x7B,
-    "STATUS_FLAGS" : 0x7C,
-    "STATUS_MASK" : 0x7D
+    "CHIPINFO_DATA":            0x00,
+    "CHIPINFO_ADDR":            0x01,
+    "ADC_RAW_DATA":             0x02,
+    "ADC_RAW_ADDR":             0x03,
+    "dsADC_MCFG_B_MCFG_A":      0x04,
+    "dsADC_MCLK_A":             0x05,
+    "dsADC_MCLK_B":             0x06,
+    "dsADC_MDEC_B_MDEC_A":      0x07,
+    "ADC_I1_SCALE_OFFSET":      0x08,
+    "ADC_I0_SCALE_OFFSET":      0x09,
+    "ADC_I_SELECT":             0x0A,
+    "ADC_I1_I0_EXT":            0x0B,
+    "DS_ANALOG_INPUT_STAGE_CFG": 0x0C,
+    "AENC_0_SCALE_OFFSET":      0x0D,
+    "AENC_1_SCALE_OFFSET":      0x0E,
+    "AENC_2_SCALE_OFFSET":      0x0F,
+    "AENC_SELECT":              0x11,
+    "ADC_IWY_IUX":              0x12,
+    "ADC_IV":                   0x13,
+    "AENC_WY_UX":               0x15,
+    "AENC_VN":                  0x16,
+    "PWM_POLARITIES":           0x17,
+    "PWM_MAXCNT":               0x18,
+    "PWM_BBM_H_BBM_L":          0x19,
+    "PWM_SV_CHOP":              0x1A,
+    "MOTOR_TYPE_N_POLE_PAIRS":  0x1B,
+    "PHI_E_EXT":                0x1C,
+    "OPENLOOP_MODE":            0x1F,
+    "OPENLOOP_ACCELERATION":    0x20,
+    "OPENLOOP_VELOCITY_TARGET": 0x21,
+    "OPENLOOP_VELOCITY_ACTUAL": 0x22,
+    "OPENLOOP_PHI":             0x23,
+    "UQ_UD_EXT":                0x24,
+    "ABN_DECODER_MODE":         0x25,
+    "ABN_DECODER_PPR":          0x26,
+    "ABN_DECODER_COUNT":        0x27,
+    "ABN_DECODER_COUNT_N":      0x28,
+    "ABN_DECODER_PHI_E_PHI_M_OFFSET": 0x29,
+    "ABN_DECODER_PHI_E_PHI_M":  0x2A,
+    "HALL_MODE":                0x33,
+    "HALL_POSITION_060_000":    0x34,
+    "HALL_POSITION_180_120":    0x35,
+    "HALL_POSITION_300_240":    0x36,
+    "HALL_PHI_E_PHI_M_OFFSET":  0x37,
+    "HALL_DPHI_MAX":            0x38,
+    "HALL_PHI_E_INTERPOLATED_PHI_E": 0x39,
+    "HALL_PHI_M":               0x3A,
+    "CONFIG_DATA":              0x4D,
+    "CONFIG_ADDR":              0x4E,
+    "VELOCITY_SELECTION":       0x50,
+    "POSITION_SELECTION":       0x51,
+    "PHI_E_SELECTION":          0x52,
+    "PHI_E":                    0x53,
+    "PID_FLUX_P_FLUX_I":        0x54,
+    "PID_TORQUE_P_TORQUE_I":    0x56,
+    "PID_VELOCITY_P_VELOCITY_I": 0x58,
+    "PID_POSITION_P_POSITION_I": 0x5A,
+    "PIDOUT_UQ_UD_LIMITS":      0x5D,
+    "PID_TORQUE_FLUX_LIMITS":   0x5E,
+    "PID_VELOCITY_LIMIT":       0x60,
+    "PID_POSITION_LIMIT_LOW":   0x61,
+    "PID_POSITION_LIMIT_HIGH":  0x62,
+    "MODE_RAMP_MODE_MOTION":    0x63,
+    "PID_TORQUE_FLUX_TARGET":   0x64,
+    "PID_TORQUE_FLUX_OFFSET":   0x65,
+    "PID_VELOCITY_TARGET":      0x66,
+    "PID_VELOCITY_OFFSET":      0x67,
+    "PID_POSITION_TARGET":      0x68,
+    "PID_TORQUE_FLUX_ACTUAL":   0x69,
+    "PID_VELOCITY_ACTUAL":      0x6A,
+    "PID_POSITION_ACTUAL":      0x6B,
+    "INTERIM_DATA":             0x6E,
+    "INTERIM_ADDR":             0x6F,
+    "ADC_VM_LIMITS":            0x75,
+    "TMC4671_INPUTS_RAW":       0x76,
+    "TMC4671_OUTPUTS_RAW":      0x77,
+    "STATUS_FLAGS":             0x7C,
+    "STATUS_MASK":              0x7D,
 }
 
-# register fields
+# Registers safe to read at any time (no read side effects, not bank
+# switched).  Bank-switched pairs (ADC_RAW, CONFIG, INTERIM) must only
+# be used by a single owner and are excluded from generic dumps.
+ReadRegisters = [
+    "CHIPINFO_DATA", "ADC_IWY_IUX", "ADC_IV", "PWM_POLARITIES",
+    "PWM_MAXCNT", "PWM_BBM_H_BBM_L", "PWM_SV_CHOP",
+    "MOTOR_TYPE_N_POLE_PAIRS", "OPENLOOP_VELOCITY_ACTUAL", "UQ_UD_EXT",
+    "ABN_DECODER_MODE", "ABN_DECODER_PPR", "ABN_DECODER_COUNT",
+    "ABN_DECODER_COUNT_N", "ABN_DECODER_PHI_E_PHI_M_OFFSET",
+    "ABN_DECODER_PHI_E_PHI_M", "HALL_MODE",
+    "HALL_PHI_E_INTERPOLATED_PHI_E", "HALL_PHI_M",
+    "VELOCITY_SELECTION", "POSITION_SELECTION", "PHI_E_SELECTION",
+    "PHI_E", "PID_FLUX_P_FLUX_I", "PID_TORQUE_P_TORQUE_I",
+    "PID_VELOCITY_P_VELOCITY_I", "PID_POSITION_P_POSITION_I",
+    "PIDOUT_UQ_UD_LIMITS", "PID_TORQUE_FLUX_LIMITS",
+    "PID_VELOCITY_LIMIT", "MODE_RAMP_MODE_MOTION",
+    "PID_TORQUE_FLUX_TARGET", "PID_VELOCITY_TARGET",
+    "PID_POSITION_TARGET", "PID_TORQUE_FLUX_ACTUAL",
+    "PID_VELOCITY_ACTUAL", "PID_POSITION_ACTUAL",
+    "TMC4671_INPUTS_RAW", "TMC4671_OUTPUTS_RAW", "STATUS_FLAGS",
+]
+
 Fields = {}
-
-# status flags
-Fields["STATUS_FLAGS"] = {
-    "status_flags" : 0xffffffff
-}
-Fields["TMC4671_INPUTS_RAW"] = {
-    "tmc4671_inputs_raw" : 0xffffffff << 0
-}
-Fields["TMC4671_OUTPUTS_RAW"] = {
-    "tmc4671_outputs_raw" : 0xffffffff << 0
-}
-
-# motor type
 Fields["MOTOR_TYPE_N_POLE_PAIRS"] = {
-    "pole_pairs": 0xffff << 0,
-    "motor_type": 0xffff << 16,
+    "pole_pairs": 0xffff << 0, "motor_type": 0xff << 16,
 }
-
-#motion mode
-Fields["MODE_RAMP_MODE_MOTION"] = {
-    "mode_motion": 0xFF << 0,
-    "mode_pid_smpl": 0x7F << 24,
-    "mode_pid_type": 0x01 << 31,
-}
-
-# pwm
 Fields["PWM_POLARITIES"] = {
-    "low_side_gate" : 0x01 << 0,
-    "high_side_gate" : 0x01 << 1,
+    "low_side_polarity": 0x01 << 0, "high_side_polarity": 0x01 << 1,
 }
-Fields["PWM_MAXCNT"] = {
-    "pwm_maxcnt" : 0xfff << 0,
-}
-Fields["PWM_SV_CHOP"] = {
-    "pwm_chomp" : 0xff << 0,
-    "pwm_sv" : 0x01 << 8
-}
+Fields["PWM_MAXCNT"] = { "pwm_maxcnt": 0xffff << 0 }
 Fields["PWM_BBM_H_BBM_L"] = {
-    "pwm_bbm_l" : 0xff << 0,
-    "pwm_bbm_h" : 0xff << 8,
+    "pwm_bbm_l": 0xff << 0, "pwm_bbm_h": 0xff << 8,
 }
-
-# adc
-Fields["ADC_I_SELECT"] = {
-    "adc_i0_select": 0xff << 0,
-    "adc_i1_select": 0xff << 8,
-    "adc_i_ux_select" : 0x03 << 24,
-    "adc_i_v_select" : 0x03 << 26,
-    "adc_i_wy_select" : 0x03 << 28,
+Fields["PWM_SV_CHOP"] = { "pwm_chop": 0xff << 0, "pwm_sv": 0x01 << 8 }
+Fields["dsADC_MCFG_B_MCFG_A"] = {
+    "cfg_dsmodulator_a": 0x03 << 0, "mclk_polarity_a": 0x01 << 2,
+    "mdat_polarity_a": 0x01 << 3, "sel_nclk_mclk_i_a": 0x01 << 4,
+    "cfg_dsmodulator_b": 0x03 << 16, "mclk_polarity_b": 0x01 << 18,
+    "mdat_polarity_b": 0x01 << 19, "sel_nclk_mclk_i_b": 0x01 << 20,
+}
+Fields["dsADC_MCLK_A"] = { "dsadc_mclk_a": 0xffffffff << 0 }
+Fields["dsADC_MCLK_B"] = { "dsadc_mclk_b": 0xffffffff << 0 }
+Fields["dsADC_MDEC_B_MDEC_A"] = {
+    "dsadc_mdec_a": 0xffff << 0, "dsadc_mdec_b": 0xffff << 16,
 }
 Fields["ADC_I0_SCALE_OFFSET"] = {
-    "adc_i0_offset" : 0xffff << 0,
-    "adc_i0_scale" : 0xffff << 16,
+    "adc_i0_offset": 0xffff << 0, "adc_i0_scale": 0xffff << 16,
 }
 Fields["ADC_I1_SCALE_OFFSET"] = {
-    "adc_i1_offset" : 0xffff << 0,
-    "adc_i1_scale" : 0xffff << 16,
+    "adc_i1_offset": 0xffff << 0, "adc_i1_scale": 0xffff << 16,
 }
-Fields["dsADC_MDEC_B_MDEC_A"] = {
-    "dsadc_mdec_a" : 0xffff << 0,
-    "dsadc_mdec_b" : 0xffff << 16,
+Fields["ADC_I_SELECT"] = {
+    "adc_i0_select": 0xff << 0, "adc_i1_select": 0xff << 8,
+    "adc_i_ux_select": 0x03 << 24, "adc_i_v_select": 0x03 << 26,
+    "adc_i_wy_select": 0x03 << 28,
 }
-Fields["dsADC_MCFG_B_MCFG_A"] = {
-    "cfg_dsmodulator_a" : 0x03 << 0,
-    "mclk_polarity_a" : 0x01 << 2,
-    "mdat_polarity_a" : 0x01 << 3,
-    "sel_nclk_mclk_i_a" : 0x01 << 4,
-    "cfg_dsmodulator_b" : 0x03 << 16,
-    "mclk_polarity_b" : 0x01 << 18,
-    "mdat_polarity_b" : 0x01 << 19,
-    "sel_nclk_mclk_i_b" : 0x01 << 20,
-}
-Fields["dsADC_MCLK_A"] = {
-    "dsadc_mclk_a" : 0xffffffff << 0,
-}
-Fields["dsADC_MCLK_B"] = {
-    "dsadc_mclk_b": 0xffffffff << 0,
-}
-
-#encoder
 Fields["ABN_DECODER_MODE"] = {
-    "apol" : 0x01 << 0,
-    "bpol" : 0x01 << 1,
-    "npol" : 0x01 << 2,
-    "use_abn_as_n" : 0x01 << 3,
-    "cln" : 0x01 << 8,
-    "direction" : 0x01 << 12
+    "apol": 0x01 << 0, "bpol": 0x01 << 1, "npol": 0x01 << 2,
+    "use_abn_as_n": 0x01 << 3, "cln": 0x01 << 8, "direction": 0x01 << 12,
 }
-Fields["ABN_DECODER_PPR"] = {
-    "abn_decoder_ppr" : 0xffffff << 0,
-}
-Fields["ABN_DECODER_COUNT"] = {
-    "abn_decoder_count" : 0xffffff << 0,
-}
+Fields["ABN_DECODER_PPR"] = { "abn_decoder_ppr": 0xffffff << 0 }
+Fields["ABN_DECODER_COUNT"] = { "abn_decoder_count": 0xffffff << 0 }
 Fields["ABN_DECODER_PHI_E_PHI_M_OFFSET"] = {
-    "abn_decoder_phi_m_offset" : 0xffff << 0,
-    "abn_decoder_phi_e_offset" : 0xffff << 16,
+    "abn_decoder_phi_m_offset": 0xffff << 0,
+    "abn_decoder_phi_e_offset": 0xffff << 16,
+}
+Fields["ABN_DECODER_PHI_E_PHI_M"] = {
+    "abn_decoder_phi_m": 0xffff << 0, "abn_decoder_phi_e": 0xffff << 16,
+}
+Fields["HALL_MODE"] = {
+    "hall_polarity": 0x01 << 0, "hall_synchronous_pwm_sampling": 0x01 << 4,
+    "hall_interpolation": 0x01 << 8, "hall_direction": 0x01 << 12,
+    "hall_blank": 0xfff << 16,
+}
+Fields["HALL_PHI_E_INTERPOLATED_PHI_E"] = {
+    "hall_phi_e": 0xffff << 0, "hall_phi_e_interpolated": 0xffff << 16,
+}
+Fields["HALL_PHI_E_PHI_M_OFFSET"] = {
+    "hall_phi_m_offset": 0xffff << 0, "hall_phi_e_offset": 0xffff << 16,
 }
 Fields["VELOCITY_SELECTION"] = {
-    "velocity_selection" : 0xff << 0,
-    "velocity_meter_selection" : 0xff << 8
+    "velocity_selection": 0xff << 0, "velocity_meter_selection": 0xff << 8,
 }
-Fields["POSITION_SELECTION"] = {
-    "position_selection" : 0xff << 0,
-}
-Fields["PHI_E_SELECTION"] = {
-    "phi_e_selection" : 0xff << 0
-}
-Fields["PHI_E_EXT"] = {
-    "phi_e_ext" : 0xffff << 0
-}
-Fields["UQ_UD_EXT"] = {
-    "ud_ext" : 0xffff << 0,
-    "uq_ext" : 0xffff << 16
-}
-
-#limits
-Fields["PID_TORQUE_FLUX_LIMITS"] = {
-    "pid_torque_flux_limits" : 0xffff
-}
-Fields["PID_VELOCITY_LIMIT"] = {
-    "pid_velocity_limit" : 0xffff
-}
-Fields["PID_POSITION_LIMIT_LOW"] = {
-    "pid_position_limit_low" : 0xffffffff
-}
-Fields["PID_POSITION_LIMIT_HIGH"] = {
-    "pid_position_limit_high" : 0xffffffff
-}
-
-#controller
-Fields["PID_POSITION_P_POSITION_I"] = {
-    "ki_position": 0xffff << 0,
-    "kp_position": 0xffff << 16,
-}
-Fields["PID_VELOCITY_P_VELOCITY_I"] = {
-    "ki_velocity": 0xffff << 0,
-    "kp_velocity": 0xffff << 16,
+Fields["POSITION_SELECTION"] = { "position_selection": 0xff << 0 }
+Fields["PHI_E_SELECTION"] = { "phi_e_selection": 0xff << 0 }
+Fields["PHI_E_EXT"] = { "phi_e_ext": 0xffff << 0 }
+Fields["UQ_UD_EXT"] = { "ud_ext": 0xffff << 0, "uq_ext": 0xffff << 16 }
+Fields["PID_FLUX_P_FLUX_I"] = {
+    "ki_flux": 0xffff << 0, "kp_flux": 0xffff << 16,
 }
 Fields["PID_TORQUE_P_TORQUE_I"] = {
-    "ki_torque": 0xffff << 0,
-    "kp_torque": 0xffff << 16,
+    "ki_torque": 0xffff << 0, "kp_torque": 0xffff << 16,
 }
-Fields["PID_FLUX_P_FLUX_I"] = {
-    "ki_flux" : 0xffff << 0,
-    "kp_flux" : 0xffff << 16
+Fields["PID_VELOCITY_P_VELOCITY_I"] = {
+    "ki_velocity": 0xffff << 0, "kp_velocity": 0xffff << 16,
 }
-
-Fields["OPENLOOP_MODE"] = {
-    "openloop_phi_direction" : 0x01 << 12
+Fields["PID_POSITION_P_POSITION_I"] = {
+    "ki_position": 0xffff << 0, "kp_position": 0xffff << 16,
 }
-Fields["OPENLOOP_ACCELERATION"] = {
-    "openloop_acceleration" : 0xffffffff << 0
+Fields["PIDOUT_UQ_UD_LIMITS"] = { "pidout_uq_ud_limits": 0xffff << 0 }
+Fields["PID_TORQUE_FLUX_LIMITS"] = { "pid_torque_flux_limits": 0xffff << 0 }
+Fields["PID_VELOCITY_LIMIT"] = { "pid_velocity_limit": 0xffffffff << 0 }
+Fields["PID_POSITION_LIMIT_LOW"] = {
+    "pid_position_limit_low": 0xffffffff << 0 }
+Fields["PID_POSITION_LIMIT_HIGH"] = {
+    "pid_position_limit_high": 0xffffffff << 0 }
+Fields["MODE_RAMP_MODE_MOTION"] = {
+    "mode_motion": 0xff << 0, "mode_pid_smpl": 0x7f << 24,
+    "mode_pid_type": 0x01 << 31,
 }
 Fields["PID_POSITION_ACTUAL"] = {
-    "pid_position_angle" : 0xffff << 0,
-    "pid_position_revolutions" : 0xffff << 16
-}
-
-Fields["OPENLOOP_VELOCITY_TARGET"] = {
-    "openloop_velocity_target" : 0xffffffff << 0
-}
-
-Fields["OPENLOOP_ACCELERATION"] = {
-    "openloop_acceleration" : 0xffffffff << 0
-}
+    "pid_position_actual": 0xffffffff << 0 }
+Fields["STATUS_FLAGS"] = { "status_flags": 0xffffffff << 0 }
 
 SignedFields = [
-    "position_target",
-    "velocity_target",
-    "torque_target"]
+    "abn_decoder_phi_m_offset", "abn_decoder_phi_e_offset",
+    "abn_decoder_phi_m", "abn_decoder_phi_e", "hall_phi_e",
+    "hall_phi_e_interpolated", "hall_phi_m_offset", "hall_phi_e_offset",
+    "phi_e_ext", "ud_ext", "uq_ext", "pid_position_actual",
+]
 
-FieldFormatters = {
-    "position_target": (lambda v: "Position Target: %d" % v),
-    "velocity_target": (lambda v: "Velocity Target: %d" % v),
-    "torque_target": (lambda v: "Torque Target: %d" % v),
-}
+FieldFormatters = {}
+
+# Latched STATUS_FLAGS bits treated as faults when they reappear after
+# an explicit clear (TMC4671-LA datasheet chapter 5)
+STATUS_NOT_PLL_LOCKED = 1 << 19
+STATUS_ADC_I_CLIPPED = 1 << 26
+STATUS_AENC_CLIPPED = 1 << 27
+STATUS_FAULT_MASK = (STATUS_NOT_PLL_LOCKED | STATUS_ADC_I_CLIPPED
+                     | STATUS_AENC_CLIPPED)
+
+# Motion modes (MODE_RAMP_MODE_MOTION mode_motion field)
+MODE_STOPPED = 0
+MODE_TORQUE = 1
+MODE_VELOCITY = 2
+MODE_POSITION = 3
+MODE_UQ_UD_EXT = 8
+
+# phi_e source selection
+PHI_E_EXT_SEL = 1
+PHI_E_ABN = 3
+PHI_E_HALL = 5
+
+# Power stage off: pwm_chop=0 (gates inactive, freewheel), sv retained
+PWM_CHOP_OFF = 0x00000100
+# Power stage on: chop mode 7 (centered PWM for FOC)
+PWM_CHOP_ON_MASK = 0x07
 
 
-class TMCCurrentHelper:
-    '''
-    TMC current helper. NOTE: it is a separate class just in case
-    more tmc servo models will be added in the future, otherwise
-    it can be merged into TMC4671 class.
-    '''
-    def __init__(self, config, mcu_tmc):
+class MCU_TMC4671_SPI:
+    # SPI access with single-frame reads (the TMC4671 replies within
+    # the same 40 bit datagram) and verify-with-retry writes
+    def __init__(self, config, name_to_reg, fields):
         self.printer = config.get_printer()
         self.name = config.get_name().split()[-1]
-        self.mcu_tmc = mcu_tmc
-        self.fields = mcu_tmc.get_fields()
-        run_current = config.getfloat('run_current', above=0.)
-        hold_current = config.getfloat('hold_current', run_current, above=0.)
+        self.mutex = self.printer.get_reactor().mutex()
+        # 1MHz: the chip errata documents MSB read corruption at
+        # higher pauseless-read clock rates
+        self.spi = bus.MCU_SPI_from_config(config, 3, default_speed=1000000)
+        self.name_to_reg = name_to_reg
+        self.fields = fields
+    def get_fields(self):
+        return self.fields
+    def get_tmc_frequency(self):
+        return TMC_FREQUENCY
+    def _do_read(self, reg):
+        params = self.spi.spi_transfer([reg & 0x7f, 0, 0, 0, 0])
+        pr = bytearray(params['response'])
+        return (pr[1] << 24) | (pr[2] << 16) | (pr[3] << 8) | pr[4]
+    def _do_write(self, reg, val):
+        self.spi.spi_send([(reg | 0x80) & 0xff, (val >> 24) & 0xff,
+                           (val >> 16) & 0xff, (val >> 8) & 0xff, val & 0xff])
+    def get_register(self, reg_name):
+        reg = self.name_to_reg[reg_name]
+        if self.printer.get_start_args().get('debugoutput') is not None:
+            return 0
+        with self.mutex:
+            return self._do_read(reg)
+    def set_register(self, reg_name, val, print_time=None, verify=None):
+        reg = self.name_to_reg[reg_name]
+        if verify is None:
+            verify = reg_name in VerifyRegisters
+        if self.printer.get_start_args().get('debugoutput') is not None:
+            verify = False
+        with self.mutex:
+            for retry in range(5):
+                self._do_write(reg, val)
+                if not verify:
+                    return
+                if self._do_read(reg) == val & 0xffffffff:
+                    return
+        raise self.printer.command_error(
+            "Unable to write tmc4671 '%s' register %s" % (self.name,
+                                                          reg_name))
 
-    def set_current(self, run_current, hold_current, print_time=None):
-        torque_target = self._calc_torque(run_current)
-        self.mcu_tmc.set_register("PID_TORQUE_FLUX_TARGET", torque_target, print_time)
+# Static configuration registers - written with readback verification
+# and scrubbed periodically against the intended values
+VerifyRegisters = [
+    "dsADC_MCFG_B_MCFG_A", "dsADC_MCLK_A", "dsADC_MCLK_B",
+    "dsADC_MDEC_B_MDEC_A", "ADC_I0_SCALE_OFFSET", "ADC_I1_SCALE_OFFSET",
+    "ADC_I_SELECT", "DS_ANALOG_INPUT_STAGE_CFG", "PWM_POLARITIES",
+    "PWM_MAXCNT", "PWM_BBM_H_BBM_L", "MOTOR_TYPE_N_POLE_PAIRS",
+    "ABN_DECODER_MODE", "ABN_DECODER_PPR", "HALL_MODE",
+    "HALL_POSITION_060_000", "HALL_POSITION_180_120",
+    "HALL_POSITION_300_240", "HALL_PHI_E_PHI_M_OFFSET", "HALL_DPHI_MAX",
+    "VELOCITY_SELECTION", "POSITION_SELECTION",
+    "PID_FLUX_P_FLUX_I", "PID_TORQUE_P_TORQUE_I",
+    "PID_VELOCITY_P_VELOCITY_I", "PID_POSITION_P_POSITION_I",
+    "PIDOUT_UQ_UD_LIMITS", "PID_TORQUE_FLUX_LIMITS",
+    "PID_VELOCITY_LIMIT", "PID_POSITION_LIMIT_LOW",
+    "PID_POSITION_LIMIT_HIGH", "STATUS_MASK",
+]
 
-    def _calc_torque(self, current):
-        torque = int(current * 1000)
-        return max(0, min(0xffff, torque))
 
-    def get_current(self):
-        torque_target = self.mcu_tmc.get_register("PID_TORQUE_FLUX_TARGET")
-        return self._calc_current_from_torque(torque_target)
-
-    def _calc_current_from_torque(self, torque):
-        current = torque / 1000
-        return current
-    
-
-class TMCCommandHelper:
-    '''
-    TMC command helper. NOTE: it is a separate class just in case
-    more tmc servo models will be added in the future, otherwise
-    it can be merged into TMC4671 class.
-    '''
-    def __init__(self, config, mcu_tmc, current_helper):
+class TMC4671:
+    def __init__(self, config):
         self.printer = config.get_printer()
         self.stepper_name = ' '.join(config.get_name().split()[1:])
         self.name = config.get_name().split()[-1]
-        self.mcu_tmc = mcu_tmc
-        self.current_helper = current_helper
-        #self.echeck_helper = TMCErrorCheck(config, mcu_tmc)
-        self.fields = mcu_tmc.get_fields()
-        self.read_registers = None
-        self.read_translate = None
-        self.toff = None
-        self.mcu_phase_offset = None
+        self.fields = tmc.FieldHelper(Fields, SignedFields, FieldFormatters)
+        self.mcu_tmc = MCU_TMC4671_SPI(config, Registers, self.fields)
+        self.mutex = self.printer.get_reactor().mutex()
         self.stepper = None
-        self.spi = mcu_tmc.tmc_spi.spi
-        self.mcu = self.spi.get_mcu()
-        self.stepper_enable = self.printer.load_object(config, "stepper_enable")
-        self.printer.register_event_handler("stepper:sync_mcu_position", self._handle_sync_mcu_pos)
-        self.printer.register_event_handler("klippy:mcu_identify", self._handle_mcu_identify)
-        self.printer.register_event_handler("klippy:connect", self._handle_connect)
-        # register commands (NOTE: keep stepper notation for compatibility)
+        self.stepper_enable = self.printer.load_object(config,
+                                                       "stepper_enable")
+        self.enabled = False
+        self.adc_calibrated = False
+        self.aligned = False
+        self.fault_strikes = 0
+        self.scrub_index = 0
+        self.last_status = {}
+        self.check_timer = None
+        self.monitor_timer = None
+        self.monitor_count = 0
+        # Motor/encoder configuration (must match the machine)
+        self.pole_pairs = config.getint('pole_pairs', minval=1, maxval=120)
+        self.encoder_resolution = config.getint('encoder_resolution',
+                                                minval=4)
+        self.encoder_direction = config.getboolean('encoder_direction',
+                                                   True)
+        # Current control.  current_scale_ma_per_lsb depends on the
+        # power stage (shunt + amplifier gain) and MUST be validated
+        # for each board design before trusting any ampere value.
+        self.current_scale = config.getfloat('current_scale_ma_per_lsb',
+                                             1.0, above=0.)
+        self.run_current = config.getfloat('run_current', above=0.)
+        self.velocity_limit = config.getfloat('velocity_limit', 3000.,
+                                              above=0.)
+        self.dead_time_ns = config.getint('dead_time_ns', 250, minval=0,
+                                          maxval=2550)
+        # Encoder alignment strategy
+        self.align_mode = config.getchoice('align_mode', {
+            'forced': 'forced', 'hall': 'hall', 'manual': 'manual'},
+            'forced')
+        self.align_voltage = config.getint('align_voltage', 1000,
+                                           minval=100, maxval=8000)
+        self.align_delay = config.getfloat('align_delay', 1.0,
+                                           minval=0.2, maxval=5.)
+        # Board-specific analog frontend configuration
+        self.adc_i_select = config.getint('adc_i_select', 0x18000100)
+        self.analog_input_cfg = config.getint('analog_input_stage_cfg',
+                                              0x00044400)
+        self._setup_register_defaults(config)
+        # Event handlers
+        self.printer.register_event_handler("klippy:mcu_identify",
+                                            self._handle_mcu_identify)
+        self.printer.register_event_handler("klippy:connect",
+                                            self._handle_connect)
+        # Commands
         gcode = self.printer.lookup_object("gcode")
-        gcode.register_mux_command("SET_TMC4671_FIELD", "STEPPER", self.name, self.cmd_SET_TMC_FIELD, desc=self.cmd_SET_TMC_FIELD_help)
-        gcode.register_mux_command("INIT_TMC4671", "STEPPER", self.name, self.cmd_INIT_TMC, desc=self.cmd_INIT_TMC_help)
-        gcode.register_mux_command("SET_TMC4671_CURRENT", "STEPPER", self.name, self.cmd_SET_TMC_CURRENT, desc=self.cmd_SET_TMC_CURRENT_help)
-
-    def _init_registers(self, print_time=None):
-        '''
-        Setup registers.
-        '''
+        gcode.register_mux_command("INIT_TMC4671", "STEPPER", self.name,
+                                   self.cmd_INIT_TMC4671,
+                                   desc=self.cmd_INIT_TMC4671_help)
+        gcode.register_mux_command("SET_TMC4671_FIELD", "STEPPER", self.name,
+                                   self.cmd_SET_TMC4671_FIELD,
+                                   desc=self.cmd_SET_TMC4671_FIELD_help)
+        gcode.register_mux_command("SET_TMC4671_CURRENT", "STEPPER",
+                                   self.name, self.cmd_SET_TMC4671_CURRENT,
+                                   desc=self.cmd_SET_TMC4671_CURRENT_help)
+        gcode.register_mux_command("DUMP_TMC4671", "STEPPER", self.name,
+                                   self.cmd_DUMP_TMC4671,
+                                   desc=self.cmd_DUMP_TMC4671_help)
+        gcode.register_mux_command("TMC4671_CALIBRATE_ADC", "STEPPER",
+                                   self.name, self.cmd_TMC4671_CALIBRATE_ADC,
+                                   desc=self.cmd_TMC4671_CALIBRATE_ADC_help)
+        gcode.register_mux_command("TMC4671_ALIGN_ENCODER", "STEPPER",
+                                   self.name, self.cmd_TMC4671_ALIGN_ENCODER,
+                                   desc=self.cmd_TMC4671_ALIGN_ENCODER_help)
+        gcode.register_mux_command("TMC4671_STATUS", "STEPPER", self.name,
+                                   self.cmd_TMC4671_STATUS,
+                                   desc=self.cmd_TMC4671_STATUS_help)
+        gcode.register_mux_command("TMC4671_MONITOR", "STEPPER", self.name,
+                                   self.cmd_TMC4671_MONITOR,
+                                   desc=self.cmd_TMC4671_MONITOR_help)
+    def _calc_current_limit(self, current):
+        limit = int(current * 1000. / self.current_scale + .5)
+        return max(0, min(0x7fff, limit))
+    def _setup_register_defaults(self, config):
+        # Stage the full register configuration.  Values are the tuned
+        # TMCL-IDE reference for the DMM DST640 where motor-bound, and
+        # explicit config options where board-bound.  Every field
+        # remains overridable via driver_<FIELD> options.
+        setf = self.fields.set_field
+        set_config_field = self.fields.set_config_field
+        # Motor
+        set_config_field(config, "motor_type", 3)
+        setf("pole_pairs", self.pole_pairs)
+        # PWM: 25kHz, polarities and dead time are power-stage-bound
+        set_config_field(config, "low_side_polarity", 0)
+        set_config_field(config, "high_side_polarity", 0)
+        set_config_field(config, "pwm_maxcnt", 0x0F9F)
+        bbm = max(0, min(0xff, (self.dead_time_ns + 5) // 10))
+        setf("pwm_bbm_l", bbm)
+        setf("pwm_bbm_h", bbm)
+        # Power stage starts OFF (chop=0); enable turns it on
+        setf("pwm_chop", 0)
+        set_config_field(config, "pwm_sv", 1)
+        # dsADC frontend: internal modulators, 25MHz group A clock,
+        # sinc3 decimation of exactly one 25kHz PWM period (MDEC=334)
+        set_config_field(config, "cfg_dsmodulator_a", 0)
+        set_config_field(config, "mclk_polarity_a", 0)
+        set_config_field(config, "mdat_polarity_a", 0)
+        set_config_field(config, "sel_nclk_mclk_i_a", 1)
+        set_config_field(config, "cfg_dsmodulator_b", 0)
+        set_config_field(config, "mclk_polarity_b", 0)
+        set_config_field(config, "mdat_polarity_b", 0)
+        set_config_field(config, "sel_nclk_mclk_i_b", 1)
+        set_config_field(config, "dsadc_mclk_a", 0x20000000)
+        set_config_field(config, "dsadc_mclk_b", 0)
+        set_config_field(config, "dsadc_mdec_a", 0x014E)
+        set_config_field(config, "dsadc_mdec_b", 0x014E)
+        # ADC current scaling; offsets are calibrated at every boot
+        # (never transplanted between boards), config options exist
+        # for bench diagnosis only
+        set_config_field(config, "adc_i0_scale", 0x0100)
+        set_config_field(config, "adc_i0_offset", 0x8000)
+        set_config_field(config, "adc_i1_scale", 0x0100)
+        set_config_field(config, "adc_i1_offset", 0x8000)
+        # ADC_I_SELECT and the analog input stage are board-bound raw
+        # values (see docs); stage them as whole registers
+        self.reg_overrides = {
+            "ADC_I_SELECT": self.adc_i_select,
+            "DS_ANALOG_INPUT_STAGE_CFG": self.analog_input_cfg,
+        }
+        # ABN encoder: PPR is 4x the line count (quadrature)
+        set_config_field(config, "apol", 0)
+        set_config_field(config, "bpol", 0)
+        set_config_field(config, "npol", 0)
+        set_config_field(config, "use_abn_as_n", 0)
+        set_config_field(config, "cln", 0)
+        setf("direction", 1 if self.encoder_direction else 0)
+        setf("abn_decoder_ppr", self.encoder_resolution)
+        set_config_field(config, "abn_decoder_phi_m_offset", 0)
+        set_config_field(config, "abn_decoder_phi_e_offset", 0)
+        # Hall sensors: polarity/direction need bench commissioning;
+        # interpolation stays off (silicon erratum with hall
+        # interpolation + position feedback)
+        set_config_field(config, "hall_polarity", 0)
+        set_config_field(config, "hall_synchronous_pwm_sampling", 0)
+        set_config_field(config, "hall_interpolation", 0)
+        set_config_field(config, "hall_direction", 0)
+        set_config_field(config, "hall_blank", 2)
+        # Feedback selections: electrical-angle domain (keeps the
+        # tuned PID gains valid; unit conversion is host-side)
+        set_config_field(config, "velocity_selection", 0)
+        set_config_field(config, "velocity_meter_selection", 0)
+        set_config_field(config, "position_selection", 0)
+        set_config_field(config, "phi_e_selection", PHI_E_ABN)
+        # PID gains (tuned TMCL-IDE values for the DST640)
+        set_config_field(config, "kp_torque", 0x00F5)
+        set_config_field(config, "ki_torque", 0x00C1)
+        set_config_field(config, "kp_flux", 0x00F5)
+        set_config_field(config, "ki_flux", 0x00C1)
+        set_config_field(config, "kp_velocity", 0x4E20)
+        set_config_field(config, "ki_velocity", 0x04B0)
+        set_config_field(config, "kp_position", 0x0050)
+        set_config_field(config, "ki_position", 0x0014)
+        # Limits
+        set_config_field(config, "pidout_uq_ud_limits", 0x5A81)
+        setf("pid_torque_flux_limits",
+             self._calc_current_limit(self.run_current))
+        vel_limit = int(self.velocity_limit * self.pole_pairs + .5)
+        setf("pid_velocity_limit", vel_limit)
+        set_config_field(config, "pid_position_limit_low", -0x80000000
+                         + 1)
+        set_config_field(config, "pid_position_limit_high", 0x7fffffff)
+        # Motion mode: stopped, parallel PI, no ramp bits (dead on -LA)
+        setf("mode_motion", MODE_STOPPED)
+        set_config_field(config, "mode_pid_smpl", 0)
+        set_config_field(config, "mode_pid_type", 0)
+    def _handle_mcu_identify(self):
+        force_move = self.printer.lookup_object("force_move")
+        self.stepper = force_move.lookup_stepper(self.stepper_name)
+        if self.stepper.get_pole_pairs() != self.pole_pairs:
+            raise self.printer.config_error(
+                "tmc4671 %s: pole_pairs (%d) must match the %s section"
+                " (%d)" % (self.name, self.pole_pairs, self.stepper_name,
+                           self.stepper.get_pole_pairs()))
+        # Register shutdown-safe de-energize messages: replayed by the
+        # mcu (spidev_shutdown) on ANY shutdown, in registration order
+        spi = self.mcu_tmc.spi
+        for reg_name, val in [
+                ("MODE_RAMP_MODE_MOTION", 0),
+                ("PID_VELOCITY_OFFSET", 0),
+                ("UQ_UD_EXT", 0),
+                ("PWM_SV_CHOP", PWM_CHOP_OFF)]:
+            reg = Registers[reg_name]
+            spi.setup_shutdown_msg([(reg | 0x80) & 0xff,
+                                    (val >> 24) & 0xff, (val >> 16) & 0xff,
+                                    (val >> 8) & 0xff, val & 0xff])
+        # Wire enable/disable sequencing to the stepper enable line
+        enable_line = self.stepper_enable.lookup_enable(self.stepper_name)
+        enable_line.register_state_callback(self._handle_stepper_enable)
+    def _handle_stepper_enable(self, print_time, is_enable):
+        if is_enable:
+            cb = (lambda ev: self._do_enable())
+        else:
+            cb = (lambda ev: self._do_disable())
+        self.printer.get_reactor().register_callback(cb)
+    def _init_registers(self):
+        # Full safe (de-energized) chip configuration.  Explicit
+        # ordering: force-safe registers first, then static config.
+        setr = self.mcu_tmc.set_register
+        # Force safe state (chip may hold stale state across host
+        # restarts; a whole-register write is the only STATUS clear)
+        setr("PWM_SV_CHOP", PWM_CHOP_OFF, verify=True)
+        setr("MODE_RAMP_MODE_MOTION", 0, verify=True)
+        for reg in ["PID_TORQUE_FLUX_TARGET", "PID_TORQUE_FLUX_OFFSET",
+                    "PID_VELOCITY_TARGET", "PID_VELOCITY_OFFSET",
+                    "UQ_UD_EXT", "PHI_E_EXT", "OPENLOOP_MODE",
+                    "OPENLOOP_ACCELERATION", "OPENLOOP_VELOCITY_TARGET",
+                    "OPENLOOP_PHI"]:
+            setr(reg, 0, verify=False)
+        setr("STATUS_FLAGS", 0, verify=False)
+        setr("STATUS_MASK", 0)
+        # Static configuration
         for reg_name in list(self.fields.registers.keys()):
-            val = self.fields.registers[reg_name] # Val may change during loop
-            pre_val = self.mcu_tmc.get_register(reg_name)
-            self.mcu_tmc.set_register(reg_name, val, print_time)
-            post_val = self.mcu_tmc.get_register(reg_name)
-            logging.info("%s: (pre = %s, post = %s)" % (reg_name, pre_val, post_val))
-            
-    cmd_INIT_TMC_help = "Initialize TMC4671 stepper driver registers"
-    def cmd_INIT_TMC(self, gcmd):
-        '''
-        Initialize TMC.
-        '''
-        logging.info("INIT_TMC for TMC4671 %s", self.name)
-        print_time = self.printer.lookup_object('toolhead').get_last_move_time()
-        self._init_registers(print_time)
-
-    cmd_SET_TMC_FIELD_help = "Set a register field of the TMC4671 driver"
-    def cmd_SET_TMC_FIELD(self, gcmd):
-        '''
-        Set TMC field.
-        '''
+            if reg_name in ("PWM_SV_CHOP", "MODE_RAMP_MODE_MOTION"):
+                continue
+            val = self.reg_overrides.get(reg_name,
+                                         self.fields.registers[reg_name])
+            setr(reg_name, val)
+        for reg_name, val in self.reg_overrides.items():
+            setr(reg_name, val)
+    def _handle_connect(self):
+        # Full bring-up happens at connect while nothing can move:
+        # safe register init, per-boot ADC offset calibration and
+        # encoder alignment (the forced method can rotate the motor by
+        # up to half an electrical revolution - use align_mode: hall
+        # or manual for zero-motion connects once commissioned).
+        # Enable/disable afterwards only toggles power stage and mode.
+        try:
+            with self.mutex:
+                self._init_registers()
+                if self.printer.get_start_args().get('debugoutput') \
+                   is None:
+                    self._calibrate_adc_offsets()
+                    if self.align_mode != 'manual':
+                        self._stage_on()
+                        try:
+                            if self.align_mode == 'hall':
+                                self._align_encoder_hall()
+                            else:
+                                self._align_encoder_forced()
+                        finally:
+                            self._stage_off()
+        except self.printer.command_error as e:
+            logging.info("TMC4671 %s failed to init: %s", self.name, str(e))
+            return
+        # Hand the SPI device to the serialservo mcu code for runtime
+        # setpoint streaming, then anchor the host position frame
+        try:
+            self.stepper.setup_spi(self.mcu_tmc.spi.get_oid())
+            self.stepper.note_homing_end()
+        except Exception:
+            logging.exception("TMC4671 %s: serialservo spi setup failed",
+                              self.name)
+    def _stage_on(self):
+        chop = (self.fields.registers["PWM_SV_CHOP"] & ~0xff) \
+            | PWM_CHOP_ON_MASK
+        self.mcu_tmc.set_register("PWM_SV_CHOP", chop, verify=True)
+    def _stage_off(self):
+        chop = self.fields.registers["PWM_SV_CHOP"] & ~0xff
+        self.mcu_tmc.set_register("PWM_SV_CHOP", chop, verify=True)
+    def _pause(self, seconds):
+        reactor = self.printer.get_reactor()
+        eventtime = reactor.monotonic()
+        reactor.pause(eventtime + seconds)
+    def _calibrate_adc_offsets(self):
+        # Per-boot zero-current ADC offset calibration (power stage
+        # must be off).  Never use transplanted offsets.
+        if self.printer.get_start_args().get('debugoutput') is not None:
+            self.adc_calibrated = True
+            return
+        setr = self.mcu_tmc.set_register
+        getr = self.mcu_tmc.get_register
+        chop = getr("PWM_SV_CHOP")
+        if chop & 0xff:
+            raise self.printer.command_error(
+                "TMC4671 %s: ADC calibration requires power stage off"
+                % (self.name,))
+        setr("ADC_RAW_ADDR", 0, verify=False)
+        total0 = total1 = 0
+        count = 32
+        for i in range(count):
+            raw = getr("ADC_RAW_DATA")
+            total0 += raw & 0xffff
+            total1 += (raw >> 16) & 0xffff
+            self._pause(0.002)
+        offs0 = (total0 + count // 2) // count
+        offs1 = (total1 + count // 2) // count
+        # Sanity: offsets must be near mid scale (25%..75%)
+        for offs, chan in ((offs0, "I0"), (offs1, "I1")):
+            if not (0x4000 <= offs <= 0xC000):
+                raise self.printer.command_error(
+                    "TMC4671 %s: ADC %s offset calibration implausible"
+                    " (0x%04X)" % (self.name, chan, offs))
+        self.fields.set_field("adc_i0_offset", offs0)
+        self.fields.set_field("adc_i1_offset", offs1)
+        setr("ADC_I0_SCALE_OFFSET",
+             self.fields.registers["ADC_I0_SCALE_OFFSET"])
+        setr("ADC_I1_SCALE_OFFSET",
+             self.fields.registers["ADC_I1_SCALE_OFFSET"])
+        self.adc_calibrated = True
+        logging.info("TMC4671 %s: ADC offsets calibrated I0=0x%04X"
+                     " I1=0x%04X", self.name, offs0, offs1)
+    def _align_encoder_forced(self):
+        # Commissioning-grade forced rotor alignment: park the rotor
+        # at phi_e=0 with a UD-only voltage, then zero the decoder.
+        # The rotor can move up to half an electrical revolution.
+        setr = self.mcu_tmc.set_register
+        setr("PHI_E_SELECTION", PHI_E_EXT_SEL, verify=False)
+        setr("PHI_E_EXT", 0, verify=False)
+        setr("UQ_UD_EXT", 0, verify=False)
+        setr("MODE_RAMP_MODE_MOTION", MODE_UQ_UD_EXT, verify=False)
+        # Ramp UD to the alignment voltage
+        steps = 8
+        for i in range(1, steps + 1):
+            setr("UQ_UD_EXT", (self.align_voltage * i) // steps,
+                 verify=False)
+            self._pause(0.05)
+        self._pause(self.align_delay)
+        setr("ABN_DECODER_COUNT", 0, verify=False)
+        setr("ABN_DECODER_PHI_E_PHI_M_OFFSET", 0, verify=False)
+        setr("UQ_UD_EXT", 0, verify=False)
+        setr("MODE_RAMP_MODE_MOTION", MODE_STOPPED, verify=False)
+        setr("PHI_E_SELECTION", PHI_E_ABN, verify=False)
+        self.aligned = True
+        logging.info("TMC4671 %s: forced encoder alignment complete",
+                     self.name)
+    def _align_encoder_hall(self):
+        # Zero-motion alignment: copy the hall electrical angle into
+        # the ABN phi_e offset (coarse, +-30deg electrical; requires
+        # commissioned hall polarity/direction)
+        setr = self.mcu_tmc.set_register
+        getr = self.mcu_tmc.get_register
+        setr("ABN_DECODER_PHI_E_PHI_M_OFFSET", 0, verify=False)
+        hall = getr("HALL_PHI_E_INTERPOLATED_PHI_E")
+        hall_phi_e = hall & 0xffff
+        abn = getr("ABN_DECODER_PHI_E_PHI_M")
+        abn_phi_e = (abn >> 16) & 0xffff
+        offset = (hall_phi_e - abn_phi_e) & 0xffff
+        self.fields.set_field("abn_decoder_phi_e_offset",
+                              offset - 0x10000 if offset >= 0x8000
+                              else offset)
+        setr("ABN_DECODER_PHI_E_PHI_M_OFFSET", offset << 16, verify=False)
+        setr("PHI_E_SELECTION", PHI_E_ABN, verify=False)
+        self.aligned = True
+        logging.info("TMC4671 %s: hall encoder alignment offset=0x%04X",
+                     self.name, offset)
+    def _seed_position(self):
+        # Sync the position target to the measured position (writing
+        # PID_POSITION_ACTUAL auto-copies into PID_POSITION_TARGET,
+        # preventing any jump on loop closure)
+        getr = self.mcu_tmc.get_register
+        actual = getr("PID_POSITION_ACTUAL")
+        self.mcu_tmc.set_register("PID_POSITION_ACTUAL", actual,
+                                  verify=False)
+    def _do_enable(self):
+        # Fast path: power stage on and closed loop entry.  ADC
+        # calibration and alignment already happened at connect.
+        try:
+            with self.mutex:
+                if self.enabled:
+                    return
+                if self.printer.get_start_args().get('debugoutput') \
+                   is not None:
+                    self.enabled = True
+                    return
+                if self.align_mode != 'manual' and not self.aligned:
+                    raise self.printer.command_error(
+                        "TMC4671 %s: encoder not aligned" % (self.name,))
+                self._stage_on()
+                self._seed_position()
+                self.mcu_tmc.set_register("PID_VELOCITY_OFFSET", 0,
+                                          verify=False)
+                self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
+                                          MODE_POSITION, verify=False)
+                self.enabled = True
+                self.fault_strikes = 0
+            self._start_checks()
+            logging.info("TMC4671 %s: enabled (closed loop position)",
+                         self.name)
+        except self.printer.command_error as e:
+            logging.error("TMC4671 %s enable failed: %s", self.name, str(e))
+            self.printer.invoke_shutdown(str(e))
+    def _do_disable(self):
+        try:
+            self._stop_checks()
+            with self.mutex:
+                if not self.enabled:
+                    return
+                self.enabled = False
+                if self.printer.get_start_args().get('debugoutput') \
+                   is not None:
+                    return
+                setr = self.mcu_tmc.set_register
+                setr("MODE_RAMP_MODE_MOTION", MODE_STOPPED, verify=False)
+                setr("PID_VELOCITY_OFFSET", 0, verify=False)
+                setr("UQ_UD_EXT", 0, verify=False)
+                setr("PWM_SV_CHOP", PWM_CHOP_OFF, verify=True)
+            logging.info("TMC4671 %s: disabled (power stage off)",
+                         self.name)
+        except self.printer.command_error as e:
+            logging.error("TMC4671 %s disable failed: %s", self.name,
+                          str(e))
+            self.printer.invoke_shutdown(str(e))
+    def _start_checks(self):
+        if self.check_timer is None:
+            reactor = self.printer.get_reactor()
+            curtime = reactor.monotonic()
+            self.check_timer = reactor.register_timer(self._periodic_check,
+                                                      curtime + 1.)
+    def _stop_checks(self):
+        if self.check_timer is not None:
+            self.printer.get_reactor().unregister_timer(self.check_timer)
+            self.check_timer = None
+    def _periodic_check(self, eventtime):
+        try:
+            status = self.mcu_tmc.get_register("STATUS_FLAGS")
+            self.last_status = {'status_flags': status}
+            if status & STATUS_FAULT_MASK:
+                self.fault_strikes += 1
+                self.mcu_tmc.set_register("STATUS_FLAGS", 0, verify=False)
+                logging.warning("TMC4671 %s: fault flags 0x%08X (strike"
+                                " %d)", self.name, status,
+                                self.fault_strikes)
+                if self.fault_strikes >= 3:
+                    raise self.printer.command_error(
+                        "TMC4671 %s reports persistent fault flags 0x%08X"
+                        % (self.name, status & STATUS_FAULT_MASK))
+            else:
+                self.fault_strikes = 0
+            # Scrub one static register per cycle against its intended
+            # value (the chip has no SPI CRC)
+            reg_names = [r for r in VerifyRegisters
+                         if r in self.fields.registers
+                         or r in self.reg_overrides]
+            if reg_names:
+                self.scrub_index = (self.scrub_index + 1) % len(reg_names)
+                reg_name = reg_names[self.scrub_index]
+                expected = self.reg_overrides.get(
+                    reg_name, self.fields.registers.get(reg_name, 0))
+                actual = self.mcu_tmc.get_register(reg_name)
+                if actual != expected & 0xffffffff:
+                    raise self.printer.command_error(
+                        "TMC4671 %s: register %s corrupted (0x%08X !="
+                        " 0x%08X)" % (self.name, reg_name, actual,
+                                      expected))
+        except self.printer.command_error as e:
+            self.printer.invoke_shutdown(str(e))
+            return self.printer.get_reactor().NEVER
+        return eventtime + 1.
+    def get_status(self, eventtime=None):
+        return {'enabled': self.enabled,
+                'adc_calibrated': self.adc_calibrated,
+                'aligned': self.aligned,
+                'status_flags': self.last_status.get('status_flags'),
+                'run_current': self.run_current}
+    cmd_INIT_TMC4671_help = "Re-initialize TMC4671 registers (safe state)"
+    def cmd_INIT_TMC4671(self, gcmd):
+        if self.enabled:
+            raise gcmd.error("TMC4671 %s: disable the motor before"
+                             " INIT_TMC4671" % (self.name,))
+        with self.mutex:
+            self._init_registers()
+        self.aligned = False
+        gcmd.respond_info("TMC4671 %s initialized (motor de-energized)"
+                          % (self.name,))
+    cmd_SET_TMC4671_FIELD_help = "Set a TMC4671 register field"
+    def cmd_SET_TMC4671_FIELD(self, gcmd):
         field_name = gcmd.get('FIELD').lower()
         reg_name = self.fields.lookup_register(field_name, None)
         if reg_name is None:
             raise gcmd.error("Unknown field name '%s'" % (field_name,))
-        value = gcmd.get_int('VALUE', None)
-        if value is None:
-            raise gcmd.error("Null value")
+        value = gcmd.get_int('VALUE')
         reg_val = self.fields.set_field(field_name, value)
-        print_time = self.printer.lookup_object('toolhead').get_last_move_time()
-        self.mcu_tmc.set_register(reg_name, reg_val, print_time)
-
-    cmd_SET_TMC_CURRENT_help = "Set the current of a TMC4671 driver"
-    def cmd_SET_TMC_CURRENT(self, gcmd):
-        pass
-
-    def _handle_sync_mcu_pos(self, stepper):
-        '''
-        Synchronize mcu position. TODO: add logic to handle
-        position instead of phase.
-        '''
-        if stepper.get_name() != self.name:
-            return
-        pass
-
-    def _handle_mcu_identify(self):
-        '''
-        Identify mcu and perform post initialization tasks.
-        '''
-        force_move = self.printer.lookup_object("force_move")
-        self.stepper = force_move.lookup_stepper(self.stepper_name)
-        
-    def _handle_stepper_enable(self, print_time, is_enable):
-        '''
-        Enable or disable stepper.
-        '''
-        if is_enable:
-            cb = (lambda ev: self._do_enable(print_time))
-        else:
-            cb = (lambda ev: self._do_disable(print_time))
-        self.printer.get_reactor().register_callback(cb)
-
-    def _do_enable(self, print_time):
-        '''
-        Enable stepper.
-        '''
-        try:
-            self._init_registers(print_time)
-            logging.info(f"TMC4671 {self.name}: Enabled")
-        except self.printer.command_error as e:
-            logging.error(f"Error enabling {self.name}: {str(e)}")
-            self.printer.invoke_shutdown(str(e))
-
-    def _do_disable(self, print_time):
-        '''
-        Disable stepper.
-        '''
-        try:
-            logging.info(f"TMC4671 {self.name}: Disabled")
-        except self.printer.command_error as e:
-            logging.error(f"Error disabling {self.name}: {str(e)}")
-            self.printer.invoke_shutdown(str(e))
-
-    def _handle_connect(self):
-        '''
-        Connect to mcu and perform postinitialization tasks.
-        '''
-        try:
-            self._init_registers()
-            # enable serialservo spi in firmware directly
-            self.stepper._set_spi_cmd.send(
-                [self.stepper.get_oid(), self.spi.get_oid(),
-                 self.mcu_tmc.tmc_spi.chain_len,
-                 self.mcu_tmc.chain_pos])
-            logging.info(f"TMC4671 {self.name}: connected and initialized")
-            status_flags = self.mcu_tmc.get_register("STATUS_FLAGS")
-            logging.info("STATUS REGISTER = %s" % status_flags)
-        except self.printer.command_error as e:
-            logging.error(f"TMC4671 {self.name} failed to initialize: {str(e)}")
-
-    def setup_register_dump(self, read_registers, read_translate=None):
-        '''
-        Dump register.
-        '''
-        self.read_registers = read_registers
-        self.read_translate = read_translate
-        gcode = self.printer.lookup_object("gcode")
-        gcode.register_mux_command("DUMP_TMCS", "STEPPER", self.name, self.cmd_DUMP_TMC, desc=self.cmd_DUMP_TMC_help)
-
-    cmd_DUMP_TMC_help = "Read and display TMC4671 servo driver registers"
-    def cmd_DUMP_TMC(self, gcmd):
-        '''
-        Dump tmc command.
-        '''
-        logging.info("DUMP_TMC %s", self.name)
+        with self.mutex:
+            self.mcu_tmc.set_register(reg_name, reg_val)
+    cmd_SET_TMC4671_CURRENT_help = "Set the TMC4671 torque/flux current limit"
+    def cmd_SET_TMC4671_CURRENT(self, gcmd):
+        run_current = gcmd.get_float('CURRENT', None, above=0.)
+        if run_current is not None:
+            self.run_current = run_current
+            limit = self._calc_current_limit(run_current)
+            self.fields.set_field("pid_torque_flux_limits", limit)
+            with self.mutex:
+                self.mcu_tmc.set_register(
+                    "PID_TORQUE_FLUX_LIMITS",
+                    self.fields.registers["PID_TORQUE_FLUX_LIMITS"])
+        gcmd.respond_info("Run current: %.2fA (limit=%d lsb, scale=%.3f"
+                          " mA/lsb)" % (self.run_current,
+                                        self._calc_current_limit(
+                                            self.run_current),
+                                        self.current_scale))
+    cmd_DUMP_TMC4671_help = "Read and display TMC4671 registers"
+    def cmd_DUMP_TMC4671(self, gcmd):
         reg_name = gcmd.get('REGISTER', None)
         if reg_name is not None:
             reg_name = reg_name.upper()
-            val = self.fields.registers.get(reg_name)
-            if (val is not None) and (reg_name not in self.read_registers):
-                # write-only register
-                gcmd.respond_info(self.fields.pretty_format(reg_name, val))
-            elif reg_name in self.read_registers:
-                # readable register
-                val = self.mcu_tmc.get_register(reg_name)
-                if self.read_translate is not None:
-                    reg_name, val = self.read_translate(reg_name, val)
-                gcmd.respond_info(self.fields.pretty_format(reg_name, val))
+            if reg_name not in Registers:
+                raise gcmd.error("Unknown register name '%s'" % (reg_name,))
+            if reg_name not in ReadRegisters:
+                raise gcmd.error("Register '%s' is not safe for generic"
+                                 " reads" % (reg_name,))
+            val = self.mcu_tmc.get_register(reg_name)
+            gcmd.respond_info(self.fields.pretty_format(reg_name, val))
+            return
+        gcmd.respond_info("========== Queried registers ==========")
+        for reg_name in ReadRegisters:
+            val = self.mcu_tmc.get_register(reg_name)
+            gcmd.respond_info(self.fields.pretty_format(reg_name, val))
+    cmd_TMC4671_CALIBRATE_ADC_help = "Run zero-current ADC offset calibration"
+    def cmd_TMC4671_CALIBRATE_ADC(self, gcmd):
+        if self.enabled:
+            raise gcmd.error("TMC4671 %s: disable the motor before ADC"
+                             " calibration" % (self.name,))
+        with self.mutex:
+            self._calibrate_adc_offsets()
+        gcmd.respond_info(
+            "ADC offsets: I0=0x%04X I1=0x%04X" % (
+                self.fields.get_field("adc_i0_offset"),
+                self.fields.get_field("adc_i1_offset")))
+    cmd_TMC4671_ALIGN_ENCODER_help = "Run the encoder alignment procedure"
+    def cmd_TMC4671_ALIGN_ENCODER(self, gcmd):
+        mode = gcmd.get('MODE', self.align_mode)
+        if mode not in ('forced', 'hall'):
+            raise gcmd.error("MODE must be 'forced' or 'hall'")
+        if not self.enabled:
+            raise gcmd.error("TMC4671 %s: enable the motor first (power"
+                             " stage must be on)" % (self.name,))
+        with self.mutex:
+            self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
+                                      MODE_STOPPED, verify=False)
+            if mode == 'hall':
+                self._align_encoder_hall()
             else:
-                raise gcmd.error("Unknown register name '%s'" % (reg_name))
-        else:
-            gcmd.respond_info("========== Write-only registers ==========")
-            for reg_name, val in self.fields.registers.items():
-                if reg_name not in self.read_registers:
-                    gcmd.respond_info(self.fields.pretty_format(reg_name, val))
-            gcmd.respond_info("========== Queried registers ==========")
-            for reg_name in self.read_registers:
-                val = self.mcu_tmc.get_register(reg_name)
-                if self.read_translate is not None:
-                    reg_name, val = self.read_translate(reg_name, val)
-                gcmd.respond_info(self.fields.pretty_format(reg_name, val))
+                self._align_encoder_forced()
+            self._seed_position()
+            self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
+                                      MODE_POSITION, verify=False)
+        self.stepper.note_homing_end()
+        gcmd.respond_info("TMC4671 %s: encoder alignment (%s) complete"
+                          % (self.name, mode))
+    cmd_TMC4671_STATUS_help = "Report TMC4671 servo state"
+    def cmd_TMC4671_STATUS(self, gcmd):
+        status = self.mcu_tmc.get_register("STATUS_FLAGS")
+        faults = []
+        if status & STATUS_NOT_PLL_LOCKED:
+            faults.append("not_PLL_locked")
+        if status & STATUS_ADC_I_CLIPPED:
+            faults.append("adc_i_clipped")
+        if status & STATUS_AENC_CLIPPED:
+            faults.append("aenc_clipped")
+        abn = self.mcu_tmc.get_register("ABN_DECODER_PHI_E_PHI_M")
+        hall = self.mcu_tmc.get_register("HALL_PHI_E_INTERPOLATED_PHI_E")
+        count = self.mcu_tmc.get_register("ABN_DECODER_COUNT")
+        msg = ["TMC4671 %s: enabled=%d aligned=%d adc_calibrated=%d"
+               % (self.name, self.enabled, self.aligned,
+                  self.adc_calibrated),
+               "status_flags=0x%08X%s" % (
+                   status, (" FAULTS: " + ",".join(faults)) if faults
+                   else ""),
+               "abn_count=%d abn_phi_e=%d hall_phi_e=%d" % (
+                   count, (abn >> 16) & 0xffff, hall & 0xffff)]
+        state = self.stepper.query_state()
+        if state is not None:
+            msg.append("target=%.4fmm actual=%.4fmm velocity=%.2fmm/s"
+                       % (state['target'], state['actual'],
+                          state['velocity']))
+        gcmd.respond_info("\n".join(msg))
+    cmd_TMC4671_MONITOR_help = "Periodically report servo state" \
+        " (PERIOD= COUNT= or ENABLE=0)"
+    def cmd_TMC4671_MONITOR(self, gcmd):
+        enable = gcmd.get_int('ENABLE', 1)
+        period = gcmd.get_float('PERIOD', 0.5, minval=0.05, maxval=10.)
+        count = gcmd.get_int('COUNT', 20, minval=1, maxval=10000)
+        reactor = self.printer.get_reactor()
+        if self.monitor_timer is not None:
+            reactor.unregister_timer(self.monitor_timer)
+            self.monitor_timer = None
+        if not enable:
+            gcmd.respond_info("TMC4671 %s: monitor stopped" % (self.name,))
+            return
+        self.monitor_count = count
+        gcode = self.printer.lookup_object("gcode")
+        def monitor_event(eventtime):
+            try:
+                abn = self.mcu_tmc.get_register("ABN_DECODER_PHI_E_PHI_M")
+                hall = self.mcu_tmc.get_register(
+                    "HALL_PHI_E_INTERPOLATED_PHI_E")
+                count_reg = self.mcu_tmc.get_register("ABN_DECODER_COUNT")
+                state = self.stepper.query_state()
+                parts = ["abn_count=%d" % (count_reg,),
+                         "abn_phi_e=%d" % ((abn >> 16) & 0xffff,),
+                         "hall_phi_e=%d" % (hall & 0xffff,)]
+                if state is not None:
+                    parts.append("target=%.4f actual=%.4f vel=%.2f"
+                                 % (state['target'], state['actual'],
+                                    state['velocity']))
+                msg = "servo %s: %s" % (self.name, " ".join(parts))
+                logging.info(msg)
+                gcode.respond_info(msg)
+            except Exception:
+                logging.exception("TMC4671 monitor error")
+                self.monitor_timer = None
+                return reactor.NEVER
+            self.monitor_count -= 1
+            if self.monitor_count <= 0:
+                self.monitor_timer = None
+                return reactor.NEVER
+            return eventtime + period
+        curtime = reactor.monotonic()
+        self.monitor_timer = reactor.register_timer(monitor_event,
+                                                    curtime + period)
+        gcmd.respond_info("TMC4671 %s: monitoring %d samples every %.2fs"
+                          % (self.name, count, period))
 
-
-class MCU_TMC_SPI_chain:
-    '''
-    Spi chain helper.
-    '''
-    def __init__(self, config, chain_len=1):
-        self.printer = config.get_printer()
-        self.chain_len = chain_len
-        self.mutex = self.printer.get_reactor().mutex()
-        share = None
-        if chain_len > 1:
-            share = "tmc_spi_cs"
-        self.spi = bus.MCU_SPI_from_config(config, 3, default_speed=4000000,
-                                           share_type=share)
-        self.taken_chain_positions = []
-
-    def _build_cmd(self, data, chain_pos):
-        '''
-        Build command.
-        '''
-        return ([0x00] * ((self.chain_len - chain_pos) * 5) +
-                data + [0x00] * ((chain_pos - 1) * 5))
-    
-    def reg_read(self, reg, chain_pos):
-        '''
-        Read register.
-        '''
-        cmd = self._build_cmd([reg, 0x00, 0x00, 0x00, 0x00], chain_pos)
-        self.spi.spi_send(cmd)
-        if self.printer.get_start_args().get('debugoutput') is not None:
-            return 0
-        params = self.spi.spi_transfer(cmd)
-        pr = bytearray(params['response'])
-        pr = pr[(self.chain_len - chain_pos) * 5 :
-                (self.chain_len - chain_pos + 1) * 5]
-        return (pr[1] << 24) | (pr[2] << 16) | (pr[3] << 8) | pr[4]
-    
-    def reg_write(self, reg, val, chain_pos, print_time=None):
-        '''
-        Write register.
-        '''
-        minclock = 0
-        if print_time is not None:
-            minclock = self.spi.get_mcu().print_time_to_clock(print_time)
-        data = [(reg | 0x80) & 0xff, (val >> 24) & 0xff, (val >> 16) & 0xff,
-                (val >> 8) & 0xff, val & 0xff]
-        if self.printer.get_start_args().get('debugoutput') is not None:
-            self.spi.spi_send(self._build_cmd(data, chain_pos), minclock)
-            return val
-        write_cmd = self._build_cmd(data, chain_pos)
-        dummy_read = self._build_cmd([0x00, 0x00, 0x00, 0x00, 0x00], chain_pos)
-        params = self.spi.spi_transfer_with_preface(write_cmd, dummy_read,
-                                                    minclock=minclock)
-        pr = bytearray(params['response'])
-        pr = pr[(self.chain_len - chain_pos) * 5 :
-                (self.chain_len - chain_pos + 1) * 5]
-        return (pr[1] << 24) | (pr[2] << 16) | (pr[3] << 8) | pr[4]
-
-def lookup_tmc_spi_chain(config):
-    '''
-    Helper to setup an spi daisy chain bus from settings in a config section
-    '''
-    chain_len = config.getint('chain_length', None, minval=2)
-    if chain_len is None:
-        # simple, non daisy chained SPI connection
-        return MCU_TMC_SPI_chain(config, 1), 1
-
-    # shared SPI bus - lookup existing MCU_TMC_SPI_chain
-    ppins = config.get_printer().lookup_object("pins")
-    cs_pin_params = ppins.lookup_pin(config.get('cs_pin'),
-                                     share_type="tmc_spi_cs")
-    tmc_spi = cs_pin_params.get('class')
-    if tmc_spi is None:
-        tmc_spi = cs_pin_params['class'] = MCU_TMC_SPI_chain(config, chain_len)
-    if chain_len != tmc_spi.chain_len:
-        raise config.error("TMC SPI chain must have same length")
-    chain_pos = config.getint('chain_position', minval=1, maxval=chain_len)
-    if chain_pos in tmc_spi.taken_chain_positions:
-        raise config.error("TMC SPI chain can not have duplicate position")
-    tmc_spi.taken_chain_positions.append(chain_pos)
-    return tmc_spi, chain_pos
-
-
-class MCU_TMC_SPI:
-    '''
-    Helper code for working with TMC devices via SPI.
-    '''
-    def __init__(self, config, name_to_reg, fields, tmc_frequency):
-        self.printer = config.get_printer()
-        self.name = config.get_name().split()[-1]
-        self.tmc_spi, self.chain_pos = lookup_tmc_spi_chain(config)
-        self.mutex = self.tmc_spi.mutex
-        self.name_to_reg = name_to_reg
-        self.fields = fields
-        self.tmc_frequency = tmc_frequency
-
-    def get_fields(self):
-        '''
-        Field getter.
-        '''
-        return self.fields
-    
-    def get_register(self, reg_name):
-        '''
-        Get register from name.
-        '''
-        reg = self.name_to_reg[reg_name]
-        with self.mutex:
-            read = self.tmc_spi.reg_read(reg, self.chain_pos)
-        return read
-    
-    def set_register(self, reg_name, val, print_time=None):
-        '''
-        Set register from name.
-        '''
-        reg = self.name_to_reg[reg_name]
-        with self.mutex:
-            self.tmc_spi.reg_write(reg, val, self.chain_pos, print_time)
-
-    def get_tmc_frequency(self):
-        '''
-        Frequency getter.
-        '''
-        return self.tmc_frequency
-
-
-class TMC4671:
-    '''
-    TMC4671 driver. NOTE: keep this class as simple as possible for generalization,
-    so that it will be easier to add different tmc servo models.
-    '''
-    def __init__(self, config):
-        # field parser
-        self.fields = tmc.FieldHelper(Fields, SignedFields, FieldFormatters)
-        # create spi bus
-        self.mcu_tmc = MCU_TMC_SPI(config, Registers, self.fields, TMC_FREQUENCY)
-        # virtual pin for sensorless homing
-        tmc.TMCVirtualPinHelper(config, self.mcu_tmc)
-        # generic current helper
-        current_helper = TMCCurrentHelper(config, self.mcu_tmc)
-        # generic command helper
-        cmdhelper = TMCCommandHelper(config, self.mcu_tmc, current_helper)
-        # setup registers
-        #STATUS_FLAGS
-        self.fields.set_config_field(config, "status_flags", 0)
-        #MOTOR_TYPE_N_POLE_PAIRS
-        self.fields.set_config_field(config, "pole_pairs", config.getint('pole_pairs', 4)) #four poles
-        self.fields.set_config_field(config, "motor_type", config.getint('motor_type', 3)) #three phase motor
-        #PWM_POLARITIES
-        self.fields.set_config_field(config, "low_side_gate", 0) #standard polarity
-        self.fields.set_config_field(config, "high_side_gate", 0) #standard polarity
-        #PWM_MAXCNT
-        self.fields.set_config_field(config, "pwm_maxcnt", 0xF9F) #pwm frequency (25kHz)
-        #PWM_BBM_H_BBM_L
-        self.fields.set_config_field(config, "pwm_bbm_l", 0xFF) #low side mosfet dead time (2.55 µs)
-        self.fields.set_config_field(config, "pwm_bbm_h", 0xFF) #high side mosfet dead time (2.55 µs)
-        #PWM_SV_CHOP
-        self.fields.set_config_field(config, "pwm_chomp", 0x07) #centered pwm for foc
-        self.fields.set_config_field(config, "pwm_sv", 0x00) #enable space vector modulation
-        #ADC_I_SELECT
-        self.fields.set_config_field(config, "adc_i0_select", 0x00) #adc channel ADCSD_I0_RAW
-        self.fields.set_config_field(config, "adc_i1_select", 0x01) #adc channel ADCSD_I1_RAW
-        self.fields.set_config_field(config, "adc_i_ux_select", 0x00) #UX = ADC_I0 (default = 0)
-        self.fields.set_config_field(config, "adc_i_v_select", 0x01) #UX = ADC_I1 (default = 1)
-        self.fields.set_config_field(config, "adc_i_wy_select", 0x02) #WY = ADC_I1 (default = 2)
-        #dsADC_MCFG_B_MCFG_A
-        self.fields.set_config_field(config, "cfg_dsmodulator_a", 0x00)
-        self.fields.set_config_field(config, "mclk_polarity_a", 0x00)
-        self.fields.set_config_field(config, "mdat_polarity_a", 0x00)
-        self.fields.set_config_field(config, "sel_nclk_mclk_i_a", 0x01)
-        self.fields.set_config_field(config, "cfg_dsmodulator_b", 0x00)
-        self.fields.set_config_field(config, "mclk_polarity_b", 0x00)
-        self.fields.set_config_field(config, "mdat_polarity_b", 0x00)
-        self.fields.set_config_field(config, "sel_nclk_mclk_i_b", 0x01)
-        #dsADC_MCLK_A
-        self.fields.set_config_field(config, "dsadc_mclk_a", 0x20000000)
-        #dsADC_MCLK_B
-        self.fields.set_config_field(config, "dsadc_mclk_b", 0x20000000)
-        #dsADC_MDEC_B_MDEC_A
-        self.fields.set_config_field(config, "dsadc_mdec_a", 0x380038)
-        self.fields.set_config_field(config, "dsadc_mdec_b", 0x014E)
-        #ADC_I0_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i0_offset", 0x6B4D)
-        self.fields.set_config_field(config, "adc_i0_scale", 0x0100)
-        #ADC_I1_SCALE_OFFSET
-        self.fields.set_config_field(config, "adc_i1_offset", 0x6C29)
-        self.fields.set_config_field(config, "adc_i1_scale", 0x0100)
-        #ABN_DECODER_MODE
-        self.fields.set_config_field(config, "apol", 0x00)
-        self.fields.set_config_field(config, "bpol", 0x00)
-        self.fields.set_config_field(config, "npol", 0x00)
-        self.fields.set_config_field(config, "use_abn_as_n", 0x00)
-        self.fields.set_config_field(config, "cln", 0x00)
-        self.fields.set_config_field(config, "direction", 0x00)
-        #ABN_DECODER_PPR
-        self.fields.set_config_field(config, "abn_decoder_ppr", 0x00001000)
-        #ABN_DECODER_COUNT
-        self.fields.set_config_field(config, "abn_decoder_count", 0xA7B) #encoder count
-        #ABN_DECODER_PHI_E_PHI_M_OFFSET
-        self.fields.set_config_field(config, "abn_decoder_phi_m_offset", 0x00)
-        self.fields.set_config_field(config, "abn_decoder_phi_e_offset", 0x00)
-        #PID_TORQUE_FLUX_LIMITS
-        self.fields.set_config_field(config, "pid_torque_flux_limits", 0x7fff)
-        #PID_VELOCITY_LIMIT
-        self.fields.set_config_field(config, "pid_velocity_limit", 4000)
-        #PID_TORQUE_P_TORQUE_I
-        self.fields.set_config_field(config, "ki_torque", 0x0164)
-        self.fields.set_config_field(config, "kp_torque", 0x0966)
-        #PID_FLUX_P_FLUX_I
-        self.fields.set_config_field(config, "ki_flux", 0x0164)
-        self.fields.set_config_field(config, "kp_flux", 0x0966)
-        #PID_VELOCITY_P_VELOCITY_I
-        self.fields.set_config_field(config, "ki_velocity", 0x0080)
-        self.fields.set_config_field(config, "kp_velocity", 0x0480)
-        #PID_POSITION_P_POSITION_I
-        self.fields.set_config_field(config, "ki_position", 0x0080)
-        self.fields.set_config_field(config, "kp_position", 0x0280)
-        #MODE_RAMP_MODE_MOTION
-        self.fields.set_config_field(config, "mode_motion", config.getint('mode_motion', 0x08)) #Initialize in open-loop mode
-        self.fields.set_config_field(config, "mode_pid_smpl", 0x00)
-        self.fields.set_config_field(config, "mode_pid_type", 0x01)
-        #VELOCITY_SELECTION
-        self.fields.set_config_field(config, "velocity_selection",  config.getint('velocity_selection', 0x03)) #phi_e_abn
-        self.fields.set_config_field(config, "velocity_meter_selection", 0x01) #advanced
-        #POSITION_SELECTION
-        self.fields.set_config_field(config, "position_selection", config.getint('position_selection', 0x03))
-        #PHI_E_SELECTION
-        self.fields.set_config_field(config, "phi_e_selection", config.getint('phi_e_selection', 0x03))
-        self.fields.set_config_field(config, "openloop_phi_direction", config.getint('openloop_phi_direction', 0x00))    
-        
-        self.fields.set_config_field(config, "ud_ext", 0x07D0)
-        self.fields.set_config_field(config, "uq_ext", 0x1000)
-        self.fields.set_config_field(config, "openloop_velocity_target", 0x1000)
-        self.fields.set_config_field(config, "openloop_acceleration", 0x100)
 
 def load_config_prefix(config):
-    '''
-    Load TMC4671 from config file.
-    '''
     return TMC4671(config)
