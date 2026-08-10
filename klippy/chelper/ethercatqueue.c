@@ -1506,6 +1506,17 @@ ethercatqueue_init(struct ethercatqueue *sq)
                                                          slave->vendor_id,
                                                          slave->product_code);
 
+        /* NULL means failure - and it would compare equal to the
+           cleared slave->slave below (exit and the fail path both
+           NULL it), masquerading as 'already configured' and
+           bypassing every check that follows */
+        if (!sc)
+        {
+            ret = -1;
+            report_errno("ecrt_master_slave_config", ret);
+            goto fail;
+        }
+
         /* skip already configured slaves */
         if (sc == slave->slave)
         {
