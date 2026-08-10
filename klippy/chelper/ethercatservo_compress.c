@@ -582,4 +582,6 @@ ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *po
 
     /* open loop update of step print time */
     calc_last_step_print_time(sc);
+
+    return 0;
 }
