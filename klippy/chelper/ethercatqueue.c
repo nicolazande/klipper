@@ -299,6 +299,107 @@ process_request(struct ethercatqueue *sq, double eventtime)
     }
 };
 
+/**
+ * Emit a copley 5.08 timestamp record (command 0x85) for the segment
+ * sent just prior: bytes 1-6 carry the lower 48 bits of the DC time
+ * (ns) at which that segment must be processed.  time_table entries
+ * and the DC reference steering share the host monotonic domain, so
+ * the intended execution time converts directly.  The record occupies
+ * one frame slot and one drive buffer slot like any segment.
+ */
+static inline void
+emit_timestamp_records(struct ethercatqueue *sq)
+{
+    struct mastermonitor *master = &sq->masterifc;
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        struct slavemonitor *slave = &master->monitor[i];
+        if (!slave->stamp_pending || !slave->seq_num)
+        {
+            continue;
+        }
+        if (slave->operation_mode != COE_OPERATION_MODE_INTERPOLATION)
+        {
+            continue;
+        }
+        if ((slave->master_window >= slave->tx_size) ||
+            (slave->slave_window + BUFFER_MARGIN >= slave->rx_size))
+        {
+            /* no room this cycle, retry next cycle */
+            continue;
+        }
+        uint8_t last_id = (slave->seq_num - 1) % ETHERCAT_PVT_BUFFER_SIZE;
+        double exec_time = slave->time_table[last_id];
+        uint64_t dc_ns = (uint64_t)(exec_time * 1e9);
+        uint8_t *rec = slave->movedata[slave->master_window];
+        struct coe_ip_move *move = (struct coe_ip_move *)rec;
+        memset(rec, 0, sizeof(struct coe_ip_move));
+        move->command.type = COE_SEGMENT_MODE_CMD;
+        move->command.code = COE_CMD_TIMESTAMP;
+        rec[1] = dc_ns & 0xff;
+        rec[2] = (dc_ns >> 8) & 0xff;
+        rec[3] = (dc_ns >> 16) & 0xff;
+        rec[4] = (dc_ns >> 24) & 0xff;
+        rec[5] = (dc_ns >> 32) & 0xff;
+        rec[6] = (dc_ns >> 40) & 0xff;
+        slave->master_window++;
+        slave->slave_window++; //timestamp occupies a drive buffer slot
+        slave->stamp_pending = 0;
+        slave->segs_since_stamp = 0;
+    }
+}
+
+/**
+ * Poll the 0x2014 pvt timestamp error object (signed 16 bit, drive
+ * servo cycles) - the end-to-end measurement of how far drive playback
+ * is from the commanded absolute times.
+ */
+static inline void
+poll_pvt_time_error(struct ethercatqueue *sq)
+{
+    struct mastermonitor *master = &sq->masterifc;
+    for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+    {
+        struct slavemonitor *slave = &master->monitor[i];
+        ec_sdo_request_t *req = slave->pvt_error_sdo;
+        if (!req)
+        {
+            continue;
+        }
+        if (slave->pvt_error_wait)
+        {
+            slave->pvt_error_wait--;
+            continue;
+        }
+        switch (ecrt_sdo_request_state(req))
+        {
+            case EC_REQUEST_SUCCESS:
+            {
+                int16_t err = EC_READ_S16(ecrt_sdo_request_data(req));
+                if (err != slave->pvt_time_error)
+                {
+                    slave->pvt_time_error = err;
+                    errorf("ethercat pvt time error (oid = %u): %d servo cycles",
+                           slave->oid, err);
+                }
+                slave->pvt_error_wait = ETHERCAT_PVT_ERROR_POLL;
+                ecrt_sdo_request_read(req);
+                break;
+            }
+            case EC_REQUEST_ERROR:
+            {
+                slave->pvt_error_wait = ETHERCAT_PVT_ERROR_POLL;
+                ecrt_sdo_request_read(req);
+                break;
+            }
+            default:
+            {
+                break;
+            }
+        }
+    }
+}
+
 static inline int
 build_and_send_command(struct ethercatqueue *sq, double eventtime)
 {
@@ -306,8 +407,11 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
     int len = 0; //number of bytes added in to the current frame
     struct mastermonitor *master = &sq->masterifc; //ethercat master interface
     struct slavemonitor *slave; //ethercat slave interface
-    
-    /* 
+
+    /* pending timestamp records take the first slot of the cycle */
+    emit_timestamp_records(sq);
+
+    /*
      * Loop over bytes ready to be transmitted. This is like going through
      * the ready queue of all command queues (normally just one).
      * Send only if there is free space in the drive pvt buffers.
@@ -351,6 +455,12 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
 
             /* update step sequence number (avoid overflow) */
             slave->seq_num++;
+
+            /* periodic absolute-time anchor (copley 0x85 timestamp) */
+            if (++slave->segs_since_stamp >= ETHERCAT_TIMESTAMP_PERIOD)
+            {
+                slave->stamp_pending = 1;
+            }
 
             /* increase master tx index */
             slave->master_window++;
@@ -600,6 +710,14 @@ static inline void coe_preoperational_setup(struct ethercatqueue *sq)
                 ecrt_sdo_request_write(slave->clear_buffer_sdo);
             }
         }
+
+        /* pvt timestamp error readout (0x2014, firmware >= 5.08) */
+        slave->pvt_error_sdo = ecrt_slave_config_create_sdo_request(slave->slave, COE_SDO_PVT_TIME_ERROR(i));
+        if (slave->pvt_error_sdo)
+        {
+            slave->pvt_error_wait = ETHERCAT_PVT_ERROR_POLL;
+            ecrt_sdo_request_read(slave->pvt_error_sdo);
+        }
     }
 }
 
@@ -725,7 +843,9 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     move->error_mask = 0xFF;
                     move->command.type = COE_SEGMENT_MODE_CMD;
                     /* update slave sequence */
-                    slave->seq_num = status->next_id;                    
+                    slave->seq_num = status->next_id;
+                    /* re-anchor the stream after the resync */
+                    slave->stamp_pending = 1;
                     /* notify buffer problem */
                     errorf("Ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
                             slave->oid, status->seq_error, status->overflow,  status->underflow);
@@ -780,9 +900,8 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
             {
                 if (!cw->signal)
                 {
-                    // errorf("--> start move: (oid = %u, first_id = %u, last_id = %u, buffer_len = %u, start_delta_time = %lf, stop_delta_time = %lf, upcoming_time = %lf, time_target = %lf)",
-                    //         slave->oid, first_id, last_id, slave->slave_window,
-                    //         start_delta, stop_delta, sq->upcoming_time, slave->time_target);
+                    /* fresh motion burst: anchor it with a timestamp */
+                    slave->stamp_pending = 1;
                 }
                 cw->signal = 1;
             }
@@ -984,11 +1103,33 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
              */
             ecrt_master_sync_reference_clock_to(master->master, sync_clock);
 
-            /** 
+            /**
              * Queue the DC clock drift compensation datagram, all slaves are
              * synchronized with the reference clock (first DC capable slave).
              */
             ecrt_master_sync_slave_clocks(master->master);
+
+            /*
+             * Diagnostic: compare the reference (drive) clock against the
+             * host time it is steered toward.  A bounded offset here means
+             * 0x85 timestamps computed in the host domain are valid.
+             */
+            {
+                static uint16_t dc_log_cnt;
+                uint32_t ref_time = 0;
+                if (!ecrt_master_reference_clock_time(master->master,
+                                                      &ref_time)
+                    && ++dc_log_cnt >= 500)
+                {
+                    dc_log_cnt = 0;
+                    int32_t dc_offset = (int32_t)(ref_time
+                                                  - (uint32_t)sync_clock);
+                    errorf("ethercat dc reference offset: %d ns", dc_offset);
+                }
+            }
+
+            /* poll the drive-reported pvt timestamp error (0x2014) */
+            poll_pvt_time_error(sq);
 
             /* loop over domains */
             for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)

@@ -35,6 +35,8 @@
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
 #define ETHERCAT_SEQ_MASK (8U)  //buffer segment sequence number mask
 #define ETHERCAT_PVT_BUFFER_SIZE (32U)
+#define ETHERCAT_TIMESTAMP_PERIOD (16U) //buffer segments between 0x85 timestamp records
+#define ETHERCAT_PVT_ERROR_POLL (50U)   //cycles between 0x2014 sdo polls
 
 
 /****************************************************************
@@ -91,6 +93,12 @@ struct slavemonitor
     ec_sdo_request_t *operation_mode_sdo; //sdo for setting operation mode
     ec_sdo_request_t *homing_method_sdo; //sdo for setting operation mode
     ec_sdo_request_t *clear_buffer_sdo; //sdo for clearing the buffer
+    ec_sdo_request_t *pvt_error_sdo; //sdo upload of the pvt timestamp error (0x2014)
+    /* pvt timestamp synchronization (copley firmware >= 5.08) */
+    int16_t pvt_time_error;   //last 0x2014 readout (drive servo cycles)
+    uint8_t pvt_error_wait;   //cycles until the next 0x2014 poll
+    uint16_t segs_since_stamp; //buffer segments since the last timestamp record
+    uint8_t stamp_pending;    //emit a timestamp record before the next segment
     /* monitoring */
     uint16_t seq_num;
     double time_target;

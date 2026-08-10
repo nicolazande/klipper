@@ -70,7 +70,11 @@ enum
     COE_CMD_POP_SEGMENTS,
     COE_CMD_CLEAR_ERRORS,
     COE_CMD_RESET_SEGMENT_ID,
-    COE_CMD_NO_OPERATION
+    COE_CMD_NO_OPERATION,
+    COE_CMD_TIMESTAMP //firmware >= 5.08: bytes 1-6 = lower 48 bits of the
+                      //DC time (ns) at which the segment sent just prior
+                      //must be processed; drive slews the following
+                      //segments by +-1 servo cycle (250us) to compensate
 };
 
 /* copley drives sdo */
@@ -78,6 +82,9 @@ enum
 #define COE_SDO_INTERPOLATION_MODE(axis) 0x60C0 + axis*0x800, 0, 2
 #define COE_SDO_HOMING_METHOD(axis) 0x6098 + axis*0x800, 0, 1
 #define COE_SDO_CLEAR_BUFFER(axis) 0x60C4 + axis*0x800, 6, 1
+/* firmware >= 5.08: signed 16-bit error (in 250us servo cycles) measured
+   by the most recent timestamp record processed */
+#define COE_SDO_PVT_TIME_ERROR(axis) 0x2014 + axis*0x800, 0, 2
 
 
 /****************************************************************
