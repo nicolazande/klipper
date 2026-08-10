@@ -422,6 +422,8 @@ class TMC4671:
                                             self._handle_mcu_identify)
         self.printer.register_event_handler("klippy:connect",
                                             self._handle_connect)
+        self.printer.register_event_handler("gcode:request_restart",
+                                            self._handle_request_restart)
         # Commands
         gcode = self.printer.lookup_object("gcode")
         gcode.register_mux_command("INIT_TMC4671", "STEPPER", self.name,
@@ -576,6 +578,16 @@ class TMC4671:
         # Wire enable/disable sequencing to the stepper enable line
         enable_line = self.stepper_enable.lookup_enable(self.stepper_name)
         enable_line.register_state_callback(self._handle_stepper_enable)
+    def _handle_request_restart(self, print_time):
+        # A host restart tears the session down before minclock-held
+        # de-energize writes can flush, leaving the chip energized
+        # until the next connect's safe-state init.  Disable now if
+        # still enabled, then hold the restart until the scheduled
+        # writes (brake engage + power-stage off) have gone out.
+        if self.enabled:
+            self._do_disable(print_time)
+        reactor = self.printer.get_reactor()
+        reactor.pause(reactor.monotonic() + self.brake_engage_time + 0.100)
     def _handle_stepper_enable(self, print_time, is_enable):
         if is_enable:
             cb = (lambda ev: self._do_enable(print_time))
