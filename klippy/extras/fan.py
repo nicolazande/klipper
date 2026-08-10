@@ -43,12 +43,23 @@ class Fan:
         self.enable_pin = None
         enable_pin = config.get('enable_pin', None)
         if enable_pin is not None:
+            if master_fan is not None:
+                # A slave's _apply_speed never runs, so a slave-owned
+                # enable pin would never be switched on - the fan would
+                # stay gated off while reporting the master's speed.
+                raise config.error(
+                    "enable_pin is not supported on a slave fan"
+                    " (set it on the master '%s' section)"
+                    % (config.get('master_fan'),))
             self.enable_pin = ppins.setup_pin('digital_out', enable_pin)
             self.enable_pin.setup_max_duration(0.)
 
-        # Create gcode request queue
-        self.gcrq = output_pin.GCodeRequestQueue(config, self.mcu_fan.get_mcu(),
-                                                 self._apply_speed)
+        # Create gcode request queue (master only: slaves forward all
+        # speed requests to their master)
+        self.gcrq = None
+        if master_fan is None:
+            self.gcrq = output_pin.GCodeRequestQueue(
+                config, self.mcu_fan.get_mcu(), self._apply_speed)
 
         # Setup tachometer
         self.tachometer = FanTachometer(config)
