@@ -26,8 +26,18 @@
 // (homing) never produce a physical jump.
 
 #define HISTORY_EXPIRE (30.0) // history time window in seconds
-// A gap beyond this marks a new motion burst needing a hold anchor
-#define ANCHOR_GAP_TIME (0.050)
+/*
+ * A gap beyond this marks a new motion burst needing a hold anchor.
+ * The mcu chains every segment to the end of the previous one, so ANY
+ * unanchored gap stretches the first segment's interpolation window
+ * (transient overshoot ~ 0.5*a*dt*gap, plus motion starting up to
+ * 'gap' early).  Contiguous segments have bit-identical clocks (same
+ * double arithmetic), so the threshold only needs to clear float
+ * noise - 2ms anchors even one-sample gaps (shortest real idle is
+ * one 10ms sampling period) at the cost of one extra message per
+ * burst.
+ */
+#define ANCHOR_GAP_TIME (0.002)
 
 // This struct must stay layout-compatible with struct stepcompress in
 // stepcompress.c up to and including history_list: these objects are
