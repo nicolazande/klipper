@@ -269,11 +269,18 @@ class ServoBrakePin:
         if not self.release_count:
             self._transition(print_time, 0)
     def _transition(self, print_time, value):
-        # Per-pin transitions must carry non-decreasing clocks: a
-        # transition scheduled before a still-pending one would reach
-        # the mcu after its event time and shut it down ("Timer too
-        # close"), so never schedule before the last transition
-        print_time = max(print_time, self.last_sched_time + 0.001)
+        # A transition scheduled behind the mcu's clock fires late
+        # and shuts it down ("Timer too close"), and per-pin
+        # transitions must carry non-decreasing clocks: floor every
+        # transition at fresh mcu time and at the last scheduled
+        # transition.  The stale-request case is real - an enable
+        # can block on SPI verify reads long enough for its
+        # motion-start print time to fall into the past.
+        mcu = self.mcu_brake.get_mcu()
+        reactor = mcu.get_printer().get_reactor()
+        est = mcu.estimated_print_time(reactor.monotonic())
+        print_time = max(print_time, self.last_sched_time + 0.001,
+                         est + 0.100)
         self.last_sched_time = print_time
         self.mcu_brake.set_digital(print_time, value)
 
