@@ -8,6 +8,7 @@
  * Includes
  ****************************************************************/
 #include <pthread.h>
+#include <stdio.h> // fprintf
 #include "ethercatmsg.h" // message_alloc
 #include "pyhelper.h" // errorf
 #include "compiler.h"
@@ -117,7 +118,11 @@ void emsg_free(struct move_msgpool* pool, struct move_segment_msg* msg, uint8_t 
         }
         else
         {
-            errorf("error: out of order (free_idx = %d, index = %d)", pool->free_idx[slot], index);
+            /* emsg_free runs in the cyclic realtime thread: python
+               logging (errorf) must not be entered from it - see the
+               rt_errorf note in ethercatqueue.c */
+            fprintf(stderr, "rt: emsg out of order (free_idx = %d,"
+                    " index = %d)\n", pool->free_idx[slot], index);
         }
     }
 
