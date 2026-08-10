@@ -880,6 +880,17 @@ class TMC4671:
         except self.printer.command_error as e:
             self.config_failed = True
             raise gcmd.error(str(e))
+        # Re-bind the SPI device to the serialservo mcu streamer and
+        # re-anchor the host frame (mirrors the connect flow - without
+        # this, motion after a recovery shut down the mcu with
+        # "serialservo spi not configured")
+        if self.stepper is not None:
+            try:
+                self.stepper.setup_spi(self.mcu_tmc.spi.get_oid())
+                self.stepper.note_homing_end()
+            except Exception:
+                logging.exception("TMC4671 %s: serialservo spi re-bind"
+                                  " failed", self.name)
         gcmd.respond_info("TMC4671 %s re-initialized (calibrated%s,"
                           " motor de-energized)"
                           % (self.name, ", aligned" if self.aligned
@@ -948,15 +959,13 @@ class TMC4671:
                              " stage must be on)" % (self.name,))
         self.printer.lookup_object('toolhead').wait_moves()
         with self.mutex:
-            self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
-                                      MODE_STOPPED, verify=False)
+            self._set_motion_mode(MODE_STOPPED)
             if mode == 'hall':
                 self._align_encoder_hall()
             else:
                 self._align_encoder_forced()
             self._seed_position()
-            self.mcu_tmc.set_register("MODE_RAMP_MODE_MOTION",
-                                      MODE_POSITION, verify=False)
+            self._set_motion_mode(MODE_POSITION)
         self.stepper.note_homing_end()
         gcmd.respond_info("TMC4671 %s: encoder alignment (%s) complete"
                           % (self.name, mode))
