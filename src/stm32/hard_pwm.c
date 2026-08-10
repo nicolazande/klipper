@@ -272,12 +272,16 @@ static const struct gpio_pwm_info pwm_regs[] = {
     {TIM17, GPIO('F', 7),  1, GPIO_FUNCTION(1)},
     {TIM17, GPIO('B', 9),  1, GPIO_FUNCTION(1)},
     {TIM15, GPIO('E', 6),  2, GPIO_FUNCTION(4)},
+  #ifdef TIM23
     {TIM23, GPIO('F', 0),  1, GPIO_FUNCTION(13)},
     {TIM23, GPIO('G', 13), 2, GPIO_FUNCTION(13)},
     {TIM23, GPIO('G', 14), 3, GPIO_FUNCTION(13)},
     {TIM23, GPIO('F', 3),  4, GPIO_FUNCTION(13)},
+  #endif
+  #ifdef TIM24
     {TIM24, GPIO('F', 13), 3, GPIO_FUNCTION(14)},
     {TIM24, GPIO('F', 14), 4, GPIO_FUNCTION(14)}
+  #endif
 #endif
 };
 
