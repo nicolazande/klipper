@@ -360,9 +360,13 @@ class TMC4671:
         self.dead_time_ns = config.getint('dead_time_ns', 250, minval=0,
                                           maxval=2550)
         # Encoder alignment strategy
+        # Default: zero-motion startup - the hall angle seeds the ABN
+        # commutation offset (encoder + halls are wired on every Z
+        # motor).  'forced' rotates the rotor and is the commissioning
+        # fallback until hall polarity/direction are verified.
         self.align_mode = config.getchoice('align_mode', {
             'forced': 'forced', 'hall': 'hall', 'manual': 'manual'},
-            'forced')
+            'hall')
         self.align_voltage = config.getint('align_voltage', 1000,
                                            minval=100, maxval=8000)
         self.align_delay = config.getfloat('align_delay', 1.0,
@@ -676,6 +680,16 @@ class TMC4671:
         getr = self.mcu_tmc.get_register
         setr("ABN_DECODER_PHI_E_PHI_M_OFFSET", 0, verify=False)
         hall = getr("HALL_PHI_E_INTERPOLATED_PHI_E")
+        # The motor is stationary at bring-up: an unstable hall angle
+        # means unwired/uncommissioned halls - fail safe rather than
+        # energize with a garbage commutation offset
+        self._pause(0.050)
+        hall2 = getr("HALL_PHI_E_INTERPOLATED_PHI_E")
+        if (hall ^ hall2) & 0xffff:
+            raise self.printer.command_error(
+                "TMC4671 %s: hall angle unstable (0x%04X vs 0x%04X) -"
+                " check hall wiring/commissioning or set align_mode:"
+                " forced" % (self.name, hall & 0xffff, hall2 & 0xffff))
         hall_phi_e = hall & 0xffff
         abn = getr("ABN_DECODER_PHI_E_PHI_M")
         abn_phi_e = (abn >> 16) & 0xffff

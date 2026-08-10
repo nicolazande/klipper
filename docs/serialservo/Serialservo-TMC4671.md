@@ -164,7 +164,7 @@ encoder_resolution: 40000   # 4x line count (10,000 lines)
 encoder_direction: True     # tuned dump had the direction bit set
 velocity_limit: 3000        # mechanical rpm
 dead_time_ns: 250           # MUST match OUR gate driver, scope-verify
-align_mode: forced
+align_mode: hall
 align_voltage: 1000
 align_delay: 1.0
 #adc_i_select: 0x18000100   # board phase/shunt routing (demo value)
