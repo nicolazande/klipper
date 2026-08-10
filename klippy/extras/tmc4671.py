@@ -1021,6 +1021,13 @@ class TMC4671:
                              " stage must be on)" % (self.name,))
         self.printer.lookup_object('toolhead').wait_moves()
         with self.mutex:
+            if not self.enabled:
+                # A deferred disable can win the race during the
+                # wait_moves yield: aligning a de-energized power
+                # stage records a garbage commutation offset
+                raise gcmd.error(
+                    "TMC4671 %s: motor disabled during wait - enable"
+                    " and retry" % (self.name,))
             self._set_motion_mode(MODE_STOPPED)
             if mode == 'hall':
                 self._align_encoder_hall()
