@@ -1222,10 +1222,16 @@ class MCU:
         serialhdl.cheetah_reset(self._serialport, self._reactor)
         
     def _restart_via_command(self):
-        if ((self._reset_cmd is None and self._config_reset_cmd is None)
-            or not self._clocksync.is_active()):
+        if self._reset_cmd is None and self._config_reset_cmd is None:
             logging.info("Unable to issue reset command on MCU '%s'", self._name)
             return
+        if not self._clocksync.is_active():
+            # A latched mcu shutdown stalls clocksync; the reset
+            # command is explicitly allowed in the shutdown state, so
+            # send it anyway - skipping it here left FIRMWARE_RESTART
+            # reconnecting to a still-latched mcu.
+            logging.info("MCU '%s' clocksync inactive - sending reset anyway",
+                         self._name)
         if self._reset_cmd is None:
             # Attempt reset via config_reset command
             logging.info("Attempting MCU '%s' config_reset command", self._name)
