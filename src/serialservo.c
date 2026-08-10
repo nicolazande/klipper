@@ -1,563 +1,410 @@
-/**
- * \file serialservo.c
- *
- * \brief Handling of serialservo.
- */
+// Servo axis control via TMC4671 position/velocity setpoint streaming
+//
+// Copyright (C) 2024  Nicola Zandegiacomo <nicola.zandegiacomo@flyingbasket.com>
+// Copyright (C) 2026  Warmbird
+//
+// This file may be distributed under the terms of the GNU GPLv3 license.
 
-/****************************************************************
- * Includes
- ****************************************************************/
 #include "autoconf.h" // CONFIG_*
 #include "basecmd.h" // oid_alloc
 #include "board/irq.h" // irq_disable
-#include "board/misc.h" // timer_is_before
+#include "board/misc.h" // timer_read_time
 #include "command.h" // DECL_COMMAND
 #include "sched.h" // struct timer
-#include "serialservo.h" // drive_event
-#include "trsync.h" // trsync_add_signal
 #include "spicmds.h" // spidev_transfer
+#include "trsync.h" // trsync_add_signal
 
+// The host streams "be at target_position with target_velocity at
+// clock" segments.  Between segment endpoints velocity is interpolated
+// linearly and position follows the resulting constant-acceleration
+// parabola - exact for the trapezoidal profiles the host generates.
+// A pacing timer wakes a task which evaluates the interpolant at the
+// actual transfer time (plus a fixed SPI lead) and writes the TMC4671
+// setpoint registers.  All SPI access happens in task context; the
+// shutdown de-energize path is handled by config_spi_shutdown messages
+// registered by the host, never by code here.
 
-/****************************************************************
- * TMC registers
- ****************************************************************/
-#define CHIPINFO_DATA 0x00
-#define CHIPINFO_ADDR 0x01
-#define ADC_RAW_DATA 0x02
-#define ADC_RAW_ADDR 0x03
-#define dsADC_MCFG_B_MCFG_A 0x04
-#define dsADC_MCLK_A 0x05
-#define dsADC_MCLK_B 0x06
-#define dsADC_MDEC_B_MDEC_A 0x07
-#define ADC_I1_SCALE_OFFSET 0x08
-#define ADC_I0_SCALE_OFFSET 0x09
-#define ADC_I_SELECT 0x0A
-#define ADC_I1_I0_EXT 0x0B
-#define DS_ANALOG_INPUT_STAGE_CFG 0x0C
-#define AENC_0_SCALE_OFFSET 0x0D
-#define AENC_1_SCALE_OFFSET 0x0E
-#define AENC_2_SCALE_OFFSET 0x0F
-#define AENC_SELECT 0x11
-#define ADC_IWY_IUX 0x12
-#define ADC_IV 0x13
-#define AENC_WY_UX 0x15
-#define AENC_VN 0x16
-#define PWM_POLARITIES 0x17
-#define PWM_MAXCNT 0x18
-#define PWM_BBM_H_BBM_L 0x19
-#define PWM_SV_CHOP 0x1A
-#define MOTOR_TYPE_N_POLE_PAIRS 0x1B
-#define PHI_E_EXT 0x1C
-#define OPENLOOP_MODE 0x1F
-#define OPENLOOP_ACCELERATION 0x20
-#define OPENLOOP_VELOCITY_TARGET 0x21
-#define OPENLOOP_VELOCITY_ACTUAL 0x22
-#define UQ_UD_EXT 0x24
-#define ABN_DECODER_MODE 0x25
-#define ABN_DECODER_PPR 0x26
-#define ABN_DECODER_COUNT 0x27
-#define ABN_DECODER_COUNT_N 0x28
-#define ABN_DECODER_PHI_E_PHI_M_OFFSET 0x29
-#define ABN_DECODER_PHI_E_PHI_M 0x2A
-#define ABN_2_DECODER_MODE 0x2C
-#define ABN_2_DECODER_PPR 0x2D
-#define ABN_2_DECODER_COUNT 0x2E
-#define ABN_2_DECODER_COUNT_N 0x2F
-#define ABN_2_DECODER_PHI_M_OFFSET 0x30
-#define ABN_2_DECODER_PHI_M 0x31
-#define HALL_MODE 0x33
-#define HALL_POSITION_060_000 0x34
-#define HALL_POSITION_180_120 0x35
-#define HALL_POSITION_300_240 0x36
-#define HALL_PHI_E_PHI_M_OFFSET 0x37
-#define HALL_DPHI_MAX 0x38
-#define HALL_PHI_E_INTERPOLATED_PHI_E 0x39
-#define HALL_PHI_M 0x3A
-#define AENC_DECODER_MODE 0x3B
-#define AENC_DECODER_N_THRESHOLD 0x3C
-#define AENC_DECODER_PHI_A_RAW 0x3D
-#define AENC_DECODER_PHI_A_OFFSET 0x3E
-#define AENC_DECODER_PHI_A 0x3F
-#define AENC_DECODER_PPR 0x40
-#define AENC_DECODER_COUNT 0x41
-#define AENC_DECODER_COUNT_N 0x42
-#define AENC_DECODER_PHI_E_PHI_M_OFFSET 0x45
-#define AENC_DECODER_PHI_E_PHI_M 0x46
-#define CONFIG_DATA 0x4D
-#define CONFIG_ADDR 0x4E
-#define VELOCITY_SELECTION 0x50
-#define POSITION_SELECTION 0x51
-#define PHI_E_SELECTION 0x52
-#define PHI_E 0x53
-#define PID_FLUX_P_FLUX_I 0x54
-#define PID_TORQUE_P_TORQUE_I 0x56
-#define PID_VELOCITY_P_VELOCITY_I 0x58
-#define PID_POSITION_P_POSITION_I 0x5A
-#define PIDOUT_UQ_UD_LIMITS 0x5D
-#define PID_TORQUE_FLUX_LIMITS 0x5E
-#define PID_VELOCITY_LIMIT 0x60
-#define PID_POSITION_LIMIT_LOW 0x61
-#define PID_POSITION_LIMIT_HIGH 0x62
-#define MODE_RAMP_MODE_MOTION 0x63
-#define PID_TORQUE_FLUX_TARGET 0x64
-#define PID_TORQUE_FLUX_OFFSET 0x65
-#define PID_VELOCITY_TARGET 0x66
-#define PID_VELOCITY_OFFSET 0x67
-#define PID_POSITION_TARGET 0x68
-#define PID_TORQUE_FLUX_ACTUAL 0x69
-#define PID_VELOCITY_ACTUAL 0x6A
-#define PID_POSITION_ACTUAL 0x6B
-#define PID_ERROR_DATA 0x6C
-#define PID_ERROR_ADDR 0x6D
-#define INTERIM_DATA 0x6E
-#define INTERIM_ADDR 0x6F
-#define ADC_VM_LIMITS 0x75
-#define TMC4671_INPUTS_RAW 0x76
-#define TMC4671_OUTPUTS_RAW 0x77
-#define STEP_WIDTH 0x78
-#define UART_BPS 0x79
-#define GPIO_dsADCI_CONFIG 0x7B
-#define STATUS_FLAGS 0x7C
-#define STATUS_MASK 0x7D
+// TMC4671 registers accessed at runtime (chip setup is host-side)
+#define TMC4671_PID_VELOCITY_OFFSET  0x67
+#define TMC4671_PID_POSITION_TARGET  0x68
+#define TMC4671_PID_VELOCITY_ACTUAL  0x6A
+#define TMC4671_PID_POSITION_ACTUAL  0x6B
 
-
-/****************************************************************
- * Defines
- ****************************************************************/
-/* flags */
-enum
-{ 
-    DF_NEED_RESET = 1<<0 
+enum {
+    SF_ACTIVE = 1<<0, SF_NEED_RESET = 1<<1, SF_STOP_PENDING = 1<<2,
+    SF_HAVE_TIME = 1<<3,
 };
 
-/* drive move step */
-struct serialservo_move
-{
+struct serialservo_move {
     struct move_node node;
-    int32_t target_position;
-    int32_t target_velocity;
-    uint32_t time;
+    int32_t target_position, target_velocity;
+    uint32_t clock;
+};
+
+struct serialservo {
+    struct timer time;
+    struct spidev_s *spi;
+    uint32_t interp_ticks, eval_lead;
+    uint32_t vel_scale; // position lsb per clock tick per rpm (<<32)
+    uint32_t ferror_window, ferror_ticks, ferror_last;
+    // Active segment: interpolate (p0,v0)@t0 -> (p1,v1)@t1
+    int32_t p0, p1;
+    int32_t v0, v1;
+    uint32_t t0, t1;
+    int32_t last_written_position;
+    struct move_queue_head mq;
+    struct trsync_signal stop_signal;
     uint8_t flags;
 };
 
-/* drive data */
-struct serialservo
+static struct task_wake serialservo_wake;
+
+
+/****************************************************************
+ * TMC4671 register access (40 bit datagrams, task context only)
+ ****************************************************************/
+
+static uint32_t
+tmc_reg_read(struct spidev_s *spi, uint8_t addr)
 {
-    struct timer time;
-    struct spidev_s *spi;
-    uint8_t chain_pos;
-    uint8_t chain_len;
-
-    int32_t start_position;
-    int32_t start_velocity;
-    uint32_t start_time;
-
-    int32_t current_position;
-    int32_t current_velocity;
-    uint32_t current_time;
-
-    int32_t target_position;
-    int32_t target_velocity;
-    uint32_t target_time;
-
-    int32_t delta_position;
-    int32_t delta_velocity;
-    int32_t delta_time;
-    uint32_t interpolation_steps;
-
-    uint32_t count;
-    uint32_t sampling_time;
-
-    struct move_queue_head mq;
-    struct trsync_signal stop_signal;
-    uint8_t flags : 8;
-};
-
-
-/****************************************************************
- * TMC function prototypes
- ****************************************************************/
-/** read TMC register */
-uint32_t tmc_reg_read(struct spidev_s *spi, uint8_t address);
-
-/** write TMC register */
-void tmc_reg_write(struct spidev_s *spi, uint8_t address, uint32_t value);
-
-/** set tmc pid target position */
-void tmc_set_position(struct serialservo *d, int32_t position);
-
-/** get tmc actual position */
-int32_t tmc_get_position(struct serialservo *d);
-
-/** set tmc pid target velocity */
-void tmc_set_velocity(struct serialservo *d, int32_t velocity);
-
-/** get tmc actual velocity */
-int32_t tmc_get_velocity(struct serialservo *d);
-
-
-/****************************************************************
- * Private function prototypes
- ****************************************************************/
-/** setup a serialservo for the next move in its queue */
-static uint_fast8_t serialservo_load_next(struct serialservo *s, uint32_t event_time);
-
-/* interpolation step (position and velocity) */
-static uint_fast8_t serialservo_interpolation_step(struct serialservo *d, uint32_t event_time);
-
-/** get serialservo for a given drive oid */
-static struct serialservo *serialservo_oid_lookup(uint8_t oid);
-
-/** current serialservo position (caller must disable irqs) */
-static int32_t serialservo_get_position(struct serialservo *s);
-
-/* stop all moves for a given serialservo (caller must disable IRQs) */
-static void serialservo_stop(struct trsync_signal *tss, uint8_t reason);
-
-
-/****************************************************************
- * Command function prototypes
- ****************************************************************/
-/* command to configure the serialservo */
-void command_config_serialservo(uint32_t *args);
-
-/** command to associate a spi bus */
-void command_config_serialservo_spi(uint32_t *args);
-
-/* command to queue a set of moves with a given timing */
-void command_queue_serialservo(uint32_t *args);
-
-/* command to reset the serialservo clock */
-void command_reset_serialservo_clock(uint32_t *args);
-
-/* command to get the current position of the serialservo */
-void command_serialservo_get_position(uint32_t *args);
-
-/* set the serialservo to stop on a trigger event */
-void command_serialservo_stop_on_trigger(uint32_t *args);
-
-/* shutdown command */
-void serialservo_shutdown(void);
-
-
-/****************************************************************
- * TMC functions
- ****************************************************************/
-uint32_t tmc_reg_read(struct spidev_s *spi, uint8_t address)
-{
-	/* read data packet */
-	uint8_t msg[5] = {address & 0x7F, 0, 0, 0, 0};
-
+    uint8_t msg[5] = { addr & 0x7f, 0, 0, 0, 0 };
     spidev_transfer(spi, 1, sizeof(msg), msg);
-	
-    return (uint32_t)((msg[1] << 24) | (msg[2] << 16) | (msg[3] << 8) | msg[4]);
+    return ((uint32_t)msg[1] << 24) | ((uint32_t)msg[2] << 16)
+        | ((uint32_t)msg[3] << 8) | msg[4];
 }
 
-void tmc_reg_write(struct spidev_s *spi, uint8_t address, uint32_t value)
+static void
+tmc_reg_write(struct spidev_s *spi, uint8_t addr, uint32_t val)
 {
-	/* write data packet */
-	uint8_t msg[5] = 
-    {
-        address | 0x80,
-        (value >> 24) & 0xFF,
-        (value >> 16) & 0xFF,
-        (value >> 8) & 0xFF,
-        value & 0xFF
-    };
-
-	spidev_transfer(spi, 0, sizeof(msg), msg);
-}
-
-void tmc_set_position(struct serialservo *d, int32_t position)
-{
-    tmc_reg_write(d->spi, PID_POSITION_TARGET, (uint32_t)position);
-}
-
-int32_t tmc_get_position(struct serialservo *d)
-{
-    return (int32_t)tmc_reg_read(d->spi, PID_POSITION_ACTUAL);
-}
-
-void tmc_set_velocity(struct serialservo *d, int32_t velocity)
-{
-    tmc_reg_write(d->spi, PID_VELOCITY_TARGET, (uint32_t)velocity);
-}
-
-int32_t tmc_get_velocity(struct serialservo *d)
-{
-    return (int32_t)tmc_reg_read(d->spi, PID_VELOCITY_ACTUAL);
+    uint8_t msg[5] = { addr | 0x80, val >> 24, val >> 16, val >> 8, val };
+    spidev_transfer(spi, 0, sizeof(msg), msg);
 }
 
 
 /****************************************************************
- * Private functions
+ * Segment interpolation
  ****************************************************************/
+
+// Interpolated velocity (register units, electrical rpm) at t0 + dt
+static int32_t
+serialservo_calc_velocity(struct serialservo *s, uint32_t dt)
+{
+    uint32_t seg_ticks = s->t1 - s->t0;
+    if (!seg_ticks || dt >= seg_ticks)
+        return s->v1;
+    return s->v0 + (int32_t)((int64_t)(s->v1 - s->v0) * dt / seg_ticks);
+}
+
+// Interpolated position (register units) at t0 + dt.  Velocity varies
+// linearly across the segment, so displacement is the trapezoid
+// integral: vel_scale * (v0*dt + (v1-v0)*dt^2/(2*T)).
+static int32_t
+serialservo_calc_position(struct serialservo *s, uint32_t dt)
+{
+    uint32_t seg_ticks = s->t1 - s->t0;
+    if (!seg_ticks || dt >= seg_ticks)
+        return s->p1;
+    int64_t inner = (int64_t)s->v0 * dt;
+    inner += (int64_t)(s->v1 - s->v0) * dt * dt / (2 * (int64_t)seg_ticks);
+    int64_t disp = (inner * s->vel_scale) >> 32;
+    return s->p0 + (int32_t)disp;
+}
+
+// Load the next queued segment (caller must disable irqs)
+static int
+serialservo_load_next(struct serialservo *s)
+{
+    if (move_queue_empty(&s->mq))
+        return -1;
+    struct move_node *n = move_queue_pop(&s->mq);
+    struct serialservo_move *m = container_of(
+        n, struct serialservo_move, node);
+    s->p0 = s->p1;
+    s->v0 = s->v1;
+    s->t0 = s->t1;
+    s->p1 = m->target_position;
+    s->v1 = m->target_velocity;
+    s->t1 = m->clock;
+    move_free(m);
+    return 0;
+}
+
+// Pacing timer - wake the servo task for the next setpoint update
+static uint_fast8_t
+serialservo_event(struct timer *t)
+{
+    struct serialservo *s = container_of(t, struct serialservo, time);
+    sched_wake_task(&serialservo_wake);
+    s->time.waketime += s->interp_ticks;
+    return SF_RESCHEDULE;
+}
+
+// Halt streaming on endstop trigger or shutdown (irq context)
+static void
+serialservo_stop(struct trsync_signal *tss, uint8_t reason)
+{
+    struct serialservo *s = container_of(
+        tss, struct serialservo, stop_signal);
+    sched_del_timer(&s->time);
+    s->flags = (s->flags & ~(SF_ACTIVE|SF_HAVE_TIME))
+        | SF_NEED_RESET | SF_STOP_PENDING;
+    while (!move_queue_empty(&s->mq)) {
+        struct move_node *mn = move_queue_pop(&s->mq);
+        struct serialservo_move *m = container_of(
+            mn, struct serialservo_move, node);
+        move_free(m);
+    }
+    sched_wake_task(&serialservo_wake);
+}
+
+
+/****************************************************************
+ * Servo update task
+ ****************************************************************/
+
+// Hold at the measured position and cancel feed-forward (Cat 2 stop -
+// power-off paths are covered by config_spi_shutdown messages)
+static void
+serialservo_do_stop(struct serialservo *s)
+{
+    if (!s->spi)
+        return;
+    int32_t actual = tmc_reg_read(s->spi, TMC4671_PID_POSITION_ACTUAL);
+    tmc_reg_write(s->spi, TMC4671_PID_VELOCITY_OFFSET, 0);
+    tmc_reg_write(s->spi, TMC4671_PID_POSITION_TARGET, actual);
+    s->last_written_position = actual;
+}
+
+static void
+serialservo_update(struct serialservo *s)
+{
+    uint32_t now = timer_read_time();
+    uint32_t eval_time = now + s->eval_lead;
+    // Advance past completed segments
+    for (;;) {
+        irq_disable();
+        if (!(s->flags & SF_ACTIVE)) {
+            irq_enable();
+            return;
+        }
+        if (timer_is_before(eval_time, s->t1)) {
+            irq_enable();
+            break;
+        }
+        int ret = serialservo_load_next(s);
+        if (ret) {
+            // Stream complete - write final target and go idle
+            sched_del_timer(&s->time);
+            s->flags &= ~SF_ACTIVE;
+            irq_enable();
+            tmc_reg_write(s->spi, TMC4671_PID_VELOCITY_OFFSET, s->v1);
+            tmc_reg_write(s->spi, TMC4671_PID_POSITION_TARGET, s->p1);
+            s->last_written_position = s->p1;
+            return;
+        }
+        irq_enable();
+    }
+    uint32_t dt = eval_time - s->t0;
+    int32_t pos = serialservo_calc_position(s, dt);
+    int32_t vel = serialservo_calc_velocity(s, dt);
+    tmc_reg_write(s->spi, TMC4671_PID_VELOCITY_OFFSET, vel);
+    tmc_reg_write(s->spi, TMC4671_PID_POSITION_TARGET, pos);
+    s->last_written_position = pos;
+    // Periodic following error supervision
+    if (s->ferror_window && !timer_is_before(now, s->ferror_last
+                                             + s->ferror_ticks)) {
+        s->ferror_last = now;
+        int32_t actual = tmc_reg_read(s->spi, TMC4671_PID_POSITION_ACTUAL);
+        int32_t ferror = pos - actual;
+        if (ferror < 0)
+            ferror = -ferror;
+        if ((uint32_t)ferror > s->ferror_window)
+            shutdown("serialservo following error exceeds window");
+    }
+}
+
+void
+command_config_serialservo(uint32_t *args);
+
+void
+serialservo_task(void)
+{
+    if (!sched_check_wake(&serialservo_wake))
+        return;
+    uint8_t oid;
+    struct serialservo *s;
+    foreach_oid(oid, s, command_config_serialservo) {
+        irq_disable();
+        uint8_t flags = s->flags;
+        s->flags = flags & ~SF_STOP_PENDING;
+        irq_enable();
+        if (!s->spi)
+            continue;
+        if (flags & SF_STOP_PENDING) {
+            serialservo_do_stop(s);
+            continue;
+        }
+        if (flags & SF_ACTIVE)
+            serialservo_update(s);
+    }
+}
+DECL_TASK(serialservo_task);
+
+
+/****************************************************************
+ * Host commands
+ ****************************************************************/
+
+void
+command_config_serialservo(uint32_t *args)
+{
+    struct serialservo *s = oid_alloc(
+        args[0], command_config_serialservo, sizeof(*s));
+    s->interp_ticks = args[1];
+    s->vel_scale = args[2];
+    s->eval_lead = args[3];
+    s->ferror_window = args[4];
+    s->ferror_ticks = args[5];
+    if (!s->interp_ticks)
+        shutdown("Invalid serialservo interp_ticks parameter");
+    move_queue_setup(&s->mq, sizeof(struct serialservo_move));
+    s->time.func = serialservo_event;
+    s->flags = SF_NEED_RESET;
+}
+DECL_COMMAND(command_config_serialservo,
+             "config_serialservo oid=%c interp_ticks=%u vel_scale=%u"
+             " eval_lead=%u ferror_window=%u ferror_ticks=%u");
+
 static struct serialservo *
 serialservo_oid_lookup(uint8_t oid)
 {
     return oid_lookup(oid, command_config_serialservo);
 }
 
-static uint_fast8_t
-serialservo_load_next(struct serialservo *d, uint32_t event_time)
+void
+command_config_serialservo_spi(uint32_t *args)
 {
-    if (move_queue_empty(&d->mq))
-    {
-        /* queue is empty (no steps) */
-        d->interpolation_steps = d->count = 0;
-        return SF_DONE;
-    }
-
-    /* load next move */
-    struct move_node *n = move_queue_pop(&d->mq);
-    struct serialservo_move *m = container_of(n, struct serialservo_move, node);
-
-    /* set timer for rescheduling event */
-    if (timer_is_before(d->time.waketime, event_time))
-    {
-        d->time.waketime = event_time + d->sampling_time;
-    }
-
-    /* update boundaries */
-    d->start_position = d->current_position = d->target_position;
-    d->start_velocity = d->current_velocity = d->target_velocity;
-    d->target_position = m->target_position;
-    d->target_velocity = m->target_velocity;
-    d->start_time = d->current_time = d->target_time;
-    d->target_time = m->time;
-
-    /* compute delta */
-    d->delta_time = d->target_time - d->start_time;
-    d->delta_position = d->target_position - d->current_position;
-    d->delta_velocity = d->target_velocity - d->current_velocity;
-
-    /* calculate interpolation steps */
-    d->interpolation_steps = d->delta_time / d->sampling_time;
-    d->count--;
-
-    /* delete move */
-    move_free(m);
-
-    return SF_RESCHEDULE;
+    struct serialservo *s = serialservo_oid_lookup(args[0]);
+    s->spi = spidev_oid_lookup(args[1]);
+    if (!spidev_have_cs_pin(s->spi))
+        shutdown("serialservo requires cs pin");
 }
+DECL_COMMAND(command_config_serialservo_spi,
+             "config_serialservo_spi oid=%c spi_oid=%c");
 
-static uint_fast8_t
-serialservo_interpolation_step(struct serialservo *d, uint32_t event_time)
+void
+command_serialservo_queue_step(uint32_t *args)
 {
-    /* compute delta */
-    int32_t delta_time = event_time - d->start_time;
-    delta_time = (delta_time < d->delta_time) ? delta_time : d->delta_time;
-    int32_t delta_position = (delta_time * d->delta_position) / d->delta_time;
-    int32_t delta_velocity = (delta_time * d->delta_velocity) / d->delta_time;
-
-    /* update */
-    d->current_position = d->start_position + delta_position;
-    d->current_velocity = d->start_velocity + delta_velocity;
-    d->current_time = d->start_time + delta_time;
-
-    d->interpolation_steps--;
-    d->time.waketime += d->sampling_time;
-    
-    return 0;
-}
-
-/* return the current serialservo position */
-static int32_t
-serialservo_get_position(struct serialservo *d)
-{
-    return d->current_position;
-}
-
-static void serialservo_stop(struct trsync_signal *tss, uint8_t reason)
-{
-    struct serialservo *d = container_of(tss, struct serialservo, stop_signal);
-    sched_del_timer(&d->time);
-    /** NOTE: important for offset calculation */
-    //d->current_position = tmc_get_position(d);
-    d->target_time = d->start_time = d->time.waketime = 0;
-    d->interpolation_steps = d->count = 0;
-    d->flags |= DF_NEED_RESET; //stop accepting new moves
-
-    /* stop the motor by setting velocity to zero.  Skip when no SPI bus has
-       been associated (config_serialservo_spi never sent): spidev_transfer()
-       would dereference a NULL device, and because this runs from the
-       shutdown path a fault or nested shutdown there wedges the MCU. */
-    if (d->spi)
-        tmc_set_position(d, 0);
-
-    while (!move_queue_empty(&d->mq))
-    {
-        struct move_node *mn = move_queue_pop(&d->mq);
-        struct serialservo_move *m = container_of(mn, struct serialservo_move, node);
-        move_free(m);
-    }
-}
-
-
-/****************************************************************
- * Public functions
- ****************************************************************/
-uint_fast8_t serialservo_event(struct timer *t)
-{
-    /* get timer serialservo */
-    struct serialservo *d = container_of(t, struct serialservo, time);
-
-    /* TMC position and velocity setpoint */
-    //tmc_set_position(d, d->current_position);
-    //tmc_set_velocity(d, d->current_velocity);
-    
-    tmc_reg_write(d->spi, OPENLOOP_ACCELERATION, 0x100);
-    tmc_reg_write(d->spi, OPENLOOP_VELOCITY_TARGET, d->current_velocity);
-    tmc_reg_write(d->spi, UQ_UD_EXT, 0x07D0);
-
-    int32_t position_feedback = tmc_get_position(d);
-    int32_t velocity_feedback = (int32_t)tmc_reg_read(d->spi, OPENLOOP_VELOCITY_ACTUAL); // tmc_get_velocity(d);
-    uint32_t input_status = tmc_reg_read(d->spi, TMC4671_INPUTS_RAW);
-    uint32_t output_status = tmc_reg_read(d->spi, TMC4671_OUTPUTS_RAW);
-    uint32_t status = tmc_reg_read(d->spi, STATUS_FLAGS);
-    output("==> position (target = %i, feedback = %i), velocity (target = %i, feedback = %i), input_status = %u, output_status = %u, status = %u)",
-    d->current_position, position_feedback,
-    d->current_velocity, velocity_feedback,
-    input_status, output_status, status);
-
-    uint32_t event_time = timer_read_time();
-    
-    /* perform interpolation and send setpoint */
-    if (timer_is_before(event_time, d->target_time))
-    {
-        serialservo_interpolation_step(d, event_time);
-        return SF_RESCHEDULE;
-    }
-
-    return serialservo_load_next(d, event_time);
-}
-
-
-/****************************************************************
- * Klippy commands
- ****************************************************************/
-void command_config_serialservo(uint32_t *args)
-{
-    /* allocate oid for serialservo */
-    struct serialservo *d = oid_alloc(args[0], command_config_serialservo, sizeof(*d));
-    d->sampling_time = args[1];
-    d->current_position = 0;
-    d->current_velocity = 0;
-    d->current_time = 0;
-    d->count = 0;
-    move_queue_setup(&d->mq, sizeof(struct serialservo_move));
-    d->time.func = serialservo_event;
-}
-DECL_COMMAND(command_config_serialservo, "config_serialservo oid=%c sampling_time=%u");
-
-void command_config_serialservo_spi(uint32_t *args)
-{
-    struct serialservo *d = serialservo_oid_lookup(args[0]);
-    d->spi = spidev_oid_lookup(args[1]);
-    d->chain_len = args[2];
-    d->chain_pos = args[3];
-    /* reset encoder count */
-    //tmc_reg_write(d->spi, ABN_DECODER_COUNT, 0);
-    /* witch to feedback control mode */
-    //tmc_reg_write(d->spi, PHI_E_SELECTION, 0x3);
-    //tmc_reg_write(d->spi, VELOCITY_SELECTION, 0x9);
-    /* witch to position mode for closed-loop control */
-    //tmc_reg_write(d->spi, MODE_RAMP_MODE_MOTION, 0x3);
-}
-DECL_COMMAND(command_config_serialservo_spi, "config_serialservo_spi oid=%c spi_oid=%c chain_len=%c chain_pos=%c");
-
-void command_queue_serialservo(uint32_t *args)
-{ 
-    /* get serialservo and create move */
-    struct serialservo *d = serialservo_oid_lookup(args[0]);
-
-    uint32_t req_time = args[3];
-    uint32_t event_time = timer_read_time();
-
-    if (timer_is_before(req_time, event_time + d->sampling_time))
-    {
-        return;
-    }
-
-    /* create new move */
+    struct serialservo *s = serialservo_oid_lookup(args[0]);
     struct serialservo_move *m = move_alloc();
-
-    /* get data */
     m->target_position = args[1];
     m->target_velocity = args[2];
-    m->time = args[3];
-    m->flags = 0;
-
+    m->clock = args[3];
+    uint32_t now = timer_read_time();
     irq_disable();
-
-    if (d->interpolation_steps)
-    {
-        //output("move in queue");
-        move_queue_push(&m->node, &d->mq);
-    }
-    else if (d->flags & DF_NEED_RESET)
-    {
-        //output("move free");
+    uint8_t flags = s->flags;
+    if (flags & SF_NEED_RESET) {
         move_free(m);
+    } else if (!timer_is_before(now, m->clock)) {
+        irq_enable();
+        shutdown("serialservo target clock in the past");
+    } else if (flags & SF_ACTIVE) {
+        move_queue_push(&m->node, &s->mq);
+    } else {
+        // Restart streaming from the current hold state
+        if (!(flags & SF_HAVE_TIME)) {
+            s->t1 = now;
+            s->v1 = 0;
+        }
+        s->p0 = s->p1;
+        s->v0 = s->v1;
+        s->t0 = s->t1;
+        s->p1 = m->target_position;
+        s->v1 = m->target_velocity;
+        s->t1 = m->clock;
+        move_free(m);
+        s->flags = (flags | SF_ACTIVE | SF_HAVE_TIME);
+        s->time.waketime = now + s->interp_ticks;
+        sched_add_timer(&s->time);
     }
-    else 
-    {
-        output("move restart");
-        d->target_time = event_time;
-        move_queue_push(&m->node, &d->mq);
-        serialservo_load_next(d, event_time);
-        sched_add_timer(&d->time);
-    }
-
-    /* increse move counter */
-    d->count++;
-
     irq_enable();
 }
-DECL_COMMAND(command_queue_serialservo, "serialservo_queue_step oid=%c target_position=%i target_velocity=%i time=%u");
+DECL_COMMAND(command_serialservo_queue_step,
+             "serialservo_queue_step oid=%c target_position=%i"
+             " target_velocity=%i clock=%u");
 
-void command_reset_serialservo_clock(uint32_t *args)
+void
+command_serialservo_reset_step_clock(uint32_t *args)
 {
-    struct serialservo *d = serialservo_oid_lookup(args[0]);
-    uint32_t waketime = args[1];
-
+    struct serialservo *s = serialservo_oid_lookup(args[0]);
     irq_disable();
-    if (d->interpolation_steps)
-    {
+    if (s->flags & SF_ACTIVE) {
+        irq_enable();
         shutdown("Can't reset time when serialservo active");
     }
-    d->time.waketime = d->target_time = d->start_time = waketime;
-    d->flags &= ~DF_NEED_RESET;
+    s->flags &= ~(SF_NEED_RESET|SF_HAVE_TIME);
     irq_enable();
+    // Re-anchor the interpolation state to the measured position
+    if (s->spi) {
+        int32_t actual = tmc_reg_read(s->spi, TMC4671_PID_POSITION_ACTUAL);
+        s->p0 = s->p1 = actual;
+        s->last_written_position = actual;
+    }
+    s->v0 = s->v1 = 0;
 }
-DECL_COMMAND(command_reset_serialservo_clock, "serialservo_reset_step_clock oid=%c clock=%u");
+DECL_COMMAND(command_serialservo_reset_step_clock,
+             "serialservo_reset_step_clock oid=%c clock=%u");
 
-void command_serialservo_get_position(uint32_t *args)
+void
+command_serialservo_get_position(uint32_t *args)
 {
     uint8_t oid = args[0];
-    struct serialservo *d = serialservo_oid_lookup(oid);
-    irq_disable();
-    int32_t position = serialservo_get_position(d);
-    irq_enable();
-    sendf("serialservo_position oid=%c pos=%i", oid, position);
+    struct serialservo *s = serialservo_oid_lookup(oid);
+    int32_t pos = s->last_written_position;
+    if (s->spi)
+        pos = tmc_reg_read(s->spi, TMC4671_PID_POSITION_ACTUAL);
+    sendf("serialservo_position oid=%c pos=%i", oid, pos);
 }
-DECL_COMMAND(command_serialservo_get_position, "serialservo_get_position oid=%c");
+DECL_COMMAND(command_serialservo_get_position,
+             "serialservo_get_position oid=%c");
 
-void command_serialservo_stop_on_trigger(uint32_t *args)
+void
+command_serialservo_query_state(uint32_t *args)
 {
-    struct serialservo *d = serialservo_oid_lookup(args[0]);
+    uint8_t oid = args[0];
+    struct serialservo *s = serialservo_oid_lookup(oid);
+    uint32_t clock = timer_read_time();
+    int32_t actual = 0, velocity = 0;
+    if (s->spi) {
+        actual = tmc_reg_read(s->spi, TMC4671_PID_POSITION_ACTUAL);
+        velocity = tmc_reg_read(s->spi, TMC4671_PID_VELOCITY_ACTUAL);
+    }
+    sendf("serialservo_state oid=%c clock=%u target=%i actual=%i"
+          " velocity=%i", oid, clock, s->last_written_position, actual
+          , velocity);
+}
+DECL_COMMAND(command_serialservo_query_state,
+             "serialservo_query_state oid=%c");
+
+void
+command_serialservo_stop_on_trigger(uint32_t *args)
+{
+    struct serialservo *s = serialservo_oid_lookup(args[0]);
     struct trsync *ts = trsync_oid_lookup(args[1]);
-    trsync_add_signal(ts, &d->stop_signal, serialservo_stop);
+    trsync_add_signal(ts, &s->stop_signal, serialservo_stop);
 }
-DECL_COMMAND(command_serialservo_stop_on_trigger, "serialservo_stop_on_trigger oid=%c trsync_oid=%c");
+DECL_COMMAND(command_serialservo_stop_on_trigger,
+             "serialservo_stop_on_trigger oid=%c trsync_oid=%c");
 
-void serialservo_shutdown(void)
+void
+serialservo_shutdown(void)
 {
-    uint8_t i;
-    struct serialservo *d;
-    foreach_oid(i, d, command_config_serialservo) {
-        move_queue_clear(&d->mq);
-        serialservo_stop(&d->stop_signal, 0);
+    uint8_t oid;
+    struct serialservo *s;
+    foreach_oid(oid, s, command_config_serialservo) {
+        sched_del_timer(&s->time);
+        s->flags = (s->flags & ~(SF_ACTIVE|SF_HAVE_TIME)) | SF_NEED_RESET;
+        move_queue_clear(&s->mq);
     }
 }
 DECL_SHUTDOWN(serialservo_shutdown);

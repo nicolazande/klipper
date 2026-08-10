@@ -1,6 +1,7 @@
 # Main code build rules
 
-src-y += sched.c command.c basecmd.c debugcmds.c serialservo.c
+src-y += sched.c command.c basecmd.c debugcmds.c
+src-$(CONFIG_WANT_SERIALSERVO) += serialservo.c
 src-$(CONFIG_HAVE_GPIO) += initial_pins.c gpiocmds.c stepper.c endstop.c \
     trsync.c
 src-$(CONFIG_HAVE_GPIO_ADC) += adccmds.c

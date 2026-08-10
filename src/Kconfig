@@ -128,6 +128,10 @@ config WANT_SENSOR_ANGLE
     bool
     depends on HAVE_GPIO_SPI
     default y
+config WANT_SERIALSERVO
+    bool
+    depends on HAVE_GPIO_SPI
+    default y
 config WANT_SOFTWARE_I2C
     bool
     depends on HAVE_GPIO && HAVE_GPIO_I2C
