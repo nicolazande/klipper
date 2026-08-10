@@ -897,6 +897,18 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 /* get buffer status */
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
+                if (!slave->seq_synced)
+                {
+                    /* Adopt the drive's persisted buffer numbering so
+                       a host restart does not begin with a guaranteed
+                       sequence error (the drive keeps next_id across
+                       host sessions while the host used to restart
+                       its numbering at zero). */
+                    slave->seq_num = status->next_id;
+                    slave->seq_synced = 1;
+                    slave->stamp_contig = 0;
+                }
+
                 /* check error */
                 if (status->seq_error || status->overflow || status->underflow)
                 {
