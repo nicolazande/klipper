@@ -82,8 +82,6 @@
   bounded per restart).
 - rt_errorf writes to stderr while holding sq->lock: journald
   backpressure could stall a cycle (diagnostics are off by default).
-- STEPPER_BUZZ/FORCE_MOVE on a servo energizes via _force_enable then
-  raises, leaving the enable line on until M84.
 - Re-enable within brake_engage_time of a disable produces a brief
   power-stage off/on transient when the held writes flush (FIFO order
   proven correct; steady state fine).
