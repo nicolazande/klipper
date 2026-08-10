@@ -98,9 +98,18 @@ class ForceMove:
         if name not in self.steppers:
             raise gcmd.error("Unknown stepper %s" % (name,))
         return self.steppers[name]
+    def _check_force_move_support(self, stepper, gcmd):
+        # Refuse steppers that reject external kinematics BEFORE
+        # energizing them: manual_move would raise anyway, but only
+        # after the enable side effects have fired
+        if not getattr(stepper, 'supports_force_move', lambda: True)():
+            raise gcmd.error(
+                "%s does not support FORCE_MOVE/STEPPER_BUZZ"
+                % (stepper.get_name(),))
     cmd_STEPPER_BUZZ_help = "Oscillate a given stepper to help id it"
     def cmd_STEPPER_BUZZ(self, gcmd):
         stepper = self._lookup_stepper(gcmd)
+        self._check_force_move_support(stepper, gcmd)
         logging.info("Stepper buzz %s", stepper.get_name())
         was_enable = self._force_enable(stepper)
         toolhead = self.printer.lookup_object('toolhead')
@@ -124,6 +133,7 @@ class ForceMove:
         distance = gcmd.get_float('DISTANCE')
         speed = gcmd.get_float('VELOCITY', above=0.)
         accel = gcmd.get_float('ACCEL', 0., minval=0.)
+        self._check_force_move_support(stepper, gcmd)
         logging.info("FORCE_MOVE %s distance=%.3f velocity=%.3f accel=%.3f",
                      stepper.get_name(), distance, speed, accel)
         was_enable = self._force_enable(stepper)

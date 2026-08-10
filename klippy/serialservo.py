@@ -142,6 +142,11 @@ class SerialServo:
         self.set_stepper_kinematics(sk)
     def get_stepper_kinematics(self):
         return self._stepper_kinematics
+    def supports_force_move(self):
+        # External-kinematics swaps are rejected by
+        # set_stepper_kinematics below; report it up front so
+        # force_move can refuse before energizing the servo
+        return False
     def set_stepper_kinematics(self, sk):
         # Only kinematics allocated via setup_itersolve share the
         # serialservo solver ABI; reject foreign objects (FORCE_MOVE
