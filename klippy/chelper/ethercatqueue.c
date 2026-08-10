@@ -16,6 +16,16 @@
 #include <math.h> //fabs
 #include <stddef.h> //offsetof
 #include <stdio.h> //snprintf
+
+/*
+ * Logging from the SCHED_FIFO cyclic thread must never enter Python:
+ * errorf() dispatches into the Python logging callback and acquiring
+ * GIL state from a foreign realtime pthread aborts the interpreter
+ * intermittently (PyGILState_Release fatal error, observed as the
+ * silent klippy crash/restart loop).  Realtime-context diagnostics go
+ * to stderr (captured by the service journal) instead.
+ */
+#define rt_errorf(fmt, ...) fprintf(stderr, "rt: " fmt "\n", ##__VA_ARGS__)
 #include <stdlib.h> //malloc
 #include <string.h> //memset
 #include <termios.h> //tcflush
@@ -194,7 +204,7 @@ process_request(struct ethercatqueue *sq, double eventtime)
             else
             {
                 /* unknown command */
-                errorf("Unknown protocol command: cmdid = %u", cmdid);
+                rt_errorf("Unknown protocol command: cmdid = %u", cmdid);
                 break;
             }
             
@@ -394,13 +404,13 @@ poll_pvt_time_error(struct ethercatqueue *sq)
                 if (!slave->stamp_supported)
                 {
                     slave->stamp_supported = 1;
-                    errorf("ethercat pvt timestamps armed (oid = %u):"
+                    rt_errorf("ethercat pvt timestamps armed (oid = %u):"
                            " drive firmware supports 0x2014", slave->oid);
                 }
                 if (err != slave->pvt_time_error)
                 {
                     slave->pvt_time_error = err;
-                    errorf("ethercat pvt time error (oid = %u): %d servo cycles",
+                    rt_errorf("ethercat pvt time error (oid = %u): %d servo cycles",
                            slave->oid, err);
                 }
                 slave->pvt_error_wait = ETHERCAT_PVT_ERROR_POLL;
@@ -480,7 +490,7 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
             /* stream flow diagnostic (ethercat_debug config option) */
             if (sq->debug)
             {
-                errorf("ethercat seg->drive: oid=%u seq=%u pos=%d"
+                rt_errorf("ethercat seg->drive: oid=%u seq=%u pos=%d"
                        " vel=%d t=%u", qm->oid, slave->seq_num,
                        (int)move->position, (int)move->velocity,
                        (unsigned)move->time);
@@ -586,7 +596,7 @@ check_send_command(struct ethercatqueue *sq, int pending, double eventtime)
                 if (!list_empty(&sq->upcoming_queue))
                     first = list_first_entry(&sq->upcoming_queue,
                                              struct move_segment_msg, node);
-                errorf("ethercat flow: upcoming=%d ready=%d ack=%llu"
+                rt_errorf("ethercat flow: upcoming=%d ready=%d ack=%llu"
                        " min=%llu req=%llu freq=%.0f",
                        sq->upcoming_bytes, sq->ready_bytes,
                        (unsigned long long)ack_clock,
@@ -922,7 +932,7 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                     slave->stamp_pending = 1;
                     slave->stamp_contig = 0;
                     /* notify buffer problem */
-                    errorf("Ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
+                    rt_errorf("Ethercat buffer error (oid = %u): sequence = %u, overflow = %u, underflow = %u",
                             slave->oid, status->seq_error, status->overflow,  status->underflow);
                 }
             }
@@ -1205,12 +1215,12 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
                     {
                         int32_t dc_offset = (int32_t)(
                             ref_time - (uint32_t)sync_clock);
-                        errorf("ethercat dc reference offset: %d ns",
+                        rt_errorf("ethercat dc reference offset: %d ns",
                                dc_offset);
                     }
                     else
                     {
-                        errorf("ethercat dc reference clock unavailable"
+                        rt_errorf("ethercat dc reference clock unavailable"
                                " (rc = %d)", rc);
                     }
                 }
