@@ -26,6 +26,8 @@
 // (homing) never produce a physical jump.
 
 #define HISTORY_EXPIRE (30.0) // history time window in seconds
+// A gap beyond this marks a new motion burst needing a hold anchor
+#define ANCHOR_GAP_TIME (0.050)
 
 // This struct must stay layout-compatible with struct stepcompress in
 // stepcompress.c up to and including history_list: these objects are
@@ -189,6 +191,32 @@ serialservo_compress_append(struct stepcompress *sc, struct pose *pose
     }
     uint64_t clock_start = (uint64_t)clock_start_d;
     uint64_t clock_end = (uint64_t)clock_end_d;
+    /*
+     * Synthesize a zero-velocity hold anchor at the start of a motion
+     * burst following an idle gap.  The mcu anchors each segment to
+     * the end of the previous one; without the anchor it would
+     * interpolate the first segment of a burst from a stale (and,
+     * past ~5s, clock-wrapped) time base - commanding a spurious
+     * excursion at every stream restart.  The anchor re-bases the mcu
+     * time reference with zero commanded motion.
+     */
+    uint64_t gap_ticks = (uint64_t)(ANCHOR_GAP_TIME * sc->mcu_freq);
+    if (clock_start > sc->last_step_clock + gap_ticks) {
+        double anchor_units = sc->last_position * sc->units_per_mm;
+        if (anchor_units > -2147483647. && anchor_units < 2147483647.) {
+            uint32_t amsg[5] = {
+                (uint32_t)sc->queue_step_msgtag, sc->oid,
+                (uint32_t)(int32_t)llrint(anchor_units), 0,
+                (uint32_t)clock_start,
+            };
+            struct queue_message *aqm = message_alloc_and_encode(
+                amsg, ARRAY_SIZE(amsg));
+            aqm->min_clock = sc->last_step_clock;
+            aqm->req_clock = clock_start;
+            list_add_tail(&aqm->node, &sc->msg_queue);
+            sc->last_step_clock = clock_start;
+        }
+    }
     uint32_t msg[5] = {
         (uint32_t)sc->queue_step_msgtag, sc->oid,
         (uint32_t)(int32_t)llrint(pos_units),

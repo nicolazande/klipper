@@ -104,8 +104,11 @@ serialservo_calc_position(struct serialservo *s, uint32_t dt)
     uint32_t seg_ticks = s->t1 - s->t0;
     if (!seg_ticks || dt >= seg_ticks)
         return s->p1;
+    // Divide by seg_ticks before the second dt factor so the
+    // intermediate cannot overflow int64 even for very long (anchor)
+    // segments
     int64_t inner = (int64_t)s->v0 * dt;
-    inner += (int64_t)(s->v1 - s->v0) * dt * dt / (2 * (int64_t)seg_ticks);
+    inner += (int64_t)(s->v1 - s->v0) * dt / seg_ticks * dt / 2;
     int64_t disp = (inner * s->vel_scale) >> 32;
     return s->p0 + (int32_t)disp;
 }
@@ -205,6 +208,8 @@ serialservo_update(struct serialservo *s)
         irq_enable();
     }
     uint32_t dt = eval_time - s->t0;
+    if ((int32_t)dt < 0)
+        dt = 0;
     int32_t pos = serialservo_calc_position(s, dt);
     int32_t vel = serialservo_calc_velocity(s, dt);
     tmc_reg_write(s->spi, TMC4671_PID_VELOCITY_OFFSET, vel);
@@ -311,8 +316,12 @@ command_serialservo_queue_step(uint32_t *args)
     } else if (flags & SF_ACTIVE) {
         move_queue_push(&m->node, &s->mq);
     } else {
-        // Restart streaming from the current hold state
-        if (!(flags & SF_HAVE_TIME)) {
+        // Restart streaming from the current hold state.  A stale
+        // time base (idle gap approaching the 32 bit clock wrap) is
+        // re-anchored to now - the host's burst-start hold anchor
+        // makes this a zero-motion segment either way.
+        if (!(flags & SF_HAVE_TIME)
+            || m->clock - s->t1 >= 0x40000000) {
             s->t1 = now;
             s->v1 = 0;
         }
