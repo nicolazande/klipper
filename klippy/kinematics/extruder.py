@@ -235,18 +235,35 @@ class PrinterExtruder:
         return move.max_cruise_v2
     def move(self, print_time, move):
         axis_r = move.axes_r[3]
-        accel = move.accel * axis_r
         start_v = move.start_v * axis_r
         cruise_v = move.cruise_v * axis_r
+        end_v = move.end_v * axis_r
         can_pressure_advance = False
         if axis_r > 0. and (move.axes_d[0] or move.axes_d[1]):
             can_pressure_advance = True
-        # Queue movement (x is extruder movement, y is pressure advance flag)
-        self.trapq_append(self.trapq, print_time,
-                          move.accel_t, move.cruise_t, move.decel_t,
-                          move.start_pos[3], 0., 0.,
-                          1., can_pressure_advance, 0.,
-                          start_v, cruise_v, accel)
+        # Queue movement (x is extruder movement, y is pressure advance
+        # flag).  Phases are appended with the acceleration realized by
+        # their ms-rounded durations, matching toolhead._process_moves.
+        t = print_time
+        pos = move.start_pos[3]
+        if move.accel_t:
+            accel = (cruise_v - start_v) / move.accel_t
+            self.trapq_append(self.trapq, t, move.accel_t, 0., 0.,
+                              pos, 0., 0., 1., can_pressure_advance, 0.,
+                              start_v, cruise_v, accel)
+            pos += (start_v + cruise_v) * .5 * move.accel_t
+            t += move.accel_t
+        if move.cruise_t:
+            self.trapq_append(self.trapq, t, 0., move.cruise_t, 0.,
+                              pos, 0., 0., 1., can_pressure_advance, 0.,
+                              start_v, cruise_v, 0.)
+            pos += cruise_v * move.cruise_t
+            t += move.cruise_t
+        if move.decel_t:
+            decel = (cruise_v - end_v) / move.decel_t
+            self.trapq_append(self.trapq, t, 0., 0., move.decel_t,
+                              pos, 0., 0., 1., can_pressure_advance, 0.,
+                              start_v, cruise_v, decel)
         self.last_position = move.end_pos[3]
     def find_past_position(self, print_time):
         if self.extruder_stepper is None:

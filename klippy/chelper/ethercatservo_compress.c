@@ -45,6 +45,7 @@ struct ethercatservo_compress
     double position_scaling; //position scaling (from mm to ticks)
     double velocity_scaling; //position scaling (from mm/s to ticks/s)
     double last_position; //last known position of the drive
+    double wire_time_carry; //sub-ms residual carried into the next segment time
     struct list_head msg_queue; //linked list of commands (moves) to be executed on the drive
     struct list_head history_list; //linked list of historical drive information
     struct move_msgpool *msgpool; //pointer to compressor private message pool
@@ -229,6 +230,7 @@ int __visible
 ethercatservo_compress_reset(struct ethercatservo_compress *sc, uint64_t last_step_clock)
 {
     sc->last_step_clock = last_step_clock;
+    sc->wire_time_carry = 0.;
     calc_last_step_print_time(sc);
     return 0;
 }
@@ -503,9 +505,23 @@ ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *po
     struct coe_ip_move *move = (struct coe_ip_move *)qm->msg;
     move->header.type = COE_SEGMENT_MODE_BUFFER;
     move->header.format = 0; //0 = buffer mode, 1 = command mode
-    move->position = (int32_t)(pose->position * sc->position_scaling); //move absolute start position [ticks].
-    move->velocity = (int32_t)(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
-    move->time = (uint8_t)(move_time * 1000.);  //move time duration [ms] (up to next pose)
+    move->position = (int32_t)llrint(pose->position * sc->position_scaling); //move absolute start position [ticks].
+    move->velocity = (int32_t)llrint(pose->velocity * sc->velocity_scaling); //move constant velocity [ticks/s].
+    /*
+     * Wire time is rounded (not truncated) and the sub-ms residual is
+     * carried into the next segment so the drive-side timeline tracks
+     * host time with bounded error instead of drifting early by every
+     * lost fraction.  A zero duration record is never emitted (drive
+     * behavior undefined).
+     */
+    double wire_time = move_time + sc->wire_time_carry;
+    int wire_ms = (int)llround(wire_time * 1000.);
+    if (wire_ms < 1)
+        wire_ms = 1;
+    else if (wire_ms > 255)
+        wire_ms = 255;
+    sc->wire_time_carry = wire_time - wire_ms / 1000.;
+    move->time = (uint8_t)wire_ms; //move time duration [ms] (up to next pose)
 
     /*
      * Queue messages from different ethercatservo_compress objects are merged in a single

@@ -799,13 +799,23 @@ static inline void process_buffer(struct ethercatqueue *sq, double eventtime)
                     
                     /* update step sequence number (avoid overflow) */
                     move->header.seq_num = slave->seq_num % ETHERCAT_SEQ_MASK; //step sequence number
+                    /*
+                     * Hold segment: constant position at zero velocity
+                     * (repeating the last record's stale velocity gave
+                     * the drive contradictory P-const/V-nonzero data).
+                     * Wire time is rounded and mirrored into the
+                     * timing table so bookkeeping matches the wire.
+                     */
                     move->position = slave->position_target;
-                    move->velocity = slave->velocity_target;
-                    move->time = (uint8_t)(1000 * stop_delta);
+                    move->velocity = 0;
+                    int fill_ms = (int)llround(1000. * stop_delta);
+                    if (fill_ms < 1)
+                        fill_ms = 1;
+                    move->time = (uint8_t)fill_ms;
 
                     /* update step timing table */
                     uint8_t next_id = slave->seq_num % ETHERCAT_PVT_BUFFER_SIZE;
-                    slave->time_table[next_id] = slave->time_table[last_id] + stop_delta;
+                    slave->time_table[next_id] = slave->time_table[last_id] + fill_ms / 1000.;
 
                     /* update step sequence number (avoid overflow) */
                     slave->seq_num++;

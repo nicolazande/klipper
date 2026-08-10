@@ -398,16 +398,46 @@ class ToolHead:
                 self.special_queuing_state = ""
                 self.need_check_pause = -1.
             self._calc_print_time()
-        # Queue moves into trapezoid motion queue (trapq)
+        # Queue moves into trapezoid motion queue (trapq).
+        # NOTE: each phase is appended with the acceleration realized
+        # by its ms-rounded duration (set_junction) - passing the
+        # original accel for rounded times made the trapq integration
+        # disagree with the planned distances, producing mm-scale
+        # commanded position jumps between adjacent moves.
         next_move_time = self.print_time
         for move in moves:
             if move.is_kinematic_move:
-                self.trapq_append(
-                    self.trapq, next_move_time,
-                    move.accel_t, move.cruise_t, move.decel_t,
-                    move.start_pos[0], move.start_pos[1], move.start_pos[2],
-                    move.axes_r[0], move.axes_r[1], move.axes_r[2],
-                    move.start_v, move.cruise_v, move.accel)
+                t = next_move_time
+                sp = move.start_pos
+                axes_r = move.axes_r
+                if move.accel_t:
+                    accel = (move.cruise_v - move.start_v) / move.accel_t
+                    self.trapq_append(
+                        self.trapq, t, move.accel_t, 0., 0.,
+                        sp[0], sp[1], sp[2],
+                        axes_r[0], axes_r[1], axes_r[2],
+                        move.start_v, move.cruise_v, accel)
+                    d = (move.start_v + move.cruise_v) * .5 * move.accel_t
+                    sp = (sp[0] + axes_r[0] * d, sp[1] + axes_r[1] * d,
+                          sp[2] + axes_r[2] * d, sp[3])
+                    t += move.accel_t
+                if move.cruise_t:
+                    self.trapq_append(
+                        self.trapq, t, 0., move.cruise_t, 0.,
+                        sp[0], sp[1], sp[2],
+                        axes_r[0], axes_r[1], axes_r[2],
+                        move.start_v, move.cruise_v, 0.)
+                    d = move.cruise_v * move.cruise_t
+                    sp = (sp[0] + axes_r[0] * d, sp[1] + axes_r[1] * d,
+                          sp[2] + axes_r[2] * d, sp[3])
+                    t += move.cruise_t
+                if move.decel_t:
+                    decel = (move.cruise_v - move.end_v) / move.decel_t
+                    self.trapq_append(
+                        self.trapq, t, 0., 0., move.decel_t,
+                        sp[0], sp[1], sp[2],
+                        axes_r[0], axes_r[1], axes_r[2],
+                        move.start_v, move.cruise_v, decel)
             if move.axes_d[3]:
                 self.extruder.move(next_move_time, move)
             next_move_time = (next_move_time + move.accel_t
