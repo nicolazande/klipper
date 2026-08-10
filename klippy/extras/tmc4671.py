@@ -521,14 +521,23 @@ class TMC4671:
         set_config_field(config, "hall_interpolation", 0)
         set_config_field(config, "hall_direction", 0)
         set_config_field(config, "hall_blank", 2)
-        # Hall geometry registers: chip power-on defaults, written
+        # Hall geometry registers: chip power-on defaults unless
+        # overridden by config (commissioning results), written
         # explicitly so stale values cannot survive a host restart and
         # poison the hall-based alignment (they are also scrubbed)
-        self.reg_overrides["HALL_POSITION_060_000"] = 0x2AAA0000
-        self.reg_overrides["HALL_POSITION_180_120"] = 0x80005555
-        self.reg_overrides["HALL_POSITION_300_240"] = 0xD555AAAA
-        self.reg_overrides["HALL_PHI_E_PHI_M_OFFSET"] = 0
-        self.reg_overrides["HALL_DPHI_MAX"] = 0x2AAA
+        self.reg_overrides["HALL_POSITION_060_000"] = int(
+            config.get('hall_position_060_000', '0x2AAA0000'), 0)
+        self.reg_overrides["HALL_POSITION_180_120"] = int(
+            config.get('hall_position_180_120', '0x80005555'), 0)
+        self.reg_overrides["HALL_POSITION_300_240"] = int(
+            config.get('hall_position_300_240', '0xD555AAAA'), 0)
+        self.reg_overrides["HALL_DPHI_MAX"] = int(
+            config.get('hall_dphi_max', '0x2AAA'), 0)
+        # The phi offsets have field definitions - keep them
+        # field-based so config, SET_TMC4671_FIELD and the register
+        # scrub all agree on the intended value
+        set_config_field(config, "hall_phi_m_offset", 0)
+        set_config_field(config, "hall_phi_e_offset", 0)
         # Feedback selections: electrical-angle domain (keeps the
         # tuned PID gains valid; unit conversion is host-side)
         set_config_field(config, "velocity_selection", 0)
@@ -947,8 +956,16 @@ class TMC4671:
         if reg_name is None:
             raise gcmd.error("Unknown field name '%s'" % (field_name,))
         value = gcmd.get_int('VALUE')
-        reg_val = self.fields.set_field(field_name, value)
+        # Whole-register overrides take precedence over the field
+        # cache (in the scrub and at re-init): compose on the override
+        # and keep it updated, or the runtime write would be flagged
+        # as register corruption and silently reverted by INIT
+        base = self.reg_overrides.get(reg_name)
+        reg_val = self.fields.set_field(field_name, value, reg_value=base,
+                                        reg_name=reg_name)
         with self.mutex:
+            if reg_name in self.reg_overrides:
+                self.reg_overrides[reg_name] = reg_val
             self.mcu_tmc.set_register(reg_name, reg_val)
     cmd_SET_TMC4671_CURRENT_help = "Set the TMC4671 torque/flux current limit"
     def cmd_SET_TMC4671_CURRENT(self, gcmd):
