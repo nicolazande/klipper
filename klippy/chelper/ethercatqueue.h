@@ -97,6 +97,7 @@ struct slavemonitor
     /* pvt timestamp synchronization (copley firmware >= 5.08) */
     int16_t pvt_time_error;   //last 0x2014 readout (drive servo cycles)
     uint8_t pvt_error_wait;   //cycles until the next 0x2014 poll
+    uint8_t stamp_supported;  //set after a successful 0x2014 read (fw >= 5.08)
     uint16_t segs_since_stamp; //buffer segments since the last timestamp record
     uint8_t stamp_pending;    //emit a timestamp record before the next segment
     /* monitoring */

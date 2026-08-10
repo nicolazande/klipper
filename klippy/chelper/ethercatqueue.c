@@ -318,6 +318,13 @@ emit_timestamp_records(struct ethercatqueue *sq)
         {
             continue;
         }
+        if (!slave->stamp_supported)
+        {
+            /* drive firmware without 0x85 support (no 0x2014 object):
+               never send timestamp records it cannot parse */
+            slave->stamp_pending = 0;
+            continue;
+        }
         if (slave->operation_mode != COE_OPERATION_MODE_INTERPOLATION)
         {
             continue;
@@ -376,6 +383,12 @@ poll_pvt_time_error(struct ethercatqueue *sq)
             case EC_REQUEST_SUCCESS:
             {
                 int16_t err = EC_READ_S16(ecrt_sdo_request_data(req));
+                if (!slave->stamp_supported)
+                {
+                    slave->stamp_supported = 1;
+                    errorf("ethercat pvt timestamps armed (oid = %u):"
+                           " drive firmware supports 0x2014", slave->oid);
+                }
                 if (err != slave->pvt_time_error)
                 {
                     slave->pvt_time_error = err;
@@ -388,7 +401,10 @@ poll_pvt_time_error(struct ethercatqueue *sq)
             }
             case EC_REQUEST_ERROR:
             {
-                slave->pvt_error_wait = ETHERCAT_PVT_ERROR_POLL;
+                /* object absent (pre-5.08 firmware) or transient sdo
+                   failure: keep timestamps disarmed and retry slowly */
+                slave->stamp_supported = 0;
+                slave->pvt_error_wait = 4 * ETHERCAT_PVT_ERROR_POLL;
                 ecrt_sdo_request_read(req);
                 break;
             }
@@ -1116,15 +1132,24 @@ cyclic_event(struct ethercatqueue *sq, double eventtime)
              */
             {
                 static uint16_t dc_log_cnt;
-                uint32_t ref_time = 0;
-                if (!ecrt_master_reference_clock_time(master->master,
-                                                      &ref_time)
-                    && ++dc_log_cnt >= 500)
+                if (++dc_log_cnt >= 500)
                 {
                     dc_log_cnt = 0;
-                    int32_t dc_offset = (int32_t)(ref_time
-                                                  - (uint32_t)sync_clock);
-                    errorf("ethercat dc reference offset: %d ns", dc_offset);
+                    uint32_t ref_time = 0;
+                    int rc = ecrt_master_reference_clock_time(
+                        master->master, &ref_time);
+                    if (!rc)
+                    {
+                        int32_t dc_offset = (int32_t)(
+                            ref_time - (uint32_t)sync_clock);
+                        errorf("ethercat dc reference offset: %d ns",
+                               dc_offset);
+                    }
+                    else
+                    {
+                        errorf("ethercat dc reference clock unavailable"
+                               " (rc = %d)", rc);
+                    }
                 }
             }
 
