@@ -68,8 +68,12 @@
   a nonzero held v1 across an idle gap) - bench-verify with a
   deliberate mid-move abort.
 - [input_shaper] with hash kinematics aborts connect (shaper swaps
-  stepper kinematics; servo objects reject foreign solvers) - guard or
-  support decision needed before shaper use.
+  stepper kinematics; servo objects reject foreign solvers - both
+  serialservo and ethercatservo now raise a clean command error,
+  though the text mentions only FORCE_MOVE/STEPPER_BUZZ) - guard or
+  support decision needed before shaper use; cleanest path is
+  teaching input_shaper to skip steppers that reject external
+  kinematics.
 - ethercatqueue_init retry after a post-thread-create failure leaks a
   busy-spin thread; pthread mutex/cond re-init on an initialized
   object is UB (works on glibc) - restructure init stages.
