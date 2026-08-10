@@ -14,6 +14,7 @@
 struct i2c_info {
     I2C_TypeDef *i2c;
     uint8_t scl_pin, sda_pin, function;
+    uint8_t sda_function; // 0 = same alternate function as scl
 };
 
 #if CONFIG_MACH_STM32F0
@@ -89,6 +90,8 @@ struct i2c_info {
   DECL_CONSTANT_STR("BUS_PINS_i2c2_PB10_PB11", "PB10,PB11");
   DECL_ENUMERATION("i2c_bus", "i2c3_PA8_PC9", 3);
   DECL_CONSTANT_STR("BUS_PINS_i2c3_PA8_PC9", "PA8,PC9");
+  DECL_ENUMERATION("i2c_bus", "i2c4_PB6_PF15", 4);
+  DECL_CONSTANT_STR("BUS_PINS_i2c4_PB6_PF15", "PB6,PF15");
 #endif
 
 static const struct i2c_info i2c_bus[] = {
@@ -130,6 +133,9 @@ static const struct i2c_info i2c_bus[] = {
     { I2C1, GPIO('B', 8), GPIO('B', 9), GPIO_FUNCTION(4) },
     { I2C2, GPIO('B', 10), GPIO('B', 11), GPIO_FUNCTION(4) },
     { I2C3, GPIO('A', 8), GPIO('C', 9), GPIO_FUNCTION(4) },
+    // I2C4: scl is AF6 on PB6 while sda is AF4 on PF15
+    { I2C4, GPIO('B', 6), GPIO('F', 15), GPIO_FUNCTION(6),
+      GPIO_FUNCTION(4) },
 #endif
 };
 
@@ -145,8 +151,10 @@ i2c_setup(uint32_t bus, uint32_t rate, uint8_t addr)
     if (!is_enabled_pclock((uint32_t)i2c)) {
         // Enable i2c clock and gpio
         enable_pclock((uint32_t)i2c);
+        uint8_t sda_function = ii->sda_function ? ii->sda_function
+            : ii->function;
         gpio_peripheral(ii->scl_pin, ii->function | GPIO_OPEN_DRAIN, 1);
-        gpio_peripheral(ii->sda_pin, ii->function | GPIO_OPEN_DRAIN, 1);
+        gpio_peripheral(ii->sda_pin, sda_function | GPIO_OPEN_DRAIN, 1);
 
         // Set 100Khz frequency and enable
         uint32_t nom_i2c_clock = 8000000;  // 8mhz internal clock = 125ns ticks
