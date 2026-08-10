@@ -483,9 +483,23 @@ drivesync_flush(struct drivesync *ss, uint64_t move_clock, uint64_t clear_histor
 }
 
 /** append step to compessor */
-void
+int
 ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *pose, double move_time)
 {
+    /*
+     * The coe_ip_move position/velocity fields are 24 bit: values
+     * beyond that range would wrap silently on the wire (a wrapped
+     * velocity reverses sign).  Fail loudly instead - the scaling or
+     * record format must be fixed, not the value.
+     */
+    double pos_ticks = pose->position * sc->position_scaling;
+    double vel_ticks = pose->velocity * sc->velocity_scaling;
+    if (!(pos_ticks > -8388607. && pos_ticks < 8388607.)
+        || !(vel_ticks > -8388607. && vel_ticks < 8388607.)) {
+        errorf("ethercatservo setpoint exceeds 24-bit wire range oid=%d"
+               " pos=%.1f vel=%.1f ticks", sc->oid, pos_ticks, vel_ticks);
+        return -1;
+    }
     /* update next move clock (wrt main mcu clock) */
     double first_offset = pose->time - sc->last_step_print_time;
     double last_offset = first_offset + move_time;

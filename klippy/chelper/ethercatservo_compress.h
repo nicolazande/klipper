@@ -50,7 +50,7 @@ void ethercatservo_compress_free(struct ethercatservo_compress *sc);
 uint32_t ethercatservo_compress_get_oid(struct ethercatservo_compress *sc);
 
 /** append step to compessor */
-void ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *pose, double move_time);
+int ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *pose, double move_time);
 
 /** reset the internal state of the compressor */
 int ethercatservo_compress_reset(struct ethercatservo_compress *sc, uint64_t last_step_clock);

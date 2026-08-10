@@ -91,7 +91,7 @@ defs_ethercatservo_compress = """
     struct ethercatservo_compress *ethercatservo_compress_alloc(uint32_t oid, double position_scaling, double velocity_scaling);
     void ethercatservo_compress_free(struct ethercatservo_compress *sc);
     uint32_t ethercatservo_compress_get_oid(struct ethercatservo_compress *sc);
-    void ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *pose, double move_time);
+    int ethercatservo_compress_append(struct ethercatservo_compress *sc, struct pose *pose, double move_time);
     int ethercatservo_compress_reset(struct ethercatservo_compress *sc, uint64_t last_step_clock);
     double ethercatservo_compress_set_last_position(struct ethercatservo_compress *sc, uint64_t clock, int32_t last_position);
     double ethercatservo_compress_find_past_position(struct ethercatservo_compress *sc, uint64_t clock);

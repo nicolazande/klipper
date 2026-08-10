@@ -85,7 +85,11 @@ gen_steps_range(struct drive_kinematics *sk, struct move *m, double abs_start, d
         pose = sk->kinematics_cb(m, start);
 
         /* append move to message queue */
-        ethercatservo_compress_append(sk->sc, &pose, dt);
+        int32_t ret = ethercatservo_compress_append(sk->sc, &pose, dt);
+        if (ret)
+        {
+            return ret;
+        }
 
         /* update start time and move on */
         start += dt;
