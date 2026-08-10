@@ -150,6 +150,44 @@ this branch's fixes:
 - Interpolation sub-mode -2 is configured explicitly at pre-op; the
   0x2011/0x2012 buffer status flow control follows Copley practice.
 
+## Bench findings (2026-08-10, four AE2-090-14 on the bus, motors on
+## position 3, klippy ready with enable_ethercat True)
+
+1. **Host-side 0x85 support is implemented on this branch** (emission
+   at burst start / every 16 segments / after resync, 0x2014 SDO
+   polling, DC diagnostics) and SELF-ARMS only after a successful
+   0x2014 read.  None of the four drives exposes 0x2014 (SDO abort
+   0x06020000) — the 5.08 firmware from the release notes is NOT
+   loaded on the drives yet.  Loading it is the gating step.
+2. **No DC reference clock exists** with assign_activate=0:
+   ecrt_master_reference_clock_time returns rc=-5 every cycle.  The
+   sync_reference_clock/sync_slave_clocks calls are inert.  When 5.08
+   goes on, canopen/config.json assign_activate must become the
+   Copley-documented DC value (0x300) or 0x85 has no timebase.
+3. **PVT segments do not reach the drive buffer during motion** (the
+   headline bring-up blocker): with the drive in OP, both axes
+   operation-enabled in mode 7, a commanded 20mm X move (klippy
+   accepted, no errors, no faults, no buffer errors) left the drive
+   buffer EMPTY with next_id=1 — exactly one record ever accepted
+   since OP entry, actual position essentially unchanged.
+   master_window per-cycle reset is correct (verified); the fault is
+   either host-side segment release (check_send_command time gating /
+   clock_estimate epoch) or the drive's record-acceptance handshake
+   (sequence-change detection vs the idle slot contents).  Debug plan:
+   instrument check_send_command to log ready-queue depth and release
+   decisions, then watch 0x2012 next_id/free while streaming.
+4. Frame convention confirmed live: klipper streams its own frame's
+   counts while the drive's absolute encoder frame sits elsewhere
+   (agenda item 9 is real, not theoretical).
+5. position_scaling=100 confirmed dimensionally wrong on hardware: a
+   commanded 0.5mm is ~50 encoder counts = 2.5um physical at the 50nm
+   encoders (ratio ~200x).  True scaling must come from the drive's
+   counts-per-mm (agenda item 2).
+6. Operational notes: IgH master service must be running
+   (systemctl start ethercat); /dev/EtherCAT0 permissions handled by
+   /etc/udev/rules.d/99-ethercat-dev.rules; SET_KINEMATIC_POSITION
+   requires [force_move] enable_force_move: True (now in printer.cfg).
+
 ## Bench-test checklist (first drive session)
 
 1. Read back 0x60C0/0x60C4; stream a deliberately parabolic profile
