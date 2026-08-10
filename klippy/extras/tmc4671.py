@@ -411,6 +411,9 @@ class TMC4671:
         self.brake_engage_time = config.getfloat('brake_engage_time',
                                                  0.200, minval=0.,
                                                  maxval=2.)
+        self.brake_release_time = config.getfloat('brake_release_time',
+                                                  0.200, minval=0.,
+                                                  maxval=2.)
         # Board-specific analog frontend configuration
         self.adc_i_select = int(config.get('adc_i_select',
                                            '0x18000100'), 0)
@@ -804,7 +807,14 @@ class TMC4671:
                 self._set_motion_mode(MODE_POSITION)
                 if self.brake is not None and print_time is not None:
                     # Loop is closed and holding - release the brake
-                    self.brake.release(print_time)
+                    # ahead of the first move so the spring mechanism
+                    # has physically disengaged when motion starts
+                    reactor = self.printer.get_reactor()
+                    est = self.brake.mcu_brake.get_mcu() \
+                        .estimated_print_time(reactor.monotonic())
+                    release_time = max(print_time - self.brake_release_time,
+                                       est + 0.100)
+                    self.brake.release(min(release_time, print_time))
                 self.enabled = True
                 self.fault_strikes = 0
             self._start_checks()
