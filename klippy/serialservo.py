@@ -182,7 +182,11 @@ class SerialServo:
         # stays fine grained.
         if cmd_pos is None:
             cmd_pos = self.get_commanded_position()
-        return (cmd_pos + self._mcu_position_offset) / HOMING_SAMPLE_DIST
+        # Integer virtual steps: homing's equality-based protections
+        # (check_no_movement, probe skew checks) rely on exact
+        # comparisons, so positions quantize to HOMING_SAMPLE_DIST
+        return int(round((cmd_pos + self._mcu_position_offset)
+                         / HOMING_SAMPLE_DIST))
     def _set_mcu_position(self, mcu_pos):
         self._mcu_position_offset = mcu_pos - self.get_commanded_position()
         # Outgoing wire positions are generated in the mcu frame
@@ -194,7 +198,7 @@ class SerialServo:
         clock = self._mcu.print_time_to_clock(print_time)
         pos = self._ffi_lib.serialservo_compress_find_past_position(
             self._stepqueue, clock)
-        return pos / HOMING_SAMPLE_DIST
+        return int(round(pos / HOMING_SAMPLE_DIST))
     def dump_steps(self, count, start_clock, end_clock):
         data = self._ffi_main.new('struct pull_history_serialservo_steps[]',
                                   count)
