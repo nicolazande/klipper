@@ -259,14 +259,23 @@ class ServoBrakePin:
     def __init__(self, mcu_brake):
         self.mcu_brake = mcu_brake
         self.release_count = 0
+        self.last_sched_time = 0.
     def release(self, print_time):
         if not self.release_count:
-            self.mcu_brake.set_digital(print_time, 1)
+            self._transition(print_time, 1)
         self.release_count += 1
     def engage(self, print_time):
         self.release_count -= 1
         if not self.release_count:
-            self.mcu_brake.set_digital(print_time, 0)
+            self._transition(print_time, 0)
+    def _transition(self, print_time, value):
+        # Per-pin transitions must carry non-decreasing clocks: a
+        # transition scheduled before a still-pending one would reach
+        # the mcu after its event time and shut it down ("Timer too
+        # close"), so never schedule before the last transition
+        print_time = max(print_time, self.last_sched_time + 0.001)
+        self.last_sched_time = print_time
+        self.mcu_brake.set_digital(print_time, value)
 
 def lookup_brake_pin(config, pin):
     ppins = config.get_printer().lookup_object('pins')
