@@ -102,14 +102,17 @@ Connect (nothing can move yet):
    are never transplanted (the three offset pairs floating around the
    old code/dump/logs are all per-board per-boot values).
 4. Encoder alignment per `align_mode`:
-   - `forced` (default): park rotor at phi_e=0 with UD-only voltage
-     ramp (`align_voltage`, `align_delay`), zero the decoder count.
-     MOVES THE MOTOR up to half an electrical rev (36 deg mech = up to
-     ~1mm of Z at 10mm lead).  Fine for bring-up; power stage is
-     switched off again right after.
-   - `hall`: copy the hall electrical angle into the ABN phi_e offset;
-     zero motion, +-30 deg electrical accuracy, requires commissioned
-     hall polarity/direction (see bring-up).
+   - `hall` (default): copy the hall electrical angle into the ABN
+     phi_e offset - ZERO MOTION at startup (encoder + halls are wired
+     on every Z motor).  Coarse +-30 deg electrical accuracy, plenty
+     for commutation; requires commissioned hall polarity/direction
+     (see bring-up).  The hall reading is stability-checked first: an
+     unwired/uncommissioned hall fails safe, motor de-energized.
+   - `forced`: park rotor at phi_e=0 with UD-only voltage ramp
+     (`align_voltage`, `align_delay`), zero the decoder count.  MOVES
+     THE MOTOR up to half an electrical rev (36 deg mech = up to ~1mm
+     of Z at 10mm lead).  Commissioning fallback until halls are
+     verified; power stage is switched off again right after.
    - `manual`: trust `driver_ABN_DECODER_PHI_E_PHI_M_OFFSET` etc. from
      the config (for N-channel/cln schemes later).
 5. SPI handoff to the MCU streamer, host frame anchored from
