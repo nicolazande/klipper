@@ -914,13 +914,18 @@ process_frame(struct ethercatqueue *sq, double eventtime)
                 /* get buffer status */
                 struct coe_buffer_status *status = (struct coe_buffer_status *)slave->off_buffer_status;
 
-                if (!slave->seq_synced)
+                if (!slave->seq_synced && slave->status_word)
                 {
                     /* Adopt the drive's persisted buffer numbering so
                        a host restart does not begin with a guaranteed
                        sequence error (the drive keeps next_id across
                        host sessions while the host used to restart
-                       its numbering at zero). */
+                       its numbering at zero).  Gated on a nonzero
+                       status word: before the first real domain
+                       exchange the freshly allocated domain memory
+                       reads all zeros, and adopting that would latch
+                       seq_num=0 (any DS402 state reports a nonzero
+                       status word). */
                     slave->seq_num = status->next_id;
                     slave->seq_synced = 1;
                     slave->stamp_contig = 0;
@@ -1526,7 +1531,12 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* register slave */
         slave->slave = sc;
 
-        /* reset per-session synchronization state */
+        /* reset per-session synchronization state (operation_mode
+           included: it is only ever set by the homing handlers, and a
+           stale interpolation mode from the previous session would
+           run the cyclic buffer management before this session has
+           exchanged a single frame) */
+        slave->operation_mode = 0;
         slave->seq_synced = 0;
         slave->stamp_supported = 0;
         slave->stamp_pending = 0;
