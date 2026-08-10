@@ -32,8 +32,13 @@ class HashKinematics:
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
         self.dc_module = None
-        # check for dual carriage support (NOTE: not used for the moment)
+        # Dual carriage never worked with hash kinematics (the stale
+        # wiring allocated mismatched solver types and crashed at
+        # startup) - fail with a clear message until it is designed
         if config.has_section('dual_carriage'):
+            raise config.error(
+                "dual_carriage is not supported with hash kinematics")
+        if False:
             dc_config = config.getsection('dual_carriage')
             dc_axis = dc_config.getchoice('axis', ['x', 'y'])
             self.dual_carriage_axis = {'x': 0, 'y': 1}[dc_axis]
