@@ -34,7 +34,15 @@
 #define ETHERCAT_MAX_PDO_ENTRIES 20 //max number of pdo enries per slave
 #define ETHERCAT_PVT_SIZE 8U //ethercat message size in bytes
 #define ETHERCAT_SEQ_MASK (8U)  //buffer segment sequence number mask
-#define ETHERCAT_PVT_BUFFER_SIZE (32U)
+/*
+ * Host-side ring capacity for per-segment bookkeeping (time_table).
+ * Sized for the 64-point drive buffer of firmware >= 4.14; the actual
+ * in-flight depth is governed by the per-slave rx_size from
+ * canopen/config.json, which must match the DRIVE (32 on pre-4.14 or
+ * 0x142-limited firmware, 64 on 5.38 without 0x142).  A ring larger
+ * than rx_size is always safe; the reverse overruns bookkeeping.
+ */
+#define ETHERCAT_PVT_BUFFER_SIZE (64U)
 #define ETHERCAT_TIMESTAMP_PERIOD (16U) //buffer segments between 0x85 timestamp records
 #define ETHERCAT_PVT_ERROR_POLL (50U)   //cycles between 0x2014 sdo polls
 

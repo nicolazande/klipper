@@ -202,12 +202,17 @@ first successful 0x2014 read).  Items that matter for the upgrade:
    32-deep time_table, seq bookkeeping).  The window computation
    clamps at zero so streaming still works, but the host would run
    ~35 segments open-loop before fill accounting engages, overrunning
-   the 32-entry time_table and corrupting start/stop timing and 0x85
-   anchors.  REQUIRED: set parameter 0x142 ("limit PVT buffer to 32
-   points", added in 5.16 for exactly this) as part of the upgrade,
-   or raise rx_size + ETHERCAT_PVT_BUFFER_SIZE to 64 host-side.
-   Verify post-upgrade: buffer-status free count must report 0x20,
-   not 0x40, when empty.
+   the time_table ring.  CHOSEN PATH (take advantage of the depth):
+   the host ring is now 64 deep (ETHERCAT_PVT_BUFFER_SIZE), so after
+   loading 5.38 set "rx_size": 64 for both slaves in
+   canopen/config.json and do NOT set 0x142 - bursts then start with
+   up to ~610ms of buffered runway instead of ~290ms, with spare
+   slots for 0x85 records.  rx_size MUST match the drive: leave it 32
+   until the firmware is actually 5.38 (a 64 rx_size against a
+   32-point drive overfills it), and use parameter 0x142 (limit to 32)
+   only as the fallback if the deeper buffer misbehaves on the bench.
+   Verify post-upgrade: empty-buffer free count reports 0x40 with
+   rx_size 64 (or 0x20 if the 0x142 fallback is chosen).
 2. 5.38 fixes the 0x6064 position-feedback PDO when an encoder
    correction table is enabled - if the 50nm load encoders use
    correction tables, pre-5.38 position readback was wrong; worth
