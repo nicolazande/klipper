@@ -175,6 +175,8 @@ class MCU_stepper:
         self.set_trapq(self._trapq)
         self._set_mcu_position(mcu_pos)
         return old_sk
+    def get_stop_on_trigger_command(self):
+        return "stepper_stop_on_trigger oid=%c trsync_oid=%c"
     def note_homing_end(self):
         ffi_main, ffi_lib = chelper.get_ffi()
         ret = ffi_lib.stepcompress_reset(self._stepqueue, 0)

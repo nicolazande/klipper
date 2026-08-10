@@ -164,7 +164,7 @@ class MCU_trsync:
         self._cmd_queue = mcu.alloc_command_queue() #dedicated command queue on serial only
         self._trsync_start_cmd = self._trsync_set_timeout_cmd = None
         self._trsync_trigger_cmd = self._trsync_query_cmd = None
-        self._stepper_stop_cmd = None
+        self._stepper_stop_cmds = {}
         self._trigger_completion = None
         self._home_end_clock = None
         mcu.register_config_callback(self._build_config)
@@ -207,9 +207,6 @@ class MCU_trsync:
             "trsync_trigger oid=%c reason=%c",
             "trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u",
             oid=self._oid, cq=self._cmd_queue)
-        # substituted stepper with serialservo (TODO: generalize)
-        self._stepper_stop_cmd = mcu.lookup_command(
-            "serialservo_stop_on_trigger oid=%c trsync_oid=%c", cq=self._cmd_queue)
         # create trdispatch_mcu object
         set_timeout_tag = mcu.lookup_command("trsync_set_timeout oid=%c clock=%u").get_command_tag()
         trigger_cmd = mcu.lookup_command("trsync_trigger oid=%c reason=%c")
@@ -256,11 +253,24 @@ class MCU_trsync:
         # register synchronization response handler
         self._mcu.register_response(self._handle_trsync_state, "trsync_state", self._oid)
         self._trsync_start_cmd.send([self._oid, report_clock, report_ticks, self.REASON_COMMS_TIMEOUT], reqclock=report_clock)
-        # homing (can stop steppers)
+        # homing (can stop steppers) - stop command depends on the
+        # stepper type (stock stepper vs serialservo)
         for s in self._steppers:
-            self._stepper_stop_cmd.send([s.get_oid(), self._oid])
+            cmd = self._lookup_stepper_stop_cmd(s)
+            cmd.send([s.get_oid(), self._oid])
         self._trsync_set_timeout_cmd.send([self._oid, expire_clock], reqclock=expire_clock)
         
+    def _lookup_stepper_stop_cmd(self, stepper):
+        get_name = getattr(stepper, 'get_stop_on_trigger_command', None)
+        if get_name is not None:
+            cmd_name = get_name()
+        else:
+            cmd_name = "stepper_stop_on_trigger oid=%c trsync_oid=%c"
+        cmd = self._stepper_stop_cmds.get(cmd_name)
+        if cmd is None:
+            cmd = self._mcu.lookup_command(cmd_name, cq=self._cmd_queue)
+            self._stepper_stop_cmds[cmd_name] = cmd
+        return cmd
     def set_home_end_time(self, home_end_time):
         self._home_end_clock = self._mcu.print_time_to_clock(home_end_time)
         
