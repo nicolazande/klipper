@@ -613,6 +613,15 @@ class TMC4671:
         # up to half an electrical revolution - use align_mode: hall
         # or manual for zero-motion bring-up once commissioned).
         with self.mutex:
+            if self.enabled:
+                # A deferred enable can win the race against a
+                # bring-up requested while the axis looked disabled
+                # (e.g. INIT_TMC4671's wait_moves yield): refuse
+                # rather than safe-state a powered chip that the host
+                # believes is enabled with the brake released
+                raise self.printer.command_error(
+                    "TMC4671 %s: motor enabled during bring-up -"
+                    " disable and retry" % (self.name,))
             self._init_registers()
             if self.printer.get_start_args().get('debugoutput') is None:
                 self._calibrate_adc_offsets()
