@@ -262,12 +262,17 @@ class ServoBrakePin:
         self.last_sched_time = 0.
     def release(self, print_time):
         if not self.release_count:
-            self._transition(print_time, 1)
+            print_time = self._transition(print_time, 1)
         self.release_count += 1
+        return print_time
     def engage(self, print_time):
+        # Returns the actual (possibly floored) transition time so
+        # callers can time follow-up actions from when the brake
+        # really clamps
         self.release_count -= 1
         if not self.release_count:
-            self._transition(print_time, 0)
+            print_time = self._transition(print_time, 0)
+        return print_time
     def _transition(self, print_time, value):
         # A transition scheduled behind the mcu's clock fires late
         # and shuts it down ("Timer too close"), and per-pin
@@ -283,6 +288,7 @@ class ServoBrakePin:
                          est + 0.100)
         self.last_sched_time = print_time
         self.mcu_brake.set_digital(print_time, value)
+        return print_time
 
 def lookup_brake_pin(config, pin):
     ppins = config.get_printer().lookup_object('pins')
@@ -866,9 +872,11 @@ class TMC4671:
                 off_time = print_time
                 if self.brake is not None and print_time is not None:
                     # Engage the brake while still holding torque,
-                    # then de-energize once it has settled
-                    self.brake.engage(print_time)
-                    off_time = print_time + self.brake_engage_time
+                    # then de-energize once it has settled - timed
+                    # from the actual (possibly floored) engage
+                    # transition so the settle margin always holds
+                    engage_time = self.brake.engage(print_time)
+                    off_time = engage_time + self.brake_engage_time
                 self._set_motion_mode(MODE_STOPPED, print_time=off_time)
                 setr("PID_VELOCITY_OFFSET", 0, print_time=off_time,
                      verify=False)
