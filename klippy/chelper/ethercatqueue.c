@@ -1528,9 +1528,23 @@ ethercatqueue_init(struct ethercatqueue *sq)
 
         /* create domain */
         dm->domain = ecrt_master_create_domain(master->master);
+        if (!dm->domain)
+        {
+            /* fail visibly - a missing domain would otherwise leave the
+               cyclic thread spinning uselessly (slaves stuck in PREOP,
+               host connect parked forever on a response) */
+            report_errno("ecrt_master_create_domain", -1);
+            ret = -1;
+            goto fail;
+        }
 
         /* register mapped pdo entries to domain */
         ret = ecrt_domain_reg_pdo_entry_list(dm->domain, dm->registers);
+        if (ret)
+        {
+            report_errno("ecrt_domain_reg_pdo_entry_list", ret);
+            goto fail;
+        }
     }
 
     /* ethercat preoperetional logic */
@@ -1538,6 +1552,18 @@ ethercatqueue_init(struct ethercatqueue *sq)
 
     /* activate master */
     ret = ecrt_master_activate(master->master);
+    if (ret)
+    {
+        /*
+         * Activation can fail transiently when the master is
+         * re-requested immediately after a release (in-process host
+         * restart).  Failing here lets the caller's retry loop request
+         * a fresh master instead of hanging the connect on an inactive
+         * one.
+         */
+        report_errno("ecrt_master_activate", ret);
+        goto fail;
+    }
 
     /* ethercat operetional logic */
     coe_operational_setup(sq);
@@ -1620,8 +1646,25 @@ fail:
     if (ret)
     {
         report_errno("Ethercat queue allocation error", ret);
+        if (master->master)
+        {
+            /* release the reservation so the caller's retry loop can
+               request a fresh master (a reserved-but-failed master
+               would make every retry fail with EBUSY) */
+            ecrt_release_master(master->master);
+            master->master = NULL;
+            for (uint8_t i = 0; i < ETHERCAT_DOMAINS; i++)
+            {
+                master->domains[i].domain = NULL;
+                master->domains[i].domain_pd = NULL;
+            }
+            for (uint8_t i = 0; i < ETHERCAT_DRIVES; i++)
+            {
+                master->monitor[i].slave = NULL;
+            }
+        }
     }
-    
+
     return ret;
 }
 
