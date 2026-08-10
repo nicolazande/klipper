@@ -144,6 +144,7 @@ class EthercatServo:
                                       ffi_lib.ethercatservo_compress_free)
         self._mcu.register_pvtqueue(self._stepqueue)
         self._stepper_kinematics = None
+        self._known_kinematics = []
         self._ethercatservo_solve_generate_steps = ffi_lib.ethercatservo_solve_generate_steps #function to sample and generate move steps
         self._ethercatservo_solve_check_active = ffi_lib.ethercatservo_solve_check_active #function to check for real displacement
         self._trapq = ffi_main.NULL
@@ -183,6 +184,7 @@ class EthercatServo:
         ffi_main, ffi_lib = chelper.get_ffi()
         # use kinematics specific allocation function
         sk = ffi_main.gc(getattr(ffi_lib, alloc_func)(*params), ffi_lib.free)
+        self._known_kinematics.append(sk)
         # set drive kinematics
         self.set_stepper_kinematics(sk)
     
@@ -290,10 +292,22 @@ class EthercatServo:
         '''
         return self._stepper_kinematics
     
+    def supports_force_move(self):
+        # External-kinematics swaps are rejected below; report it up
+        # front so force_move can refuse before energizing the drive
+        return False
+
     def set_stepper_kinematics(self, sk):
         '''
         Set drive kinematics and helper functions.
         '''
+        # Only kinematics allocated via setup_itersolve share the
+        # drive solver ABI; reject foreign objects (FORCE_MOVE style
+        # swaps) with a gcode error instead of corrupting memory
+        if sk is not None and sk not in self._known_kinematics:
+            raise self._mcu.get_printer().command_error(
+                "ethercatservo %s does not support"
+                " FORCE_MOVE/STEPPER_BUZZ" % (self._name,))
         # get old kinematics
         old_sk = self._stepper_kinematics
         # initial position (consistent with kinematics change)
