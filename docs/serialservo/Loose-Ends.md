@@ -28,10 +28,10 @@
 
 ## Code triage still open
 
-8. Branch-review findings beyond the two fixed (burst anchor,
-   missing return): the full results file has more verified findings
-   not yet triaged (session task wdb3024l3 output; includes a
-   ferror wrap-suppression remark).
+8. Review rounds 1-3 triaged: confirmed findings are fixed
+   on-branch, unverified lows are tracked in the deferred sections
+   below.  Only the ferror wrap-suppression remark from the round-1
+   results (session task wdb3024l3) was never dispositioned.
 9. TEMPORARY diagnostics to remove after flow verification:
    "ethercat flow"/"ethercat seg" logs in ethercatqueue.c, plus the
    RS485 bring-up diagnostics listed in docs/RS485-Status.md

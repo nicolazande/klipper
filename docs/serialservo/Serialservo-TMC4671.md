@@ -168,12 +168,19 @@ encoder_direction: True     # tuned dump had the direction bit set
 velocity_limit: 3000        # mechanical rpm
 dead_time_ns: 250           # MUST match OUR gate driver, scope-verify
 brake_pin: !servo:PG5       # shared holding brake (optional)
-brake_engage_time: 0.2
+brake_engage_time: 0.2      # torque held this long after engage
+brake_release_time: 0.2     # brake released this long before motion
 align_mode: hall
 align_voltage: 1000
 align_delay: 1.0
 #adc_i_select: 0x18000100   # board phase/shunt routing (demo value)
 #analog_input_stage_cfg: 0x00044400
+#hall_position_060_000: 0x2AAA0000  # hall geometry (commissioning
+#hall_position_180_120: 0x80005555  # results; defaults are the chip
+#hall_position_300_240: 0xD555AAAA  # power-on 60-degree layout)
+#hall_dphi_max: 0x2AAA
+#driver_HALL_PHI_M_OFFSET: 0
+#driver_HALL_PHI_E_OFFSET: 0
 ```
 
 Every chip field also accepts `driver_<FIELDNAME>:` overrides (PID
@@ -211,7 +218,10 @@ silicon defaults; the tune uses no biquad filters).
    pair flips direction — fix wiring, not software.
 5. Hall commissioning: sweep PHI_E_EXT slowly, record hall_phi_e vs
    phi_e from `TMC4671_MONITOR`; derive HALL_MODE polarity/direction
-   (+ position registers if edges deviate from 60 deg).  Then
+   (+ position registers if edges deviate from 60 deg).  Deploy the
+   results via `hall_position_060_000/180_120/300_240`,
+   `hall_dphi_max` and `driver_HALL_PHI_M_OFFSET` /
+   `driver_HALL_PHI_E_OFFSET` in the [tmc4671] section.  Then
    `align_mode: hall` gives zero-motion connects.
 6. Close the loop: enable (G28 Z homes and anchors the frame), small
    moves, watch following error via `TMC4671_STATUS`.
