@@ -462,9 +462,15 @@ build_and_send_command(struct ethercatqueue *sq, double eventtime)
         }
         else
         {
-            /* oid out of bounds */
-            report_errno("ethercat oid out of bounds", 0);
-            return 0;
+            /* Out-of-bounds oid: drop the message (leaving it at the
+               queue head would retry it forever) and log rt-safely -
+               report_errno enters python and must not run here. */
+            rt_errorf("ethercat oid out of bounds (%u), dropping",
+                      qm->oid);
+            list_del(&qm->node);
+            sq->ready_bytes -= qm->len;
+            emsg_free(&sq->msgpool, qm, 0);
+            continue;
         }
 
         /* check for available space */
@@ -1508,8 +1514,23 @@ ethercatqueue_init(struct ethercatqueue *sq)
         /* register slave */
         slave->slave = sc;
 
-        /* configure slave pdos */        
+        /* reset per-session synchronization state */
+        slave->seq_synced = 0;
+        slave->stamp_supported = 0;
+        slave->stamp_pending = 0;
+        slave->stamp_contig = 0;
+        slave->segs_since_stamp = 0;
+        slave->pvt_error_wait = 0;
+        slave->master_window = 0;
+        slave->slave_window = 0;
+
+        /* configure slave pdos */
         ret = ecrt_slave_config_pdos(sc, EC_END, slave->syncs);
+        if (ret)
+        {
+            report_errno("ecrt_slave_config_pdos", ret);
+            goto fail;
+        }
 
         /* configure slave dc clock */
         ecrt_slave_config_dc(sc,
