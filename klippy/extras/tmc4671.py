@@ -516,6 +516,14 @@ class TMC4671:
         set_config_field(config, "hall_interpolation", 0)
         set_config_field(config, "hall_direction", 0)
         set_config_field(config, "hall_blank", 2)
+        # Hall geometry registers: chip power-on defaults, written
+        # explicitly so stale values cannot survive a host restart and
+        # poison the hall-based alignment (they are also scrubbed)
+        self.reg_overrides["HALL_POSITION_060_000"] = 0x2AAA0000
+        self.reg_overrides["HALL_POSITION_180_120"] = 0x80005555
+        self.reg_overrides["HALL_POSITION_300_240"] = 0xD555AAAA
+        self.reg_overrides["HALL_PHI_E_PHI_M_OFFSET"] = 0
+        self.reg_overrides["HALL_DPHI_MAX"] = 0x2AAA
         # Feedback selections: electrical-angle domain (keeps the
         # tuned PID gains valid; unit conversion is host-side)
         set_config_field(config, "velocity_selection", 0)
