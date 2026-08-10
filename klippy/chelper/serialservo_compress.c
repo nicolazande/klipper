@@ -31,11 +31,13 @@
  * The mcu chains every segment to the end of the previous one, so ANY
  * unanchored gap stretches the first segment's interpolation window
  * (transient overshoot ~ 0.5*a*dt*gap, plus motion starting up to
- * 'gap' early).  Contiguous segments have bit-identical clocks (same
- * double arithmetic), so the threshold only needs to clear float
- * noise - 2ms anchors even one-sample gaps (shortest real idle is
- * one 10ms sampling period) at the cost of one extra message per
- * burst.
+ * 'gap' early).  The 2ms threshold is safe against spurious anchors
+ * inside continuous motion because toolhead print times are
+ * quantized to 1ms (time_decimals=3) and the solver merges segments
+ * shorter than its MIN_MOVE_TIME (1ms): the largest hole contiguous
+ * motion can present is ~1ms.  Changing either of those constants
+ * can silently invalidate this margin.  Cost is one extra message
+ * per motion burst.
  */
 #define ANCHOR_GAP_TIME (0.002)
 
