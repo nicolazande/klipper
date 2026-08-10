@@ -188,6 +188,46 @@ this branch's fixes:
    /etc/udev/rules.d/99-ethercat-dev.rules; SET_KINEMATIC_POSITION
    requires [force_move] enable_force_move: True (now in printer.cfg).
 
+## Copley 5.38 upgrade notes (from ReleaseNotes_FPGA.pdf, local copy
+## in ~/copley-docs/ together with AE2_5.38.cff and the full CANopen/
+## EtherCAT Programmers Manual)
+
+5.38 contains both 5.08 Warmbird features ("synchronizing PVT points
+to a specific distributed clock time" + one-encoder-on-multiple-axes),
+so loading AE2_5.38.cff arms the 0x85 path (host self-arms on the
+first successful 0x2014 read).  Items that matter for the upgrade:
+
+1. **PVT buffer is 64 points on this firmware line (since 4.14), not
+   the 32 our host assumes** (rx_size=32 in canopen/config.json,
+   32-deep time_table, seq bookkeeping).  The window computation
+   clamps at zero so streaming still works, but the host would run
+   ~35 segments open-loop before fill accounting engages, overrunning
+   the 32-entry time_table and corrupting start/stop timing and 0x85
+   anchors.  REQUIRED: set parameter 0x142 ("limit PVT buffer to 32
+   points", added in 5.16 for exactly this) as part of the upgrade,
+   or raise rx_size + ETHERCAT_PVT_BUFFER_SIZE to 64 host-side.
+   Verify post-upgrade: buffer-status free count must report 0x20,
+   not 0x40, when empty.
+2. 5.38 fixes the 0x6064 position-feedback PDO when an encoder
+   correction table is enabled - if the 50nm load encoders use
+   correction tables, pre-5.38 position readback was wrong; worth
+   rechecking any position telemetry taken on old firmware.
+3. 4.98 added high-resolution formatting options for object 0x2010
+   segments - the designated answer for the record-format/velocity-
+   unit agenda item at 50nm counts (Programmers Manual chapter on
+   0x2010 formats; manual now in ~/copley-docs/).
+4. 5.26 note: a failed prior firmware update via EtherCAT FoE can
+   cause a watchdog timeout during the next update - power-cycle the
+   drive before retrying an interrupted update.
+5. 5.36: dual-axis AC drives keep dynamic braking enabled while
+   disabled - a safety property the upgrade adds for free.
+6. 5.02/5.08 improved PVT trajectory + position capture handling with
+   encoder wrap enabled - relevant at 50nm counts if wrap is used.
+7. The bench drives report 0x100A = "2.60", which does not map to
+   this 4.x/5.x release line - after the upgrade verify via CME2 or
+   the 0x2014 probe (the host logs "pvt timestamps armed" when it
+   sees the object).
+
 ## Bench-test checklist (first drive session)
 
 1. Read back 0x60C0/0x60C4; stream a deliberately parabolic profile
